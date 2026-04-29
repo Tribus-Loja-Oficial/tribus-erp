@@ -13,11 +13,7 @@ import {
 export function createPosRepository(db: AppDb) {
   return {
     async findRegisterById(id: string) {
-      const result = await db
-        .select()
-        .from(cashRegisters)
-        .where(eq(cashRegisters.id, id))
-        .limit(1);
+      const result = await db.select().from(cashRegisters).where(eq(cashRegisters.id, id)).limit(1);
       return result[0] ?? null;
     },
 
@@ -36,11 +32,7 @@ export function createPosRepository(db: AppDb) {
     },
 
     async findSessionById(id: string): Promise<CashSession | null> {
-      const result = await db
-        .select()
-        .from(cashSessions)
-        .where(eq(cashSessions.id, id))
-        .limit(1);
+      const result = await db.select().from(cashSessions).where(eq(cashSessions.id, id)).limit(1);
       return result[0] ?? null;
     },
 
@@ -57,9 +49,7 @@ export function createPosRepository(db: AppDb) {
 
     async findSessions(params: { cashRegisterId?: string; limit?: number } = {}) {
       const { cashRegisterId, limit = 20 } = params;
-      const conditions = cashRegisterId
-        ? [eq(cashSessions.cashRegisterId, cashRegisterId)]
-        : [];
+      const conditions = cashRegisterId ? [eq(cashSessions.cashRegisterId, cashRegisterId)] : [];
       return db
         .select()
         .from(cashSessions)

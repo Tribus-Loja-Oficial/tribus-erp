@@ -34,7 +34,11 @@ export function createInventoryService(db: AppDb) {
   const now = () => new Date().toISOString();
 
   const OUT_TYPES: StockMovementType[] = [
-    "sale", "production_out", "transfer_out", "damaged", "reservation",
+    "sale",
+    "production_out",
+    "transfer_out",
+    "damaged",
+    "reservation",
   ];
 
   return {

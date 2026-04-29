@@ -28,7 +28,9 @@ export function createFiscalRepository(db: AppDb) {
       return result[0] ?? null;
     },
 
-    async findMany(params: { type?: string; limit?: number; offset?: number } = {}): Promise<FiscalDocument[]> {
+    async findMany(
+      params: { type?: string; limit?: number; offset?: number } = {},
+    ): Promise<FiscalDocument[]> {
       const { limit = 20, offset = 0 } = params;
       return db
         .select()

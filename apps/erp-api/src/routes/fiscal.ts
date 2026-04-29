@@ -12,7 +12,8 @@ const fiscal = new Hono<{ Bindings: Env }>();
 fiscal.get("/", async (c) => {
   const query = Object.fromEntries(new URL(c.req.url).searchParams);
   const parsed = listFiscalDocumentsSchema.safeParse(query);
-  if (!parsed.success) return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
   try {
     const config = getEnv(c.env);
     const db = createDb(config.db);
@@ -28,7 +29,8 @@ fiscal.get("/", async (c) => {
 fiscal.post("/xml/import", async (c) => {
   const body = await c.req.json().catch(() => null);
   const parsed = importXmlSchema.safeParse(body);
-  if (!parsed.success) return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
   try {
     const config = getEnv(c.env);
     const db = createDb(config.db);

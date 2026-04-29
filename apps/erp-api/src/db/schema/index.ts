@@ -1,11 +1,4 @@
-import {
-  sqliteTable,
-  text,
-  integer,
-  real,
-  uniqueIndex,
-  index,
-} from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real, uniqueIndex, index } from "drizzle-orm/sqlite-core";
 import { relations } from "drizzle-orm";
 
 // ─── Parties ────────────────────────────────────────────────────────────────
@@ -72,7 +65,9 @@ export const customers = sqliteTable("customers", {
   totalOrders: integer("total_orders").notNull().default(0),
   totalSpentCents: integer("total_spent_cents").notNull().default(0),
   notes: text("notes"),
-  status: text("status", { enum: ["active", "inactive", "blocked"] }).notNull().default("active"),
+  status: text("status", { enum: ["active", "inactive", "blocked"] })
+    .notNull()
+    .default("active"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
   archivedAt: text("archived_at"),
@@ -89,7 +84,9 @@ export const suppliers = sqliteTable("suppliers", {
   website: text("website"),
   marketplace: text("marketplace"),
   notes: text("notes"),
-  status: text("status", { enum: ["active", "inactive"] }).notNull().default("active"),
+  status: text("status", { enum: ["active", "inactive"] })
+    .notNull()
+    .default("active"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
   archivedAt: text("archived_at"),
@@ -182,7 +179,9 @@ export const productVariants = sqliteTable("product_variants", {
   costPriceCents: integer("cost_price_cents").notNull().default(0),
   currentStock: integer("current_stock").notNull().default(0),
   barcode: text("barcode"),
-  status: text("status", { enum: ["active", "inactive"] }).notNull().default("active"),
+  status: text("status", { enum: ["active", "inactive"] })
+    .notNull()
+    .default("active"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
   archivedAt: text("archived_at"),
@@ -348,7 +347,9 @@ export const cashRegisters = sqliteTable("cash_registers", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   location: text("location"),
-  status: text("status", { enum: ["active", "inactive"] }).notNull().default("active"),
+  status: text("status", { enum: ["active", "inactive"] })
+    .notNull()
+    .default("active"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
@@ -708,7 +709,9 @@ export const billOfMaterials = sqliteTable(
       .notNull()
       .references(() => products.id),
     version: text("version").notNull().default("1.0"),
-    status: text("status", { enum: ["draft", "active", "archived"] }).notNull().default("active"),
+    status: text("status", { enum: ["draft", "active", "archived"] })
+      .notNull()
+      .default("active"),
     notes: text("notes"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),

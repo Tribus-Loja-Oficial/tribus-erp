@@ -30,7 +30,8 @@ production.get("/orders/:id", async (c) => {
     const data = await service.findById(c.req.param("id"));
     return c.json({ data });
   } catch (e) {
-    if (e instanceof AppError) return c.json({ message: e.message, code: e.code }, e.statusCode as 404);
+    if (e instanceof AppError)
+      return c.json({ message: e.message, code: e.code }, e.statusCode as 404);
     throw e;
   }
 });
@@ -42,7 +43,8 @@ production.post("/orders", zValidator("json", CreateProductionOrderSchema), asyn
     const data = await service.createProductionOrder(c.req.valid("json"));
     return c.json({ data }, 201);
   } catch (e) {
-    if (e instanceof AppError) return c.json({ message: e.message, code: e.code }, e.statusCode as 400);
+    if (e instanceof AppError)
+      return c.json({ message: e.message, code: e.code }, e.statusCode as 400);
     throw e;
   }
 });
@@ -54,22 +56,28 @@ production.post("/orders/:id/start", zValidator("json", StartProductionOrderSche
     const data = await service.startProductionOrder(c.req.param("id"), c.req.valid("json"));
     return c.json({ data });
   } catch (e) {
-    if (e instanceof AppError) return c.json({ message: e.message, code: e.code }, e.statusCode as 400);
+    if (e instanceof AppError)
+      return c.json({ message: e.message, code: e.code }, e.statusCode as 400);
     throw e;
   }
 });
 
-production.post("/orders/:id/complete", zValidator("json", CompleteProductionOrderSchema), async (c) => {
-  const db = createDb(getEnv(c.env).db);
-  const service = createProductionService(db);
-  try {
-    const data = await service.completeProductionOrder(c.req.param("id"), c.req.valid("json"));
-    return c.json({ data });
-  } catch (e) {
-    if (e instanceof AppError) return c.json({ message: e.message, code: e.code }, e.statusCode as 400);
-    throw e;
-  }
-});
+production.post(
+  "/orders/:id/complete",
+  zValidator("json", CompleteProductionOrderSchema),
+  async (c) => {
+    const db = createDb(getEnv(c.env).db);
+    const service = createProductionService(db);
+    try {
+      const data = await service.completeProductionOrder(c.req.param("id"), c.req.valid("json"));
+      return c.json({ data });
+    } catch (e) {
+      if (e instanceof AppError)
+        return c.json({ message: e.message, code: e.code }, e.statusCode as 400);
+      throw e;
+    }
+  },
+);
 
 production.post("/orders/:id/cancel", async (c) => {
   const db = createDb(getEnv(c.env).db);
@@ -78,7 +86,8 @@ production.post("/orders/:id/cancel", async (c) => {
     const data = await service.cancelProductionOrder(c.req.param("id"));
     return c.json({ data });
   } catch (e) {
-    if (e instanceof AppError) return c.json({ message: e.message, code: e.code }, e.statusCode as 400);
+    if (e instanceof AppError)
+      return c.json({ message: e.message, code: e.code }, e.statusCode as 400);
     throw e;
   }
 });
@@ -97,7 +106,8 @@ production.post("/bom", zValidator("json", CreateBomSchema), async (c) => {
     const data = await service.createBom(c.req.valid("json"));
     return c.json({ data }, 201);
   } catch (e) {
-    if (e instanceof AppError) return c.json({ message: e.message, code: e.code }, e.statusCode as 400);
+    if (e instanceof AppError)
+      return c.json({ message: e.message, code: e.code }, e.statusCode as 400);
     throw e;
   }
 });

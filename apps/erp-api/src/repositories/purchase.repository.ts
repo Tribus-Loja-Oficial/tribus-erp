@@ -31,9 +31,20 @@ export function createPurchaseRepository(db: AppDb) {
         .where(eq(purchaseOrderItems.purchaseOrderId, purchaseOrderId));
     },
 
-    async findMany(params: { status?: string; supplierId?: string; limit: number; offset: number }) {
+    async findMany(params: {
+      status?: string;
+      supplierId?: string;
+      limit: number;
+      offset: number;
+    }) {
       const conditions = [];
-      if (params.status) conditions.push(eq(purchaseOrders.status, params.status as "draft" | "ordered" | "partially_received" | "received" | "cancelled"));
+      if (params.status)
+        conditions.push(
+          eq(
+            purchaseOrders.status,
+            params.status as "draft" | "ordered" | "partially_received" | "received" | "cancelled",
+          ),
+        );
       if (params.supplierId) conditions.push(eq(purchaseOrders.supplierId, params.supplierId));
 
       return db

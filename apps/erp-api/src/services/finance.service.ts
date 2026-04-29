@@ -139,10 +139,7 @@ export function createFinanceService(db: AppDb) {
       if (payable.status === "cancelled") throw new BadRequestError("Payable is cancelled");
 
       const newPaidAmount = payable.paidAmountCents + input.amountCents;
-      const status =
-        newPaidAmount >= payable.amountCents
-          ? "paid"
-          : "partially_paid";
+      const status = newPaidAmount >= payable.amountCents ? "paid" : "partially_paid";
 
       const updated = await financeRepo.updatePayable(id, {
         paidAmountCents: newPaidAmount,
@@ -151,15 +148,18 @@ export function createFinanceService(db: AppDb) {
         paidAt: input.paidAt ?? now().slice(0, 10),
       });
 
-      await this.createEntry({
-        type: "expense",
-        financialAccountId: input.financialAccountId,
-        amountCents: input.amountCents,
-        date: input.paidAt ?? now().slice(0, 10),
-        description: `Pagamento: ${payable.description}`,
-        referenceType: "accounts_payable",
-        referenceId: id,
-      }, actorId);
+      await this.createEntry(
+        {
+          type: "expense",
+          financialAccountId: input.financialAccountId,
+          amountCents: input.amountCents,
+          date: input.paidAt ?? now().slice(0, 10),
+          description: `Pagamento: ${payable.description}`,
+          referenceType: "accounts_payable",
+          referenceId: id,
+        },
+        actorId,
+      );
 
       return updated;
     },
@@ -169,7 +169,7 @@ export function createFinanceService(db: AppDb) {
       return financeRepo.findPayables({ status, limit, offset: (page - 1) * limit });
     },
 
-    async createReceivable(input: CreateReceivableInput, actorId?: string) {
+    async createReceivable(input: CreateReceivableInput, _actorId?: string) {
       return financeRepo.insertReceivable({
         id: generateId(),
         ...input,
@@ -190,7 +190,8 @@ export function createFinanceService(db: AppDb) {
     async receiveReceivable(id: string, input: ReceiveReceivableInput, actorId?: string) {
       const receivable = await financeRepo.findReceivableById(id);
       if (!receivable) throw new NotFoundError("Receivable", id);
-      if (receivable.status === "received") throw new BadRequestError("Receivable is already received");
+      if (receivable.status === "received")
+        throw new BadRequestError("Receivable is already received");
 
       const newReceivedAmount = receivable.receivedAmountCents + input.amountCents;
       const status =
@@ -203,15 +204,18 @@ export function createFinanceService(db: AppDb) {
         receivedAt: input.receivedAt ?? now().slice(0, 10),
       });
 
-      await this.createEntry({
-        type: "income",
-        financialAccountId: input.financialAccountId,
-        amountCents: input.amountCents,
-        date: input.receivedAt ?? now().slice(0, 10),
-        description: `Recebimento: ${receivable.description}`,
-        referenceType: "accounts_receivable",
-        referenceId: id,
-      }, actorId);
+      await this.createEntry(
+        {
+          type: "income",
+          financialAccountId: input.financialAccountId,
+          amountCents: input.amountCents,
+          date: input.receivedAt ?? now().slice(0, 10),
+          description: `Recebimento: ${receivable.description}`,
+          referenceType: "accounts_receivable",
+          referenceId: id,
+        },
+        actorId,
+      );
 
       return updated;
     },

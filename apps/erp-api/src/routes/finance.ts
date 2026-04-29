@@ -47,7 +47,8 @@ finance.get("/accounts", async (c) => {
 finance.post("/accounts", async (c) => {
   const body = await c.req.json().catch(() => null);
   const parsed = createFinancialAccountSchema.safeParse(body);
-  if (!parsed.success) return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
   try {
     const config = getEnv(c.env);
     const db = createDb(config.db);
@@ -89,7 +90,8 @@ finance.get("/cost-centers", async (c) => {
 finance.get("/entries", async (c) => {
   const query = Object.fromEntries(new URL(c.req.url).searchParams);
   const parsed = listEntriesSchema.safeParse(query);
-  if (!parsed.success) return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
   try {
     const config = getEnv(c.env);
     const db = createDb(config.db);
@@ -105,7 +107,8 @@ finance.get("/entries", async (c) => {
 finance.post("/entries", async (c) => {
   const body = await c.req.json().catch(() => null);
   const parsed = createFinancialEntrySchema.safeParse(body);
-  if (!parsed.success) return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
   try {
     const config = getEnv(c.env);
     const db = createDb(config.db);
@@ -137,7 +140,8 @@ finance.get("/payables", async (c) => {
 finance.post("/payables", async (c) => {
   const body = await c.req.json().catch(() => null);
   const parsed = createPayableSchema.safeParse(body);
-  if (!parsed.success) return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
   try {
     const config = getEnv(c.env);
     const db = createDb(config.db);
@@ -153,7 +157,8 @@ finance.post("/payables", async (c) => {
 finance.post("/payables/:id/pay", async (c) => {
   const body = await c.req.json().catch(() => null);
   const parsed = payPayableSchema.safeParse(body);
-  if (!parsed.success) return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
   try {
     const config = getEnv(c.env);
     const db = createDb(config.db);
@@ -185,7 +190,8 @@ finance.get("/receivables", async (c) => {
 finance.post("/receivables", async (c) => {
   const body = await c.req.json().catch(() => null);
   const parsed = createReceivableSchema.safeParse(body);
-  if (!parsed.success) return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
   try {
     const config = getEnv(c.env);
     const db = createDb(config.db);
@@ -201,7 +207,8 @@ finance.post("/receivables", async (c) => {
 finance.post("/receivables/:id/receive", async (c) => {
   const body = await c.req.json().catch(() => null);
   const parsed = receiveReceivableSchema.safeParse(body);
-  if (!parsed.success) return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
   try {
     const config = getEnv(c.env);
     const db = createDb(config.db);

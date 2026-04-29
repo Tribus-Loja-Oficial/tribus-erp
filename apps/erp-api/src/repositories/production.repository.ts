@@ -75,7 +75,10 @@ export function createProductionRepository(db: AppDb) {
           and(
             isNull(productionOrders.archivedAt),
             params?.status
-              ? eq(productionOrders.status, params.status as "planned" | "in_progress" | "completed" | "cancelled")
+              ? eq(
+                  productionOrders.status,
+                  params.status as "planned" | "in_progress" | "completed" | "cancelled",
+                )
               : undefined,
           ),
         )
@@ -91,16 +94,17 @@ export function createProductionRepository(db: AppDb) {
     },
 
     async generateOrderNumber() {
-      const count = await db
-        .select()
-        .from(productionOrders)
-        .all();
+      const count = await db.select().from(productionOrders).all();
       return `PROD-${String(count.length + 1).padStart(5, "0")}`;
     },
 
     async insertConsumption(data: NewProductionOrderConsumption) {
       await db.insert(productionOrderConsumptions).values(data);
-      return db.select().from(productionOrderConsumptions).where(eq(productionOrderConsumptions.id, data.id)).get()!;
+      return db
+        .select()
+        .from(productionOrderConsumptions)
+        .where(eq(productionOrderConsumptions.id, data.id))
+        .get()!;
     },
 
     async findConsumptionsByOrder(productionOrderId: string) {
@@ -113,7 +117,11 @@ export function createProductionRepository(db: AppDb) {
 
     async insertLoss(data: NewProductionOrderLoss) {
       await db.insert(productionOrderLosses).values(data);
-      return db.select().from(productionOrderLosses).where(eq(productionOrderLosses.id, data.id)).get()!;
+      return db
+        .select()
+        .from(productionOrderLosses)
+        .where(eq(productionOrderLosses.id, data.id))
+        .get()!;
     },
 
     async findLossesByOrder(productionOrderId: string) {

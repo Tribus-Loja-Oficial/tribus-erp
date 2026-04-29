@@ -1,4 +1,4 @@
-import { eq, and, isNull, desc } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import type { AppDb } from "../db/client.js";
 import {
   stockLocations,
@@ -74,11 +74,7 @@ export function createInventoryRepository(db: AppDb) {
     },
 
     async findRecentMovements(limit = 50): Promise<StockMovement[]> {
-      return db
-        .select()
-        .from(stockMovements)
-        .orderBy(desc(stockMovements.createdAt))
-        .limit(limit);
+      return db.select().from(stockMovements).orderBy(desc(stockMovements.createdAt)).limit(limit);
     },
   };
 }

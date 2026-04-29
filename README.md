@@ -26,12 +26,12 @@ packages/
 
 ### Variáveis principais (Web)
 
-| Variável | Descrição |
-|----------|-----------|
-| `ERP_API_URL` | URL base do Worker (ex.: `http://127.0.0.1:8787` em dev) |
-| `ERP_API_INTERNAL_SECRET` | Bearer compartilhado com a API (≥ 32 caracteres) |
-| `AUTH_SECRET` | Segredo NextAuth |
-| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Login inicial (substitua em produção) |
+| Variável                         | Descrição                                                |
+| -------------------------------- | -------------------------------------------------------- |
+| `ERP_API_URL`                    | URL base do Worker (ex.: `http://127.0.0.1:8787` em dev) |
+| `ERP_API_INTERNAL_SECRET`        | Bearer compartilhado com a API (≥ 32 caracteres)         |
+| `AUTH_SECRET`                    | Segredo NextAuth                                         |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Login inicial (substitua em produção)                    |
 
 ## Desenvolvimento
 

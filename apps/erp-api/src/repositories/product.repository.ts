@@ -46,9 +46,7 @@ export function createProductRepository(db: AppDb) {
       if (categoryId) conditions.push(eq(products.categoryId, categoryId));
       if (niche) conditions.push(eq(products.niche, niche));
       if (q) {
-        conditions.push(
-          or(like(products.name, `%${q}%`), like(products.sku, `%${q}%`))!,
-        );
+        conditions.push(or(like(products.name, `%${q}%`), like(products.sku, `%${q}%`))!);
       }
       return db
         .select()

@@ -59,9 +59,7 @@ app.route("/production", production);
 app.route("/reports", reports);
 app.route("/internal", internal);
 
-app.notFound((c) =>
-  c.json({ message: "Not found", code: "NOT_FOUND" }, 404),
-);
+app.notFound((c) => c.json({ message: "Not found", code: "NOT_FOUND" }, 404));
 
 app.onError((err, c) => {
   logger.error("unhandled error", { error: String(err) });

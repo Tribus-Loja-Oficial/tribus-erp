@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import { BadRequestError, NotFoundError } from "../../../src/errors/app-error.js";
 
 // Pure logic helpers extracted from finance.service for unit testing
@@ -52,8 +52,7 @@ describe("finance — receivable status transitions", () => {
 
 describe("finance — balance delta calculation", () => {
   it("income increases balance", () => {
-    const delta = (type: string, amount: number) =>
-      type === "income" ? amount : -amount;
+    const delta = (type: string, amount: number) => (type === "income" ? amount : -amount);
 
     expect(delta("income", 5000)).toBe(5000);
     expect(delta("expense", 5000)).toBe(-5000);

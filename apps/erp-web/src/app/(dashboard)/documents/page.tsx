@@ -17,7 +17,10 @@ interface FiscalDoc {
 export default async function DocumentsPage() {
   let docs: FiscalDoc[] = [];
   try {
-    const res = await erpApiFetch<{ data: FiscalDoc[] }>({ path: "/fiscal", searchParams: { limit: 40 } });
+    const res = await erpApiFetch<{ data: FiscalDoc[] }>({
+      path: "/fiscal",
+      searchParams: { limit: 40 },
+    });
     docs = res.data;
   } catch {
     docs = [];
@@ -32,7 +35,7 @@ export default async function DocumentsPage() {
         </Link>
         <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+            <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold tracking-wide text-zinc-500 uppercase">
               <tr>
                 <th className="px-4 py-3">Tipo</th>
                 <th className="px-4 py-3">Número</th>
@@ -56,7 +59,9 @@ export default async function DocumentsPage() {
                       {d.number ?? "—"} / {d.series ?? "—"}
                     </td>
                     <td className="px-4 py-3 text-zinc-600">{d.issueDate}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">{formatCurrency(d.totalAmountCents)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">
+                      {formatCurrency(d.totalAmountCents)}
+                    </td>
                     <td className="max-w-[200px] truncate px-4 py-3 font-mono text-xs text-zinc-500">
                       {d.accessKey ?? "—"}
                     </td>

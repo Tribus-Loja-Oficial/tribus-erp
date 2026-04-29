@@ -1,14 +1,7 @@
 import { Header } from "@/components/layout/header";
 import { erpApiFetch } from "@/lib/api/erp-api-client";
 import { formatCurrency } from "@/lib/utils";
-import {
-  Package,
-  ShoppingCart,
-  DollarSign,
-  AlertTriangle,
-  TrendingUp,
-  TrendingDown,
-} from "lucide-react";
+import { DollarSign, AlertTriangle, TrendingUp, TrendingDown } from "lucide-react";
 
 interface FinanceDashboard {
   income: number;

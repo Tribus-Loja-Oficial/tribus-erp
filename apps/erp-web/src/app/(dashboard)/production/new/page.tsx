@@ -25,7 +25,7 @@ export default function NewProductionOrderPage() {
           notes: String(fd.get("notes") ?? "").trim() || undefined,
         }),
       });
-      const json = await res.json() as { data?: { id: string }; message?: string };
+      const json = (await res.json()) as { data?: { id: string }; message?: string };
       if (!res.ok) throw new Error(json.message ?? "Erro ao criar ordem");
       router.push("/production");
     } catch (err) {

@@ -43,7 +43,10 @@ export const payPayableSchema = z.object({
   amountCents: z.number().int().min(1),
   paymentMethod: z.string().min(1),
   financialAccountId: z.string().min(1),
-  paidAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  paidAt: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
 });
 
 export const createReceivableSchema = z.object({
@@ -60,7 +63,10 @@ export const receiveReceivableSchema = z.object({
   amountCents: z.number().int().min(1),
   paymentMethod: z.string().min(1),
   financialAccountId: z.string().min(1),
-  receivedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  receivedAt: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
 });
 
 export const listEntriesSchema = z.object({

@@ -7,11 +7,7 @@ interface OrderItem {
   discountCents: number;
 }
 
-function calculateTotals(
-  items: OrderItem[],
-  discountCents: number,
-  shippingCents: number,
-) {
+function calculateTotals(items: OrderItem[], discountCents: number, shippingCents: number) {
   const subtotal = items.reduce(
     (sum, item) => sum + item.unitPriceCents * item.quantity - item.discountCents,
     0,

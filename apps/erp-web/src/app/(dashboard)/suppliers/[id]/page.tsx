@@ -28,11 +28,7 @@ interface SupplierDetail {
   };
 }
 
-export default async function SupplierDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function SupplierDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
   let data: SupplierDetail | null = null;
@@ -51,7 +47,9 @@ export default async function SupplierDetailPage({
       <Header title={party.tradeName ?? party.legalName} />
       <div className="flex flex-1 flex-col gap-6 p-6">
         <div className="flex items-center justify-between">
-          <Link href="/suppliers" className="text-sm text-zinc-600 hover:text-zinc-900">← Fornecedores</Link>
+          <Link href="/suppliers" className="text-sm text-zinc-600 hover:text-zinc-900">
+            ← Fornecedores
+          </Link>
           <Link
             href={`/purchases/new?supplierId=${supplier.id}`}
             className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
@@ -106,7 +104,12 @@ export default async function SupplierDetailPage({
                 <div className="flex justify-between">
                   <dt className="text-zinc-500">Site</dt>
                   <dd>
-                    <a href={supplier.website} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                    <a
+                      href={supplier.website}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline"
+                    >
                       {supplier.website}
                     </a>
                   </dd>
@@ -126,7 +129,7 @@ export default async function SupplierDetailPage({
             <dl className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <dt className="text-zinc-500">Status</dt>
-                <dd className="capitalize font-medium text-zinc-900">{supplier.status}</dd>
+                <dd className="font-medium text-zinc-900 capitalize">{supplier.status}</dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-zinc-500">Cadastrado em</dt>

@@ -4,13 +4,21 @@ import { erpApiFetch } from "@/lib/api/erp-api-client";
 
 interface Row {
   supplier: { id: string; status: string; contactName: string | null };
-  party: { legalName: string; tradeName: string | null; email: string | null; documentNumber: string | null };
+  party: {
+    legalName: string;
+    tradeName: string | null;
+    email: string | null;
+    documentNumber: string | null;
+  };
 }
 
 export default async function SuppliersPage() {
   let rows: Row[] = [];
   try {
-    const res = await erpApiFetch<{ data: Row[] }>({ path: "/suppliers", searchParams: { limit: 50 } });
+    const res = await erpApiFetch<{ data: Row[] }>({
+      path: "/suppliers",
+      searchParams: { limit: 50 },
+    });
     rows = res.data;
   } catch {
     rows = [];
@@ -31,7 +39,7 @@ export default async function SuppliersPage() {
         </div>
         <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+            <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold tracking-wide text-zinc-500 uppercase">
               <tr>
                 <th className="px-4 py-3">Razão social</th>
                 <th className="px-4 py-3">Documento</th>
@@ -49,13 +57,27 @@ export default async function SuppliersPage() {
                 </tr>
               ) : (
                 rows.map((r) => (
-                  <tr key={r.supplier.id} className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50/80">
-                    <td className="px-4 py-3 font-medium text-zinc-900">{r.party.tradeName ?? r.party.legalName}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-zinc-600">{r.party.documentNumber ?? "—"}</td>
-                    <td className="px-4 py-3 text-zinc-600">{r.supplier.contactName ?? r.party.email ?? "—"}</td>
-                    <td className="px-4 py-3 capitalize text-zinc-600">{r.supplier.status}</td>
+                  <tr
+                    key={r.supplier.id}
+                    className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50/80"
+                  >
+                    <td className="px-4 py-3 font-medium text-zinc-900">
+                      {r.party.tradeName ?? r.party.legalName}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-xs text-zinc-600">
+                      {r.party.documentNumber ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 text-zinc-600">
+                      {r.supplier.contactName ?? r.party.email ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 text-zinc-600 capitalize">{r.supplier.status}</td>
                     <td className="px-4 py-3">
-                      <Link href={`/suppliers/${r.supplier.id}`} className="text-xs text-zinc-500 hover:text-zinc-900 underline">Ver</Link>
+                      <Link
+                        href={`/suppliers/${r.supplier.id}`}
+                        className="text-xs text-zinc-500 underline hover:text-zinc-900"
+                      >
+                        Ver
+                      </Link>
                     </td>
                   </tr>
                 ))

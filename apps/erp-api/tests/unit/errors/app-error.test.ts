@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import {
-  AppError,
   NotFoundError,
   ValidationError,
   ConflictError,
@@ -27,7 +26,15 @@ describe("AppError hierarchy", () => {
   });
 
   it("ValidationError stores issues", () => {
-    const issues = [{ message: "Required", path: ["name"], code: "invalid_type" as const, expected: "string", received: "undefined" }];
+    const issues = [
+      {
+        message: "Required",
+        path: ["name"],
+        code: "invalid_type" as const,
+        expected: "string",
+        received: "undefined",
+      },
+    ];
     const err = new ValidationError("Invalid input", issues);
     expect(err.code).toBe("VALIDATION_ERROR");
     expect(err.statusCode).toBe(400);

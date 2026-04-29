@@ -34,9 +34,7 @@ export async function erpApiFetch<T>(options: FetchOptions): Promise<T> {
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(
-      (data as { message?: string })?.message ?? `HTTP ${response.status}`,
-    );
+    throw new Error((data as { message?: string })?.message ?? `HTTP ${response.status}`);
   }
 
   return data as T;

@@ -1,13 +1,7 @@
 import { describe, it, expect } from "vitest";
 
 // Stock movement direction logic extracted from inventory.service
-const OUT_TYPES = [
-  "sale",
-  "production_out",
-  "transfer_out",
-  "damaged",
-  "reservation",
-] as const;
+const OUT_TYPES = ["sale", "production_out", "transfer_out", "damaged", "reservation"] as const;
 
 type StockMovementType =
   | "purchase"
@@ -44,7 +38,8 @@ describe("inventory — movement direction", () => {
   it("production_in is inward", () => expect(isOutwardMovement("production_in")).toBe(false));
   it("return is inward", () => expect(isOutwardMovement("return")).toBe(false));
   it("transfer_in is inward", () => expect(isOutwardMovement("transfer_in")).toBe(false));
-  it("release_reservation is inward", () => expect(isOutwardMovement("release_reservation")).toBe(false));
+  it("release_reservation is inward", () =>
+    expect(isOutwardMovement("release_reservation")).toBe(false));
   it("adjustment is inward", () => expect(isOutwardMovement("adjustment")).toBe(false));
 });
 

@@ -16,7 +16,8 @@ const parties = new Hono<{ Bindings: Env }>();
 parties.get("/", async (c) => {
   const query = Object.fromEntries(new URL(c.req.url).searchParams);
   const parsed = listPartiesSchema.safeParse(query);
-  if (!parsed.success) return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
   try {
     const config = getEnv(c.env);
     const db = createDb(config.db);
@@ -32,7 +33,8 @@ parties.get("/", async (c) => {
 parties.post("/", async (c) => {
   const body = await c.req.json().catch(() => null);
   const parsed = createPartySchema.safeParse(body);
-  if (!parsed.success) return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
   try {
     const config = getEnv(c.env);
     const db = createDb(config.db);
@@ -61,7 +63,8 @@ parties.get("/:id", async (c) => {
 parties.patch("/:id", async (c) => {
   const body = await c.req.json().catch(() => null);
   const parsed = updatePartySchema.safeParse(body);
-  if (!parsed.success) return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
   try {
     const config = getEnv(c.env);
     const db = createDb(config.db);
@@ -90,7 +93,8 @@ parties.delete("/:id", async (c) => {
 parties.post("/:id/addresses", async (c) => {
   const body = await c.req.json().catch(() => null);
   const parsed = createAddressSchema.safeParse({ ...body, partyId: c.req.param("id") });
-  if (!parsed.success) return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
   try {
     const config = getEnv(c.env);
     const db = createDb(config.db);

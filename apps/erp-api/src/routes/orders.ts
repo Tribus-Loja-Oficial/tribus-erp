@@ -4,14 +4,19 @@ import { getEnv } from "../config/env.js";
 import { createDb } from "../db/client.js";
 import { createOrderService } from "../services/order.service.js";
 import { toApiError } from "../errors/app-error.js";
-import { createOrderSchema, updateOrderStatusSchema, listOrdersSchema } from "../schemas/order.schemas.js";
+import {
+  createOrderSchema,
+  updateOrderStatusSchema,
+  listOrdersSchema,
+} from "../schemas/order.schemas.js";
 
 const orders = new Hono<{ Bindings: Env }>();
 
 orders.get("/", async (c) => {
   const query = Object.fromEntries(new URL(c.req.url).searchParams);
   const parsed = listOrdersSchema.safeParse(query);
-  if (!parsed.success) return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
   try {
     const config = getEnv(c.env);
     const db = createDb(config.db);
@@ -27,7 +32,8 @@ orders.get("/", async (c) => {
 orders.post("/", async (c) => {
   const body = await c.req.json().catch(() => null);
   const parsed = createOrderSchema.safeParse(body);
-  if (!parsed.success) return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
   try {
     const config = getEnv(c.env);
     const db = createDb(config.db);
@@ -56,7 +62,8 @@ orders.get("/:id", async (c) => {
 orders.patch("/:id/status", async (c) => {
   const body = await c.req.json().catch(() => null);
   const parsed = updateOrderStatusSchema.safeParse(body);
-  if (!parsed.success) return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
   try {
     const config = getEnv(c.env);
     const db = createDb(config.db);

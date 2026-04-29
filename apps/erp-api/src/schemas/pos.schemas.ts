@@ -29,7 +29,15 @@ const posSaleItemSchema = z.object({
 });
 
 const posPaymentSchema = z.object({
-  method: z.enum(["cash", "credit_card", "debit_card", "pix", "bank_transfer", "marketplace", "other"]),
+  method: z.enum([
+    "cash",
+    "credit_card",
+    "debit_card",
+    "pix",
+    "bank_transfer",
+    "marketplace",
+    "other",
+  ]),
   amountCents: z.number().int().min(1),
 });
 
@@ -45,7 +53,15 @@ export const createPosSaleSchema = z.object({
 export const addCashMovementSchema = z.object({
   cashSessionId: z.string().min(1),
   type: z.enum(["cash_in", "cash_out", "adjustment"]),
-  paymentMethod: z.enum(["cash", "credit_card", "debit_card", "pix", "bank_transfer", "marketplace", "other"]),
+  paymentMethod: z.enum([
+    "cash",
+    "credit_card",
+    "debit_card",
+    "pix",
+    "bank_transfer",
+    "marketplace",
+    "other",
+  ]),
   amountCents: z.number().int().min(1),
   notes: z.string().max(500).optional(),
 });

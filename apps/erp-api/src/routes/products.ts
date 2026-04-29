@@ -9,7 +9,6 @@ import {
   updateProductSchema,
   listProductsSchema,
   createCategorySchema,
-  createCollectionSchema,
   createVariantSchema,
 } from "../schemas/product.schemas.js";
 
@@ -18,7 +17,8 @@ const products = new Hono<{ Bindings: Env }>();
 products.get("/", async (c) => {
   const query = Object.fromEntries(new URL(c.req.url).searchParams);
   const parsed = listProductsSchema.safeParse(query);
-  if (!parsed.success) return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
   try {
     const config = getEnv(c.env);
     const db = createDb(config.db);
@@ -34,7 +34,8 @@ products.get("/", async (c) => {
 products.post("/", async (c) => {
   const body = await c.req.json().catch(() => null);
   const parsed = createProductSchema.safeParse(body);
-  if (!parsed.success) return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
   try {
     const config = getEnv(c.env);
     const db = createDb(config.db);
@@ -76,7 +77,8 @@ products.get("/categories", async (c) => {
 products.post("/categories", async (c) => {
   const body = await c.req.json().catch(() => null);
   const parsed = createCategorySchema.safeParse(body);
-  if (!parsed.success) return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
   try {
     const config = getEnv(c.env);
     const db = createDb(config.db);
@@ -118,7 +120,8 @@ products.get("/:id", async (c) => {
 products.patch("/:id", async (c) => {
   const body = await c.req.json().catch(() => null);
   const parsed = updateProductSchema.safeParse(body);
-  if (!parsed.success) return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
   try {
     const config = getEnv(c.env);
     const db = createDb(config.db);
@@ -147,7 +150,8 @@ products.delete("/:id", async (c) => {
 products.post("/:id/variants", async (c) => {
   const body = await c.req.json().catch(() => null);
   const parsed = createVariantSchema.safeParse({ ...body, productId: c.req.param("id") });
-  if (!parsed.success) return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
   try {
     const config = getEnv(c.env);
     const db = createDb(config.db);

@@ -30,7 +30,8 @@ pos.get("/registers", async (c) => {
 pos.post("/registers", async (c) => {
   const body = await c.req.json().catch(() => null);
   const parsed = createCashRegisterSchema.safeParse(body);
-  if (!parsed.success) return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
   try {
     const config = getEnv(c.env);
     const db = createDb(config.db);
@@ -60,7 +61,8 @@ pos.get("/sessions", async (c) => {
 pos.post("/sessions", async (c) => {
   const body = await c.req.json().catch(() => null);
   const parsed = openCashSessionSchema.safeParse(body);
-  if (!parsed.success) return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
   try {
     const config = getEnv(c.env);
     const db = createDb(config.db);
@@ -89,7 +91,8 @@ pos.get("/sessions/:id", async (c) => {
 pos.post("/sessions/:id/close", async (c) => {
   const body = await c.req.json().catch(() => null);
   const parsed = closeCashSessionSchema.safeParse(body);
-  if (!parsed.success) return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
   try {
     const config = getEnv(c.env);
     const db = createDb(config.db);
@@ -105,7 +108,8 @@ pos.post("/sessions/:id/close", async (c) => {
 pos.post("/sales", async (c) => {
   const body = await c.req.json().catch(() => null);
   const parsed = createPosSaleSchema.safeParse(body);
-  if (!parsed.success) return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
   try {
     const config = getEnv(c.env);
     const db = createDb(config.db);
@@ -121,7 +125,8 @@ pos.post("/sales", async (c) => {
 pos.post("/movements", async (c) => {
   const body = await c.req.json().catch(() => null);
   const parsed = addCashMovementSchema.safeParse(body);
-  if (!parsed.success) return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
   try {
     const config = getEnv(c.env);
     const db = createDb(config.db);

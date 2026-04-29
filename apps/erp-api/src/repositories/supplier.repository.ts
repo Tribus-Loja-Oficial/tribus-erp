@@ -28,7 +28,9 @@ export function createSupplierRepository(db: AppDb) {
       return result[0] ?? null;
     },
 
-    async findMany(params: { status?: string; limit?: number; offset?: number } = {}): Promise<Supplier[]> {
+    async findMany(
+      params: { status?: string; limit?: number; offset?: number } = {},
+    ): Promise<Supplier[]> {
       const { status, limit = 20, offset = 0 } = params;
       const conditions = [isNull(suppliers.archivedAt)];
       if (status) conditions.push(eq(suppliers.status, status as Supplier["status"]));

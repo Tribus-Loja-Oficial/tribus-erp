@@ -134,7 +134,8 @@ export function createProductService(db: AppDb) {
     async createVariant(input: CreateVariantInput) {
       const product = await productsRepo.findById(input.productId);
       if (!product) throw new NotFoundError("Product", input.productId);
-      const { createProductVariantRepository } = await import("../repositories/product-variant.repository.js");
+      const { createProductVariantRepository } =
+        await import("../repositories/product-variant.repository.js");
       const variantsRepo = createProductVariantRepository(db);
       return variantsRepo.insert({
         id: generateId(),

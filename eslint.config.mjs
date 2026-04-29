@@ -25,6 +25,7 @@ export default tseslint.config(
       "**/.next/**",
       "**/coverage/**",
       "**/.wrangler/**",
+      "**/next-env.d.ts",
     ],
   },
 );

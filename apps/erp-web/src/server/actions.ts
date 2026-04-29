@@ -22,7 +22,8 @@ function optionalId(raw: FormDataEntryValue | null): string | undefined {
 export async function createProductAction(formData: FormData) {
   const sku = String(formData.get("sku") ?? "").trim();
   const name = String(formData.get("name") ?? "").trim();
-  if (!sku || !name) redirect("/products/new?error=" + encodeURIComponent("SKU e nome são obrigatórios"));
+  if (!sku || !name)
+    redirect("/products/new?error=" + encodeURIComponent("SKU e nome são obrigatórios"));
   try {
     await erpApiFetch({
       method: "POST",
@@ -40,7 +41,9 @@ export async function createProductAction(formData: FormData) {
     });
     revalidatePath("/products");
   } catch (e) {
-    redirect("/products/new?error=" + encodeURIComponent(e instanceof Error ? e.message : "Erro ao criar"));
+    redirect(
+      "/products/new?error=" + encodeURIComponent(e instanceof Error ? e.message : "Erro ao criar"),
+    );
   }
   redirect("/products");
 }
@@ -66,7 +69,10 @@ export async function createCustomerAction(formData: FormData) {
     });
     revalidatePath("/customers");
   } catch (e) {
-    redirect("/customers/new?error=" + encodeURIComponent(e instanceof Error ? e.message : "Erro ao criar"));
+    redirect(
+      "/customers/new?error=" +
+        encodeURIComponent(e instanceof Error ? e.message : "Erro ao criar"),
+    );
   }
   redirect("/customers");
 }
@@ -92,7 +98,10 @@ export async function createSupplierAction(formData: FormData) {
     });
     revalidatePath("/suppliers");
   } catch (e) {
-    redirect("/suppliers/new?error=" + encodeURIComponent(e instanceof Error ? e.message : "Erro ao criar"));
+    redirect(
+      "/suppliers/new?error=" +
+        encodeURIComponent(e instanceof Error ? e.message : "Erro ao criar"),
+    );
   }
   redirect("/suppliers");
 }
@@ -113,7 +122,9 @@ export async function createStockMovementAction(formData: FormData) {
         locationId,
         type,
         quantity,
-        unitCostCents: optionalId(formData.get("unitCost")) ? moneyToCents(formData.get("unitCost")) : undefined,
+        unitCostCents: optionalId(formData.get("unitCost"))
+          ? moneyToCents(formData.get("unitCost"))
+          : undefined,
         notes: optionalId(formData.get("notes")),
       },
     });
@@ -187,7 +198,9 @@ export async function createPayableAction(formData: FormData) {
     });
     revalidatePath("/finance/payables");
   } catch (e) {
-    redirect("/finance/payables?error=" + encodeURIComponent(e instanceof Error ? e.message : "Erro"));
+    redirect(
+      "/finance/payables?error=" + encodeURIComponent(e instanceof Error ? e.message : "Erro"),
+    );
   }
   redirect("/finance/payables");
 }
@@ -206,7 +219,9 @@ export async function createReceivableAction(formData: FormData) {
     });
     revalidatePath("/finance/receivables");
   } catch (e) {
-    redirect("/finance/receivables?error=" + encodeURIComponent(e instanceof Error ? e.message : "Erro"));
+    redirect(
+      "/finance/receivables?error=" + encodeURIComponent(e instanceof Error ? e.message : "Erro"),
+    );
   }
   redirect("/finance/receivables");
 }
@@ -241,7 +256,10 @@ export async function importXmlAction(formData: FormData) {
     });
     revalidatePath("/fiscal/xml-import");
   } catch (e) {
-    redirect("/fiscal/xml-import?error=" + encodeURIComponent(e instanceof Error ? e.message : "Erro na importação"));
+    redirect(
+      "/fiscal/xml-import?error=" +
+        encodeURIComponent(e instanceof Error ? e.message : "Erro na importação"),
+    );
   }
   redirect("/fiscal/xml-import");
 }
@@ -302,7 +320,9 @@ export async function createPosSaleAction(formData: FormData) {
     revalidatePath("/sales/pos");
     revalidatePath("/orders");
   } catch (e) {
-    redirect("/sales/pos?error=" + encodeURIComponent(e instanceof Error ? e.message : "Erro na venda"));
+    redirect(
+      "/sales/pos?error=" + encodeURIComponent(e instanceof Error ? e.message : "Erro na venda"),
+    );
   }
   redirect("/sales/pos");
 }
@@ -318,8 +338,12 @@ export async function updateProductAction(formData: FormData) {
         sku: optionalId(formData.get("sku")),
         name: optionalId(formData.get("name")),
         status: optionalId(formData.get("status")),
-        salePriceCents: formData.get("salePrice") ? moneyToCents(formData.get("salePrice")) : undefined,
-        costPriceCents: formData.get("costPrice") ? moneyToCents(formData.get("costPrice")) : undefined,
+        salePriceCents: formData.get("salePrice")
+          ? moneyToCents(formData.get("salePrice"))
+          : undefined,
+        costPriceCents: formData.get("costPrice")
+          ? moneyToCents(formData.get("costPrice"))
+          : undefined,
         minStock: formData.get("minStock") !== null ? Number(formData.get("minStock")) : undefined,
         ncm: optionalId(formData.get("ncm")),
         barcode: optionalId(formData.get("barcode")),
@@ -329,7 +353,10 @@ export async function updateProductAction(formData: FormData) {
     revalidatePath("/products");
     revalidatePath(`/products/${id}`);
   } catch (e) {
-    redirect(`/products/${id}?error=` + encodeURIComponent(e instanceof Error ? e.message : "Erro ao salvar"));
+    redirect(
+      `/products/${id}?error=` +
+        encodeURIComponent(e instanceof Error ? e.message : "Erro ao salvar"),
+    );
   }
   redirect(`/products/${id}?success=` + encodeURIComponent("Produto atualizado"));
 }
@@ -347,7 +374,10 @@ export async function updateOrderStatusAction(formData: FormData) {
     revalidatePath("/orders");
     revalidatePath(`/orders/${id}`);
   } catch (e) {
-    redirect(`/orders/${id}?error=` + encodeURIComponent(e instanceof Error ? e.message : "Erro ao atualizar"));
+    redirect(
+      `/orders/${id}?error=` +
+        encodeURIComponent(e instanceof Error ? e.message : "Erro ao atualizar"),
+    );
   }
   redirect(`/orders/${id}`);
 }
@@ -382,7 +412,10 @@ export async function createPurchaseOrderAction(formData: FormData) {
     revalidatePath("/purchases");
     redirect(`/purchases/${result.data.id}`);
   } catch (e) {
-    redirect("/purchases/new?error=" + encodeURIComponent(e instanceof Error ? e.message : "Erro ao criar"));
+    redirect(
+      "/purchases/new?error=" +
+        encodeURIComponent(e instanceof Error ? e.message : "Erro ao criar"),
+    );
   }
 }
 
@@ -399,7 +432,9 @@ export async function updatePurchaseStatusAction(formData: FormData) {
     revalidatePath("/purchases");
     revalidatePath(`/purchases/${id}`);
   } catch (e) {
-    redirect(`/purchases/${id}?error=` + encodeURIComponent(e instanceof Error ? e.message : "Erro"));
+    redirect(
+      `/purchases/${id}?error=` + encodeURIComponent(e instanceof Error ? e.message : "Erro"),
+    );
   }
   redirect(`/purchases/${id}`);
 }
@@ -420,7 +455,10 @@ export async function receivePurchaseOrderAction(formData: FormData) {
   }
 
   if (items.length === 0)
-    redirect(`/purchases/${id}?error=` + encodeURIComponent("Informe quantidade recebida para ao menos um item"));
+    redirect(
+      `/purchases/${id}?error=` +
+        encodeURIComponent("Informe quantidade recebida para ao menos um item"),
+    );
 
   try {
     await erpApiFetch({
@@ -432,7 +470,10 @@ export async function receivePurchaseOrderAction(formData: FormData) {
     revalidatePath(`/purchases/${id}`);
     revalidatePath("/inventory");
   } catch (e) {
-    redirect(`/purchases/${id}?error=` + encodeURIComponent(e instanceof Error ? e.message : "Erro ao receber"));
+    redirect(
+      `/purchases/${id}?error=` +
+        encodeURIComponent(e instanceof Error ? e.message : "Erro ao receber"),
+    );
   }
   redirect(`/purchases/${id}`);
 }
@@ -453,7 +494,10 @@ export async function payPayableAction(formData: FormData) {
     revalidatePath("/finance/payables");
     revalidatePath("/finance");
   } catch (e) {
-    redirect("/finance/payables?error=" + encodeURIComponent(e instanceof Error ? e.message : "Erro ao pagar"));
+    redirect(
+      "/finance/payables?error=" +
+        encodeURIComponent(e instanceof Error ? e.message : "Erro ao pagar"),
+    );
   }
   redirect("/finance/payables");
 }
@@ -474,7 +518,10 @@ export async function receiveReceivableAction(formData: FormData) {
     revalidatePath("/finance/receivables");
     revalidatePath("/finance");
   } catch (e) {
-    redirect("/finance/receivables?error=" + encodeURIComponent(e instanceof Error ? e.message : "Erro ao receber"));
+    redirect(
+      "/finance/receivables?error=" +
+        encodeURIComponent(e instanceof Error ? e.message : "Erro ao receber"),
+    );
   }
   redirect("/finance/receivables");
 }
@@ -494,7 +541,10 @@ export async function closeCashSessionAction(formData: FormData) {
     revalidatePath("/sales/pos");
     revalidatePath("/finance/cash");
   } catch (e) {
-    redirect("/finance/cash?error=" + encodeURIComponent(e instanceof Error ? e.message : "Erro ao fechar caixa"));
+    redirect(
+      "/finance/cash?error=" +
+        encodeURIComponent(e instanceof Error ? e.message : "Erro ao fechar caixa"),
+    );
   }
   redirect("/finance/cash");
 }

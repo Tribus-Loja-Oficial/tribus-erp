@@ -30,11 +30,7 @@ interface CustomerDetail {
   };
 }
 
-export default async function CustomerDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function CustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
   let data: CustomerDetail | null = null;
@@ -52,7 +48,9 @@ export default async function CustomerDetailPage({
     <div className="flex flex-col overflow-auto">
       <Header title={party.tradeName ?? party.legalName} />
       <div className="flex flex-1 flex-col gap-6 p-6">
-        <Link href="/customers" className="text-sm text-zinc-600 hover:text-zinc-900">← Clientes</Link>
+        <Link href="/customers" className="text-sm text-zinc-600 hover:text-zinc-900">
+          ← Clientes
+        </Link>
 
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
@@ -70,7 +68,9 @@ export default async function CustomerDetailPage({
               )}
               <div className="flex justify-between">
                 <dt className="text-zinc-500">Tipo</dt>
-                <dd className="capitalize text-zinc-700">{party.type === "individual" ? "Pessoa física" : "Pessoa jurídica"}</dd>
+                <dd className="text-zinc-700 capitalize">
+                  {party.type === "individual" ? "Pessoa física" : "Pessoa jurídica"}
+                </dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-zinc-500">{party.documentType.toUpperCase()}</dt>
@@ -106,7 +106,9 @@ export default async function CustomerDetailPage({
               </div>
               <div className="flex justify-between">
                 <dt className="text-zinc-500">Total gasto</dt>
-                <dd className="font-bold text-zinc-900">{formatCurrency(customer.totalSpentCents)}</dd>
+                <dd className="font-bold text-zinc-900">
+                  {formatCurrency(customer.totalSpentCents)}
+                </dd>
               </div>
               {customer.firstPurchaseAt && (
                 <div className="flex justify-between">
@@ -122,11 +124,11 @@ export default async function CustomerDetailPage({
               )}
               <div className="flex justify-between">
                 <dt className="text-zinc-500">Origem</dt>
-                <dd className="capitalize text-zinc-700">{customer.origin}</dd>
+                <dd className="text-zinc-700 capitalize">{customer.origin}</dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-zinc-500">Status</dt>
-                <dd className="capitalize text-zinc-700">{customer.status}</dd>
+                <dd className="text-zinc-700 capitalize">{customer.status}</dd>
               </div>
             </dl>
           </div>

@@ -45,11 +45,25 @@ interface Order {
   payments: OrderPayment[];
 }
 
-const ORDER_STATUSES = ["draft", "pending_payment", "paid", "preparing", "shipped", "delivered", "cancelled", "refunded"];
+const ORDER_STATUSES = [
+  "draft",
+  "pending_payment",
+  "paid",
+  "preparing",
+  "shipped",
+  "delivered",
+  "cancelled",
+  "refunded",
+];
 const STATUS_LABELS: Record<string, string> = {
-  draft: "Rascunho", pending_payment: "Aguard. pagamento", paid: "Pago",
-  preparing: "Preparando", shipped: "Enviado", delivered: "Entregue",
-  cancelled: "Cancelado", refunded: "Estornado",
+  draft: "Rascunho",
+  pending_payment: "Aguard. pagamento",
+  paid: "Pago",
+  preparing: "Preparando",
+  shipped: "Enviado",
+  delivered: "Entregue",
+  cancelled: "Cancelado",
+  refunded: "Estornado",
 };
 
 export default async function OrderDetailPage({
@@ -77,7 +91,9 @@ export default async function OrderDetailPage({
       <Header title={`Pedido ${order.orderNumber}`} />
       <div className="flex flex-1 flex-col gap-6 p-6">
         <div className="flex items-center gap-3">
-          <Link href="/orders" className="text-sm text-zinc-600 hover:text-zinc-900">← Pedidos</Link>
+          <Link href="/orders" className="text-sm text-zinc-600 hover:text-zinc-900">
+            ← Pedidos
+          </Link>
           <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-700">
             {STATUS_LABELS[order.status] ?? order.status}
           </span>
@@ -86,15 +102,15 @@ export default async function OrderDetailPage({
         <ErrorBanner message={sp.error} />
 
         <div className="grid gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-2 space-y-4">
+          <div className="space-y-4 lg:col-span-2">
             <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
               <h2 className="mb-3 text-sm font-semibold text-zinc-800">Itens</h2>
               <table className="w-full text-left text-sm">
-                <thead className="border-b border-zinc-100 text-xs font-semibold uppercase text-zinc-500">
+                <thead className="border-b border-zinc-100 text-xs font-semibold text-zinc-500 uppercase">
                   <tr>
-                    <th className="pb-2 pr-4">Produto</th>
-                    <th className="pb-2 pr-4 text-right">Qtd</th>
-                    <th className="pb-2 pr-4 text-right">Unit.</th>
+                    <th className="pr-4 pb-2">Produto</th>
+                    <th className="pr-4 pb-2 text-right">Qtd</th>
+                    <th className="pr-4 pb-2 text-right">Unit.</th>
                     <th className="pb-2 text-right">Total</th>
                   </tr>
                 </thead>
@@ -106,27 +122,43 @@ export default async function OrderDetailPage({
                         <p className="font-mono text-xs text-zinc-500">{item.sku}</p>
                       </td>
                       <td className="py-2 pr-4 text-right tabular-nums">{item.quantity}</td>
-                      <td className="py-2 pr-4 text-right tabular-nums">{formatCurrency(item.unitPriceCents)}</td>
-                      <td className="py-2 text-right tabular-nums font-medium">{formatCurrency(item.totalCents)}</td>
+                      <td className="py-2 pr-4 text-right tabular-nums">
+                        {formatCurrency(item.unitPriceCents)}
+                      </td>
+                      <td className="py-2 text-right font-medium tabular-nums">
+                        {formatCurrency(item.totalCents)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot className="border-t border-zinc-200 text-sm">
                   {order.discountTotalCents > 0 && (
                     <tr>
-                      <td colSpan={3} className="pt-2 text-right text-zinc-500">Desconto</td>
-                      <td className="pt-2 text-right tabular-nums text-zinc-500">-{formatCurrency(order.discountTotalCents)}</td>
+                      <td colSpan={3} className="pt-2 text-right text-zinc-500">
+                        Desconto
+                      </td>
+                      <td className="pt-2 text-right text-zinc-500 tabular-nums">
+                        -{formatCurrency(order.discountTotalCents)}
+                      </td>
                     </tr>
                   )}
                   {order.shippingTotalCents > 0 && (
                     <tr>
-                      <td colSpan={3} className="text-right text-zinc-500">Frete</td>
-                      <td className="text-right tabular-nums">{formatCurrency(order.shippingTotalCents)}</td>
+                      <td colSpan={3} className="text-right text-zinc-500">
+                        Frete
+                      </td>
+                      <td className="text-right tabular-nums">
+                        {formatCurrency(order.shippingTotalCents)}
+                      </td>
                     </tr>
                   )}
                   <tr>
-                    <td colSpan={3} className="pt-2 text-right font-semibold text-zinc-700">Total</td>
-                    <td className="pt-2 text-right tabular-nums font-bold text-zinc-900">{formatCurrency(order.totalCents)}</td>
+                    <td colSpan={3} className="pt-2 text-right font-semibold text-zinc-700">
+                      Total
+                    </td>
+                    <td className="pt-2 text-right font-bold text-zinc-900 tabular-nums">
+                      {formatCurrency(order.totalCents)}
+                    </td>
                   </tr>
                 </tfoot>
               </table>
@@ -138,8 +170,10 @@ export default async function OrderDetailPage({
                 <ul className="space-y-2 text-sm">
                   {order.payments.map((p) => (
                     <li key={p.id} className="flex justify-between">
-                      <span className="capitalize text-zinc-600">{p.method.replace("_", " ")}</span>
-                      <span className={`font-medium ${p.status === "confirmed" ? "text-green-600" : "text-zinc-700"}`}>
+                      <span className="text-zinc-600 capitalize">{p.method.replace("_", " ")}</span>
+                      <span
+                        className={`font-medium ${p.status === "confirmed" ? "text-green-600" : "text-zinc-700"}`}
+                      >
                         {formatCurrency(p.amountCents)}
                       </span>
                     </li>
@@ -155,7 +189,7 @@ export default async function OrderDetailPage({
               <dl className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <dt className="text-zinc-500">Canal</dt>
-                  <dd className="capitalize text-zinc-900">{order.channel}</dd>
+                  <dd className="text-zinc-900 capitalize">{order.channel}</dd>
                 </div>
                 <div className="flex justify-between">
                   <dt className="text-zinc-500">Sistema</dt>
@@ -163,11 +197,11 @@ export default async function OrderDetailPage({
                 </div>
                 <div className="flex justify-between">
                   <dt className="text-zinc-500">Pagamento</dt>
-                  <dd className="capitalize text-zinc-700">{order.paymentStatus}</dd>
+                  <dd className="text-zinc-700 capitalize">{order.paymentStatus}</dd>
                 </div>
                 <div className="flex justify-between">
                   <dt className="text-zinc-500">Fulfillment</dt>
-                  <dd className="capitalize text-zinc-700">{order.fulfillmentStatus}</dd>
+                  <dd className="text-zinc-700 capitalize">{order.fulfillmentStatus}</dd>
                 </div>
                 <div className="flex justify-between">
                   <dt className="text-zinc-500">Criado em</dt>
@@ -187,12 +221,21 @@ export default async function OrderDetailPage({
                 <h2 className="mb-3 text-sm font-semibold text-zinc-800">Atualizar status</h2>
                 <form action={updateOrderStatusAction} className="space-y-2">
                   <input type="hidden" name="id" value={order.id} />
-                  <select name="status" defaultValue={order.status} className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm">
+                  <select
+                    name="status"
+                    defaultValue={order.status}
+                    className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+                  >
                     {ORDER_STATUSES.map((s) => (
-                      <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+                      <option key={s} value={s}>
+                        {STATUS_LABELS[s]}
+                      </option>
                     ))}
                   </select>
-                  <button type="submit" className="w-full rounded-md bg-zinc-900 py-2 text-sm font-medium text-white hover:bg-zinc-800">
+                  <button
+                    type="submit"
+                    className="w-full rounded-md bg-zinc-900 py-2 text-sm font-medium text-white hover:bg-zinc-800"
+                  >
                     Salvar
                   </button>
                 </form>

@@ -14,7 +14,10 @@ export default async function NewProductPage({
     <div className="flex flex-col overflow-auto">
       <Header title="Novo produto" />
       <div className="p-6">
-        <Link href="/products" className="mb-4 inline-block text-sm text-zinc-600 hover:text-zinc-900">
+        <Link
+          href="/products"
+          className="mb-4 inline-block text-sm text-zinc-600 hover:text-zinc-900"
+        >
           ← Voltar
         </Link>
         <ErrorBanner message={sp.error} />
@@ -39,7 +42,9 @@ export default async function NewProductPage({
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="mb-1 block text-sm font-medium text-zinc-700">Preço venda (R$)</label>
+                <label className="mb-1 block text-sm font-medium text-zinc-700">
+                  Preço venda (R$)
+                </label>
                 <input
                   name="salePrice"
                   required
@@ -49,12 +54,18 @@ export default async function NewProductPage({
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-zinc-700">Custo (R$)</label>
-                <input name="costPrice" defaultValue="0" className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm" />
+                <input
+                  name="costPrice"
+                  defaultValue="0"
+                  className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+                />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="mb-1 block text-sm font-medium text-zinc-700">Estoque mínimo</label>
+                <label className="mb-1 block text-sm font-medium text-zinc-700">
+                  Estoque mínimo
+                </label>
                 <input
                   name="minStock"
                   type="number"
@@ -65,7 +76,10 @@ export default async function NewProductPage({
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-zinc-700">Status</label>
-                <select name="status" className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm">
+                <select
+                  name="status"
+                  className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+                >
                   <option value="draft">Rascunho</option>
                   <option value="active">Ativo</option>
                   <option value="inactive">Inativo</option>

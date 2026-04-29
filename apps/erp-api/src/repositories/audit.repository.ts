@@ -26,11 +26,7 @@ export function createAuditRepository(db: AppDb) {
     },
 
     async findRecent(limit = 50) {
-      return db
-        .select()
-        .from(auditLogs)
-        .orderBy(desc(auditLogs.createdAt))
-        .limit(limit);
+      return db.select().from(auditLogs).orderBy(desc(auditLogs.createdAt)).limit(limit);
     },
 
     async insertIntegrationEvent(data: NewIntegrationEvent) {
@@ -39,7 +35,11 @@ export function createAuditRepository(db: AppDb) {
       return result[0];
     },
 
-    async findIntegrationEventByExternal(sourceSystem: string, eventType: string, externalId: string) {
+    async findIntegrationEventByExternal(
+      sourceSystem: string,
+      eventType: string,
+      externalId: string,
+    ) {
       const result = await db
         .select()
         .from(integrationEvents)

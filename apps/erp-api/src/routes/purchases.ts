@@ -16,7 +16,8 @@ const purchases = new Hono<{ Bindings: Env }>();
 purchases.get("/", async (c) => {
   const query = Object.fromEntries(new URL(c.req.url).searchParams);
   const parsed = listPurchaseOrdersSchema.safeParse(query);
-  if (!parsed.success) return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
   try {
     const config = getEnv(c.env);
     const db = createDb(config.db);
@@ -32,7 +33,8 @@ purchases.get("/", async (c) => {
 purchases.post("/", async (c) => {
   const body = await c.req.json().catch(() => null);
   const parsed = createPurchaseOrderSchema.safeParse(body);
-  if (!parsed.success) return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
   try {
     const config = getEnv(c.env);
     const db = createDb(config.db);
@@ -61,7 +63,8 @@ purchases.get("/:id", async (c) => {
 purchases.patch("/:id/status", async (c) => {
   const body = await c.req.json().catch(() => null);
   const parsed = updatePurchaseStatusSchema.safeParse(body);
-  if (!parsed.success) return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
   try {
     const config = getEnv(c.env);
     const db = createDb(config.db);
@@ -77,7 +80,8 @@ purchases.patch("/:id/status", async (c) => {
 purchases.post("/:id/receive", async (c) => {
   const body = await c.req.json().catch(() => null);
   const parsed = receivePurchaseOrderSchema.safeParse(body);
-  if (!parsed.success) return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
   try {
     const config = getEnv(c.env);
     const db = createDb(config.db);

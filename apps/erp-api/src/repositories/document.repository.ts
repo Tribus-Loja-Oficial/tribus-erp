@@ -5,15 +5,11 @@ import { documentFiles, type DocumentFile, type NewDocumentFile } from "../db/sc
 export function createDocumentRepository(db: AppDb) {
   return {
     async findById(id: string): Promise<DocumentFile | null> {
-      const result = await db
-        .select()
-        .from(documentFiles)
-        .where(eq(documentFiles.id, id))
-        .limit(1);
+      const result = await db.select().from(documentFiles).where(eq(documentFiles.id, id)).limit(1);
       return result[0] ?? null;
     },
 
-    async findByReference(referenceType: string, referenceId: string): Promise<DocumentFile[]> {
+    async findByReference(referenceType: string, _referenceId: string): Promise<DocumentFile[]> {
       return db
         .select()
         .from(documentFiles)

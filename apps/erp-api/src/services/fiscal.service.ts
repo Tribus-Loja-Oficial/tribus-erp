@@ -2,7 +2,6 @@ import type { AppDb } from "../db/client.js";
 import { generateId } from "../utils/id.js";
 import { ConflictError, BadRequestError } from "../errors/app-error.js";
 import { createFiscalRepository } from "../repositories/fiscal.repository.js";
-import { createPartyRepository } from "../repositories/party.repository.js";
 import { createAuditRepository } from "../repositories/audit.repository.js";
 import type { StorageProvider } from "../storage/storage-provider.js";
 
@@ -36,13 +35,13 @@ export interface ParsedNfe {
 export function parseNfeXml(xml: string): ParsedNfe {
   // Lightweight XML parsing using regex — no DOM library needed in Workers
   const get = (tag: string, source = xml): string => {
-    const match = source.match(new RegExp(`<${tag}[^>]*>([^<]*)<\/${tag}>`));
+    const match = source.match(new RegExp(`<${tag}[^>]*>([^<]*)</${tag}>`));
     return match?.[1]?.trim() ?? "";
   };
 
   const getAll = (tag: string): string[] => {
     const matches = [];
-    const regex = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\/${tag}>`, "g");
+    const regex = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, "g");
     let m;
     while ((m = regex.exec(xml)) !== null) {
       matches.push(m[1] ?? "");
@@ -88,7 +87,6 @@ export function parseNfeXml(xml: string): ParsedNfe {
 
 export function createFiscalService(db: AppDb, storage?: StorageProvider) {
   const fiscalRepo = createFiscalRepository(db);
-  const partiesRepo = createPartyRepository(db);
   const auditRepo = createAuditRepository(db);
   const now = () => new Date().toISOString();
 
@@ -106,7 +104,8 @@ export function createFiscalService(db: AppDb, storage?: StorageProvider) {
       }
 
       const existing = await fiscalRepo.findByAccessKey(parsed.accessKey);
-      if (existing) throw new ConflictError(`Document with access key already imported: ${parsed.accessKey}`);
+      if (existing)
+        throw new ConflictError(`Document with access key already imported: ${parsed.accessKey}`);
 
       let storageKey: string | undefined;
       if (storage) {

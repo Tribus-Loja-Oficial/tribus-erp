@@ -1,20 +1,22 @@
 import type { AppDb } from "../db/client.js";
 import { generateId } from "../utils/id.js";
-import { NotFoundError, ConflictError } from "../errors/app-error.js";
+import { NotFoundError } from "../errors/app-error.js";
 import { createOrderRepository } from "../repositories/order.repository.js";
 import { createCustomerRepository } from "../repositories/customer.repository.js";
-import { createInventoryService } from "./inventory.service.js";
 import { createAuditRepository } from "../repositories/audit.repository.js";
 import type { CreateOrderInput, IngestOrderInput } from "../schemas/order.schemas.js";
 
 export function createOrderService(db: AppDb) {
   const ordersRepo = createOrderRepository(db);
   const customersRepo = createCustomerRepository(db);
-  const inventoryService = createInventoryService(db);
   const auditRepo = createAuditRepository(db);
   const now = () => new Date().toISOString();
 
-  async function calculateTotals(items: CreateOrderInput["items"], discountCents: number, shippingCents: number) {
+  async function calculateTotals(
+    items: CreateOrderInput["items"],
+    discountCents: number,
+    shippingCents: number,
+  ) {
     const subtotal = items.reduce((sum, item) => {
       return sum + item.unitPriceCents * item.quantity - item.discountCents;
     }, 0);

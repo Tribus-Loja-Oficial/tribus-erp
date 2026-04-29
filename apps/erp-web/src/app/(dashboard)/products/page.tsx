@@ -16,7 +16,10 @@ interface Product {
 export default async function ProductsPage() {
   let products: Product[] = [];
   try {
-    const res = await erpApiFetch<{ data: Product[] }>({ path: "/products", searchParams: { limit: 50 } });
+    const res = await erpApiFetch<{ data: Product[] }>({
+      path: "/products",
+      searchParams: { limit: 50 },
+    });
     products = res.data;
   } catch {
     products = [];
@@ -37,7 +40,7 @@ export default async function ProductsPage() {
         </div>
         <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+            <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold tracking-wide text-zinc-500 uppercase">
               <tr>
                 <th className="px-4 py-3">SKU</th>
                 <th className="px-4 py-3">Nome</th>
@@ -56,11 +59,16 @@ export default async function ProductsPage() {
                 </tr>
               ) : (
                 products.map((p) => (
-                  <tr key={p.id} className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50/80">
+                  <tr
+                    key={p.id}
+                    className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50/80"
+                  >
                     <td className="px-4 py-3 font-mono text-xs">{p.sku}</td>
                     <td className="px-4 py-3 font-medium text-zinc-900">{p.name}</td>
-                    <td className="px-4 py-3 capitalize text-zinc-600">{p.status}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">{formatCurrency(p.salePriceCents)}</td>
+                    <td className="px-4 py-3 text-zinc-600 capitalize">{p.status}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">
+                      {formatCurrency(p.salePriceCents)}
+                    </td>
                     <td className="px-4 py-3 text-right tabular-nums">
                       {p.currentStock}
                       {p.minStock > 0 && p.currentStock <= p.minStock ? (
@@ -68,7 +76,12 @@ export default async function ProductsPage() {
                       ) : null}
                     </td>
                     <td className="px-4 py-3">
-                      <Link href={`/products/${p.id}`} className="text-xs text-zinc-500 hover:text-zinc-900 underline">Ver</Link>
+                      <Link
+                        href={`/products/${p.id}`}
+                        className="text-xs text-zinc-500 underline hover:text-zinc-900"
+                      >
+                        Ver
+                      </Link>
                     </td>
                   </tr>
                 ))

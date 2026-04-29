@@ -18,7 +18,13 @@ export type StockMovementType =
   | "reservation"
   | "release_reservation";
 
-export type StockLocationType = "main" | "event" | "production" | "damaged" | "reserved" | "third_party";
+export type StockLocationType =
+  | "main"
+  | "event"
+  | "production"
+  | "damaged"
+  | "reserved"
+  | "third_party";
 
 export type OrderStatus =
   | "draft"

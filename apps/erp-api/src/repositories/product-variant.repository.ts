@@ -1,6 +1,10 @@
 import { eq, and, isNull } from "drizzle-orm";
 import type { AppDb } from "../db/client.js";
-import { productVariants, type ProductVariant, type NewProductVariant } from "../db/schema/index.js";
+import {
+  productVariants,
+  type ProductVariant,
+  type NewProductVariant,
+} from "../db/schema/index.js";
 
 export function createProductVariantRepository(db: AppDb) {
   return {

@@ -97,10 +97,11 @@ export function createPosService(db: AppDb) {
       if (!session) throw new NotFoundError("Cash session", input.cashSessionId);
       if (session.status !== "open") throw new BadRequestError("Cash session is not open");
 
-      const totalCents = input.items.reduce(
-        (sum, item) => sum + item.unitPriceCents * item.quantity - item.discountCents,
-        0,
-      ) - input.discountCents;
+      const totalCents =
+        input.items.reduce(
+          (sum, item) => sum + item.unitPriceCents * item.quantity - item.discountCents,
+          0,
+        ) - input.discountCents;
 
       const paidCents = input.payments.reduce((sum, p) => sum + p.amountCents, 0);
       if (paidCents < totalCents) {

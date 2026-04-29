@@ -1,6 +1,12 @@
 import { eq, and, isNull, like, or, desc } from "drizzle-orm";
 import type { AppDb } from "../db/client.js";
-import { parties, partyAddresses, type Party, type NewParty, type NewPartyAddress } from "../db/schema/index.js";
+import {
+  parties,
+  partyAddresses,
+  type Party,
+  type NewParty,
+  type NewPartyAddress,
+} from "../db/schema/index.js";
 
 export interface ListPartiesParams {
   q?: string;

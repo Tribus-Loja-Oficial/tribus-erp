@@ -52,8 +52,12 @@ interface InventoryValuation {
 async function fetchReports() {
   const [dre, cashflow, margin, salesByChannel, inventory] = await Promise.allSettled([
     erpApiFetch<{ data: DreData }>({ path: "/reports/dre" }),
-    erpApiFetch<{ data: { rows: CashflowRow[]; currentBalance: number } }>({ path: "/reports/cashflow" }),
-    erpApiFetch<{ data: { period: { from: string; to: string }; rows: MarginRow[] } }>({ path: "/reports/margin" }),
+    erpApiFetch<{ data: { rows: CashflowRow[]; currentBalance: number } }>({
+      path: "/reports/cashflow",
+    }),
+    erpApiFetch<{ data: { period: { from: string; to: string }; rows: MarginRow[] } }>({
+      path: "/reports/margin",
+    }),
     erpApiFetch<{ data: SalesByChannel }>({ path: "/reports/sales-by-channel" }),
     erpApiFetch<{ data: InventoryValuation }>({ path: "/reports/inventory-valuation" }),
   ]);
@@ -82,10 +86,9 @@ export default async function ReportsPage() {
     <div className="flex flex-col overflow-auto">
       <Header title="Relatórios" />
       <div className="flex flex-1 flex-col gap-6 p-6">
-
         {/* DRE */}
         <section>
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-widest text-zinc-400">
+          <h2 className="mb-3 text-sm font-semibold tracking-widest text-zinc-400 uppercase">
             DRE — Demonstrativo de Resultado (mês atual)
           </h2>
           {dre ? (
@@ -93,10 +96,17 @@ export default async function ReportsPage() {
               {[
                 { label: "Receita", value: formatCurrency(dre.revenue), color: "text-green-700" },
                 { label: "Despesas", value: formatCurrency(dre.expenses), color: "text-red-600" },
-                { label: "Resultado", value: formatCurrency(dre.result), color: dre.result >= 0 ? "text-green-700" : "text-red-600" },
+                {
+                  label: "Resultado",
+                  value: formatCurrency(dre.result),
+                  color: dre.result >= 0 ? "text-green-700" : "text-red-600",
+                },
                 { label: "Margem", value: `${dre.margin}%`, color: "text-zinc-900" },
               ].map((c) => (
-                <div key={c.label} className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+                <div
+                  key={c.label}
+                  className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm"
+                >
                   <p className="text-xs text-zinc-500">{c.label}</p>
                   <p className={`mt-1 text-xl font-bold tabular-nums ${c.color}`}>{c.value}</p>
                 </div>
@@ -109,7 +119,7 @@ export default async function ReportsPage() {
 
         {/* Fluxo de caixa */}
         <section>
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-widest text-zinc-400">
+          <h2 className="mb-3 text-sm font-semibold tracking-widest text-zinc-400 uppercase">
             Fluxo de Caixa — Últimos 6 meses
           </h2>
           {cashflow && cashflow.rows.length > 0 ? (
@@ -119,7 +129,7 @@ export default async function ReportsPage() {
                 <strong className="text-zinc-900">{formatCurrency(cashflow.currentBalance)}</strong>
               </div>
               <table className="w-full text-left text-sm">
-                <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold tracking-wide text-zinc-500 uppercase">
                   <tr>
                     <th className="px-4 py-3">Mês</th>
                     <th className="px-4 py-3 text-right">Entradas</th>
@@ -131,9 +141,15 @@ export default async function ReportsPage() {
                   {cashflow.rows.map((row) => (
                     <tr key={row.month} className="border-b border-zinc-100 last:border-0">
                       <td className="px-4 py-3 font-medium text-zinc-800">{row.month}</td>
-                      <td className="px-4 py-3 text-right tabular-nums text-green-700">{formatCurrency(row.income)}</td>
-                      <td className="px-4 py-3 text-right tabular-nums text-red-600">{formatCurrency(row.expense)}</td>
-                      <td className={`px-4 py-3 text-right tabular-nums font-medium ${row.balance >= 0 ? "text-green-700" : "text-red-600"}`}>
+                      <td className="px-4 py-3 text-right text-green-700 tabular-nums">
+                        {formatCurrency(row.income)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-red-600 tabular-nums">
+                        {formatCurrency(row.expense)}
+                      </td>
+                      <td
+                        className={`px-4 py-3 text-right font-medium tabular-nums ${row.balance >= 0 ? "text-green-700" : "text-red-600"}`}
+                      >
                         {formatCurrency(row.balance)}
                       </td>
                     </tr>
@@ -148,17 +164,20 @@ export default async function ReportsPage() {
 
         {/* Vendas por canal */}
         <section>
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-widest text-zinc-400">
+          <h2 className="mb-3 text-sm font-semibold tracking-widest text-zinc-400 uppercase">
             Vendas por Canal — Mês atual
           </h2>
           {salesByChannel ? (
             <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
               <div className="px-4 pt-4 pb-2 text-sm text-zinc-600">
-                Total de pedidos: <strong className="text-zinc-900">{salesByChannel.totalOrders}</strong> ·{" "}
-                Receita: <strong className="text-zinc-900">{formatCurrency(salesByChannel.totalRevenueCents)}</strong>
+                Total de pedidos:{" "}
+                <strong className="text-zinc-900">{salesByChannel.totalOrders}</strong> · Receita:{" "}
+                <strong className="text-zinc-900">
+                  {formatCurrency(salesByChannel.totalRevenueCents)}
+                </strong>
               </div>
               <table className="w-full text-left text-sm">
-                <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold tracking-wide text-zinc-500 uppercase">
                   <tr>
                     <th className="px-4 py-3">Canal</th>
                     <th className="px-4 py-3 text-right">Pedidos</th>
@@ -168,9 +187,13 @@ export default async function ReportsPage() {
                 <tbody>
                   {Object.entries(salesByChannel.byChannel).map(([channel, data]) => (
                     <tr key={channel} className="border-b border-zinc-100 last:border-0">
-                      <td className="px-4 py-3 font-medium text-zinc-800">{CHANNEL_LABELS[channel] ?? channel}</td>
+                      <td className="px-4 py-3 font-medium text-zinc-800">
+                        {CHANNEL_LABELS[channel] ?? channel}
+                      </td>
                       <td className="px-4 py-3 text-right tabular-nums">{data.count}</td>
-                      <td className="px-4 py-3 text-right tabular-nums">{formatCurrency(data.totalCents)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">
+                        {formatCurrency(data.totalCents)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -183,13 +206,13 @@ export default async function ReportsPage() {
 
         {/* Margem por produto */}
         <section>
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-widest text-zinc-400">
+          <h2 className="mb-3 text-sm font-semibold tracking-widest text-zinc-400 uppercase">
             Margem por Produto — Mês atual (top 20)
           </h2>
           {margin && margin.rows.length > 0 ? (
             <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
               <table className="w-full text-left text-sm">
-                <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold tracking-wide text-zinc-500 uppercase">
                   <tr>
                     <th className="px-4 py-3">SKU</th>
                     <th className="px-4 py-3">Produto</th>
@@ -205,9 +228,15 @@ export default async function ReportsPage() {
                       <td className="px-4 py-3 font-mono text-xs text-zinc-500">{row.sku}</td>
                       <td className="px-4 py-3 text-zinc-800">{row.name}</td>
                       <td className="px-4 py-3 text-right tabular-nums">{row.totalQty}</td>
-                      <td className="px-4 py-3 text-right tabular-nums">{formatCurrency(row.totalRevenueCents)}</td>
-                      <td className="px-4 py-3 text-right tabular-nums text-red-600">{formatCurrency(row.totalCostCents)}</td>
-                      <td className={`px-4 py-3 text-right tabular-nums font-medium ${parseFloat(row.marginPct) >= 30 ? "text-green-700" : parseFloat(row.marginPct) < 10 ? "text-red-600" : "text-amber-600"}`}>
+                      <td className="px-4 py-3 text-right tabular-nums">
+                        {formatCurrency(row.totalRevenueCents)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-red-600 tabular-nums">
+                        {formatCurrency(row.totalCostCents)}
+                      </td>
+                      <td
+                        className={`px-4 py-3 text-right font-medium tabular-nums ${parseFloat(row.marginPct) >= 30 ? "text-green-700" : parseFloat(row.marginPct) < 10 ? "text-red-600" : "text-amber-600"}`}
+                      >
                         {row.marginPct}%
                       </td>
                     </tr>
@@ -216,13 +245,15 @@ export default async function ReportsPage() {
               </table>
             </div>
           ) : (
-            <p className="text-sm text-zinc-500">Nenhuma venda com produto vinculado neste período.</p>
+            <p className="text-sm text-zinc-500">
+              Nenhuma venda com produto vinculado neste período.
+            </p>
           )}
         </section>
 
         {/* Estoque valorizado */}
         <section>
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-widest text-zinc-400">
+          <h2 className="mb-3 text-sm font-semibold tracking-widest text-zinc-400 uppercase">
             Estoque Valorizado
           </h2>
           {inventory ? (
@@ -230,7 +261,9 @@ export default async function ReportsPage() {
               <div className="mb-3 flex gap-6 text-sm text-zinc-600">
                 <span>
                   Valor total em estoque:{" "}
-                  <strong className="text-zinc-900">{formatCurrency(inventory.totalValueCents)}</strong>
+                  <strong className="text-zinc-900">
+                    {formatCurrency(inventory.totalValueCents)}
+                  </strong>
                 </span>
                 {inventory.belowMinStockCount > 0 && (
                   <span className="text-amber-700">
@@ -240,7 +273,7 @@ export default async function ReportsPage() {
               </div>
               <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
                 <table className="w-full text-left text-sm">
-                  <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                  <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold tracking-wide text-zinc-500 uppercase">
                     <tr>
                       <th className="px-4 py-3">SKU</th>
                       <th className="px-4 py-3">Produto</th>
@@ -263,8 +296,12 @@ export default async function ReportsPage() {
                           )}
                         </td>
                         <td className="px-4 py-3 text-right tabular-nums">{row.currentStock}</td>
-                        <td className="px-4 py-3 text-right tabular-nums text-zinc-500">{formatCurrency(row.costPriceCents)}</td>
-                        <td className="px-4 py-3 text-right tabular-nums font-medium">{formatCurrency(row.totalValueCents)}</td>
+                        <td className="px-4 py-3 text-right text-zinc-500 tabular-nums">
+                          {formatCurrency(row.costPriceCents)}
+                        </td>
+                        <td className="px-4 py-3 text-right font-medium tabular-nums">
+                          {formatCurrency(row.totalValueCents)}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -275,7 +312,6 @@ export default async function ReportsPage() {
             <p className="text-sm text-zinc-500">Sem produtos cadastrados.</p>
           )}
         </section>
-
       </div>
     </div>
   );

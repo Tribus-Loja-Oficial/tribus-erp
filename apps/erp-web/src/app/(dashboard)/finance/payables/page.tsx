@@ -61,7 +61,10 @@ export default async function PayablesPage({
           <form action={createPayableAction} className="grid gap-3 text-sm md:grid-cols-2">
             <div>
               <label className="mb-1 block font-medium text-zinc-700">Fornecedor (opcional)</label>
-              <select name="supplierId" className="w-full rounded-md border border-zinc-300 px-3 py-2">
+              <select
+                name="supplierId"
+                className="w-full rounded-md border border-zinc-300 px-3 py-2"
+              >
                 <option value="">—</option>
                 {suppliers.map((r) => (
                   <option key={r.supplier.id} value={r.supplier.id}>
@@ -72,18 +75,35 @@ export default async function PayablesPage({
             </div>
             <div>
               <label className="mb-1 block font-medium text-zinc-700">Vencimento</label>
-              <input name="dueDate" type="date" required defaultValue={today} className="w-full rounded-md border border-zinc-300 px-3 py-2" />
+              <input
+                name="dueDate"
+                type="date"
+                required
+                defaultValue={today}
+                className="w-full rounded-md border border-zinc-300 px-3 py-2"
+              />
             </div>
             <div className="md:col-span-2">
               <label className="mb-1 block font-medium text-zinc-700">Descrição</label>
-              <input name="description" required className="w-full rounded-md border border-zinc-300 px-3 py-2" />
+              <input
+                name="description"
+                required
+                className="w-full rounded-md border border-zinc-300 px-3 py-2"
+              />
             </div>
             <div>
               <label className="mb-1 block font-medium text-zinc-700">Valor (R$)</label>
-              <input name="amount" required className="w-full rounded-md border border-zinc-300 px-3 py-2" />
+              <input
+                name="amount"
+                required
+                className="w-full rounded-md border border-zinc-300 px-3 py-2"
+              />
             </div>
             <div className="flex items-end">
-              <button type="submit" className="w-full rounded-md bg-zinc-900 py-2 font-medium text-white hover:bg-zinc-800">
+              <button
+                type="submit"
+                className="w-full rounded-md bg-zinc-900 py-2 font-medium text-white hover:bg-zinc-800"
+              >
                 Salvar
               </button>
             </div>
@@ -91,7 +111,7 @@ export default async function PayablesPage({
         </div>
         <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+            <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold tracking-wide text-zinc-500 uppercase">
               <tr>
                 <th className="px-4 py-3">Descrição</th>
                 <th className="px-4 py-3">Vencimento</th>
@@ -113,21 +133,40 @@ export default async function PayablesPage({
                     <td className="px-4 py-3">{r.description}</td>
                     <td className="px-4 py-3 text-zinc-600">{r.dueDate}</td>
                     <td className="px-4 py-3 capitalize">{r.status.replaceAll("_", " ")}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">{formatCurrency(r.amountCents)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">
+                      {formatCurrency(r.amountCents)}
+                    </td>
                     <td className="px-4 py-3">
                       {r.status !== "paid" && r.status !== "cancelled" && accounts.length > 0 && (
                         <form action={payPayableAction} className="flex items-center gap-1">
                           <input type="hidden" name="id" value={r.id} />
-                          <input type="hidden" name="amount" value={(r.amountCents / 100).toFixed(2)} />
-                          <select name="financialAccountId" className="rounded border border-zinc-300 px-1 py-0.5 text-xs">
-                            {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                          <input
+                            type="hidden"
+                            name="amount"
+                            value={(r.amountCents / 100).toFixed(2)}
+                          />
+                          <select
+                            name="financialAccountId"
+                            className="rounded border border-zinc-300 px-1 py-0.5 text-xs"
+                          >
+                            {accounts.map((a) => (
+                              <option key={a.id} value={a.id}>
+                                {a.name}
+                              </option>
+                            ))}
                           </select>
-                          <select name="paymentMethod" className="rounded border border-zinc-300 px-1 py-0.5 text-xs">
+                          <select
+                            name="paymentMethod"
+                            className="rounded border border-zinc-300 px-1 py-0.5 text-xs"
+                          >
                             <option value="pix">PIX</option>
                             <option value="bank_transfer">TED</option>
                             <option value="cash">Dinheiro</option>
                           </select>
-                          <button type="submit" className="rounded bg-green-600 px-2 py-0.5 text-xs text-white hover:bg-green-700">
+                          <button
+                            type="submit"
+                            className="rounded bg-green-600 px-2 py-0.5 text-xs text-white hover:bg-green-700"
+                          >
                             Pagar
                           </button>
                         </form>

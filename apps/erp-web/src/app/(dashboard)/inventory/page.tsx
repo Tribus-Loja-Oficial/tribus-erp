@@ -35,7 +35,10 @@ export default async function InventoryPage({
     const [l, p, m] = await Promise.all([
       erpApiFetch<{ data: Location[] }>({ path: "/inventory/locations" }),
       erpApiFetch<{ data: Product[] }>({ path: "/products", searchParams: { limit: 200 } }),
-      erpApiFetch<{ data: Movement[] }>({ path: "/inventory/movements", searchParams: { limit: 30 } }),
+      erpApiFetch<{ data: Movement[] }>({
+        path: "/inventory/movements",
+        searchParams: { limit: 30 },
+      }),
     ]);
     locations = l.data;
     products = p.data;
@@ -55,7 +58,11 @@ export default async function InventoryPage({
             <form action={createStockMovementAction} className="space-y-3 text-sm">
               <div>
                 <label className="mb-1 block font-medium text-zinc-700">Produto</label>
-                <select name="productId" required className="w-full rounded-md border border-zinc-300 px-3 py-2">
+                <select
+                  name="productId"
+                  required
+                  className="w-full rounded-md border border-zinc-300 px-3 py-2"
+                >
                   <option value="">Selecione…</option>
                   {products.map((p) => (
                     <option key={p.id} value={p.id}>
@@ -66,7 +73,11 @@ export default async function InventoryPage({
               </div>
               <div>
                 <label className="mb-1 block font-medium text-zinc-700">Local</label>
-                <select name="locationId" required className="w-full rounded-md border border-zinc-300 px-3 py-2">
+                <select
+                  name="locationId"
+                  required
+                  className="w-full rounded-md border border-zinc-300 px-3 py-2"
+                >
                   {locations.map((loc) => (
                     <option key={loc.id} value={loc.id}>
                       {loc.name} ({loc.type})
@@ -77,7 +88,10 @@ export default async function InventoryPage({
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="mb-1 block font-medium text-zinc-700">Tipo</label>
-                  <select name="type" className="w-full rounded-md border border-zinc-300 px-3 py-2">
+                  <select
+                    name="type"
+                    className="w-full rounded-md border border-zinc-300 px-3 py-2"
+                  >
                     <option value="purchase">Compra</option>
                     <option value="adjustment">Ajuste</option>
                     <option value="return">Devolução</option>
@@ -86,18 +100,36 @@ export default async function InventoryPage({
                 </div>
                 <div>
                   <label className="mb-1 block font-medium text-zinc-700">Quantidade</label>
-                  <input name="quantity" type="number" min={1} defaultValue={1} className="w-full rounded-md border border-zinc-300 px-3 py-2" />
+                  <input
+                    name="quantity"
+                    type="number"
+                    min={1}
+                    defaultValue={1}
+                    className="w-full rounded-md border border-zinc-300 px-3 py-2"
+                  />
                 </div>
               </div>
               <div>
-                <label className="mb-1 block font-medium text-zinc-700">Custo unitário (R$, opcional)</label>
-                <input name="unitCost" className="w-full rounded-md border border-zinc-300 px-3 py-2" placeholder="0" />
+                <label className="mb-1 block font-medium text-zinc-700">
+                  Custo unitário (R$, opcional)
+                </label>
+                <input
+                  name="unitCost"
+                  className="w-full rounded-md border border-zinc-300 px-3 py-2"
+                  placeholder="0"
+                />
               </div>
               <div>
                 <label className="mb-1 block font-medium text-zinc-700">Observações</label>
-                <input name="notes" className="w-full rounded-md border border-zinc-300 px-3 py-2" />
+                <input
+                  name="notes"
+                  className="w-full rounded-md border border-zinc-300 px-3 py-2"
+                />
               </div>
-              <button type="submit" className="w-full rounded-md bg-zinc-900 py-2 font-medium text-white hover:bg-zinc-800">
+              <button
+                type="submit"
+                className="w-full rounded-md bg-zinc-900 py-2 font-medium text-white hover:bg-zinc-800"
+              >
                 Registrar
               </button>
             </form>
@@ -109,9 +141,13 @@ export default async function InventoryPage({
                 <li className="text-zinc-500">Nenhuma movimentação.</li>
               ) : (
                 movements.map((mv) => (
-                  <li key={mv.id} className="flex justify-between border-b border-zinc-100 py-2 last:border-0">
+                  <li
+                    key={mv.id}
+                    className="flex justify-between border-b border-zinc-100 py-2 last:border-0"
+                  >
                     <span>
-                      <span className="font-mono text-xs text-zinc-500">{mv.type}</span> · {mv.quantity} un.
+                      <span className="font-mono text-xs text-zinc-500">{mv.type}</span> ·{" "}
+                      {mv.quantity} un.
                     </span>
                     <span className="text-xs text-zinc-500">{formatDateTime(mv.createdAt)}</span>
                   </li>

@@ -5,7 +5,11 @@ import { createPartyRepository } from "../repositories/party.repository.js";
 import { createCustomerRepository } from "../repositories/customer.repository.js";
 import { createSupplierRepository } from "../repositories/supplier.repository.js";
 import { createAuditRepository } from "../repositories/audit.repository.js";
-import type { CreatePartyInput, UpdatePartyInput, CreateAddressInput } from "../schemas/party.schemas.js";
+import type {
+  CreatePartyInput,
+  UpdatePartyInput,
+  CreateAddressInput,
+} from "../schemas/party.schemas.js";
 import type {
   CreateCustomerWithPartyInput,
   CreateSupplierWithPartyInput,
@@ -57,7 +61,11 @@ export function createPartyService(db: AppDb) {
     },
 
     async findMany(params: Parameters<typeof partiesRepo.findMany>[0]) {
-      const { page = 1, limit = 20, ...rest } = params as { page?: number; limit?: number; q?: string; type?: "individual" | "company" };
+      const {
+        page = 1,
+        limit = 20,
+        ...rest
+      } = params as { page?: number; limit?: number; q?: string; type?: "individual" | "company" };
       return partiesRepo.findMany({ ...rest, limit, offset: (page - 1) * limit });
     },
 
@@ -111,7 +119,10 @@ export function createPartyService(db: AppDb) {
       });
     },
 
-    async createCustomer(partyId: string, opts?: { cdsConsumerId?: string; origin?: "ecommerce" | "event" | "manual" | "imported" }) {
+    async createCustomer(
+      partyId: string,
+      opts?: { cdsConsumerId?: string; origin?: "ecommerce" | "event" | "manual" | "imported" },
+    ) {
       const party = await partiesRepo.findById(partyId);
       if (!party) throw new NotFoundError("Party", partyId);
       const existing = await customersRepo.findByPartyId(partyId);
@@ -133,7 +144,10 @@ export function createPartyService(db: AppDb) {
       });
     },
 
-    async createSupplier(partyId: string, opts?: { stateRegistration?: string; contactName?: string }) {
+    async createSupplier(
+      partyId: string,
+      opts?: { stateRegistration?: string; contactName?: string },
+    ) {
       const party = await partiesRepo.findById(partyId);
       if (!party) throw new NotFoundError("Party", partyId);
       const existing = await suppliersRepo.findByPartyId(partyId);

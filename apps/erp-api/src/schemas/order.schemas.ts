@@ -11,7 +11,15 @@ const orderItemSchema = z.object({
 });
 
 const orderPaymentSchema = z.object({
-  method: z.enum(["cash", "credit_card", "debit_card", "pix", "bank_transfer", "marketplace", "other"]),
+  method: z.enum([
+    "cash",
+    "credit_card",
+    "debit_card",
+    "pix",
+    "bank_transfer",
+    "marketplace",
+    "other",
+  ]),
   amountCents: z.number().int().min(1),
   externalRef: z.string().optional(),
 });
@@ -67,13 +75,31 @@ export const ingestOrderSchema = z.object({
     totalCents: z.number().int().min(0),
   }),
   status: z
-    .enum(["draft", "pending_payment", "paid", "preparing", "shipped", "delivered", "cancelled", "refunded"])
+    .enum([
+      "draft",
+      "pending_payment",
+      "paid",
+      "preparing",
+      "shipped",
+      "delivered",
+      "cancelled",
+      "refunded",
+    ])
     .default("pending_payment"),
 });
 
 export const listOrdersSchema = z.object({
   status: z
-    .enum(["draft", "pending_payment", "paid", "preparing", "shipped", "delivered", "cancelled", "refunded"])
+    .enum([
+      "draft",
+      "pending_payment",
+      "paid",
+      "preparing",
+      "shipped",
+      "delivered",
+      "cancelled",
+      "refunded",
+    ])
     .optional(),
   channel: z.enum(["ecommerce", "pos", "manual", "event", "marketplace"]).optional(),
   customerId: z.string().optional(),

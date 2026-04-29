@@ -21,13 +21,20 @@ reports.get("/dre", zValidator("query", periodQuery), async (c) => {
   return c.json({ data });
 });
 
-reports.get("/cashflow", zValidator("query", periodQuery.extend({ months: z.coerce.number().int().positive().max(24).default(6) })), async (c) => {
-  const db = createDb(getEnv(c.env).db);
-  const service = createReportsService(db);
-  const { from, to, months } = c.req.valid("query");
-  const data = await service.getCashflow(from, to, months);
-  return c.json({ data });
-});
+reports.get(
+  "/cashflow",
+  zValidator(
+    "query",
+    periodQuery.extend({ months: z.coerce.number().int().positive().max(24).default(6) }),
+  ),
+  async (c) => {
+    const db = createDb(getEnv(c.env).db);
+    const service = createReportsService(db);
+    const { from, to, months } = c.req.valid("query");
+    const data = await service.getCashflow(from, to, months);
+    return c.json({ data });
+  },
+);
 
 reports.get("/margin", zValidator("query", periodQuery), async (c) => {
   const db = createDb(getEnv(c.env).db);

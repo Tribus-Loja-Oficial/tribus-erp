@@ -25,9 +25,7 @@ import { cn } from "@/lib/utils";
 const navGroups = [
   {
     label: "Visão Geral",
-    items: [
-      { href: "/", label: "Dashboard", icon: LayoutDashboard },
-    ],
+    items: [{ href: "/", label: "Dashboard", icon: LayoutDashboard }],
   },
   {
     label: "Cadastros",
@@ -47,9 +45,7 @@ const navGroups = [
   },
   {
     label: "Compras",
-    items: [
-      { href: "/purchases", label: "Ordens de Compra", icon: ClipboardList },
-    ],
+    items: [{ href: "/purchases", label: "Ordens de Compra", icon: ClipboardList }],
   },
   {
     label: "Produção",
@@ -76,15 +72,11 @@ const navGroups = [
   },
   {
     label: "Análises",
-    items: [
-      { href: "/reports", label: "Relatórios", icon: BarChart3 },
-    ],
+    items: [{ href: "/reports", label: "Relatórios", icon: BarChart3 }],
   },
   {
     label: "Sistema",
-    items: [
-      { href: "/settings", label: "Configurações", icon: Settings },
-    ],
+    items: [{ href: "/settings", label: "Configurações", icon: Settings }],
   },
 ];
 
@@ -99,15 +91,13 @@ export function Sidebar() {
       <nav className="flex-1 overflow-y-auto px-3 py-4">
         {navGroups.map((group) => (
           <div key={group.label} className="mb-6">
-            <p className="mb-1.5 px-3 text-xs font-semibold uppercase tracking-widest text-zinc-400">
+            <p className="mb-1.5 px-3 text-xs font-semibold tracking-widest text-zinc-400 uppercase">
               {group.label}
             </p>
             <ul className="space-y-0.5">
               {group.items.map((item) => {
                 const active =
-                  item.href === "/"
-                    ? pathname === "/"
-                    : pathname.startsWith(item.href);
+                  item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
                 return (
                   <li key={item.href}>
                     <Link

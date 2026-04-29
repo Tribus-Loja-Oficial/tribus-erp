@@ -47,7 +47,7 @@ export default async function PurchasesPage() {
         </div>
         <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+            <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold tracking-wide text-zinc-500 uppercase">
               <tr>
                 <th className="px-4 py-3">ID</th>
                 <th className="px-4 py-3">Emissão</th>
@@ -66,23 +66,38 @@ export default async function PurchasesPage() {
                 </tr>
               ) : (
                 orders.map((o) => (
-                  <tr key={o.id} className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50/80">
-                    <td className="px-4 py-3 font-mono text-xs text-zinc-500">{o.id.slice(0, 8)}…</td>
+                  <tr
+                    key={o.id}
+                    className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50/80"
+                  >
+                    <td className="px-4 py-3 font-mono text-xs text-zinc-500">
+                      {o.id.slice(0, 8)}…
+                    </td>
                     <td className="px-4 py-3 text-zinc-600">{o.issueDate}</td>
                     <td className="px-4 py-3 text-zinc-600">{o.expectedDate ?? "—"}</td>
                     <td className="px-4 py-3">
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                        o.status === "received" ? "bg-green-100 text-green-700" :
-                        o.status === "cancelled" ? "bg-red-100 text-red-700" :
-                        o.status === "ordered" ? "bg-blue-100 text-blue-700" :
-                        "bg-zinc-100 text-zinc-700"
-                      }`}>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                          o.status === "received"
+                            ? "bg-green-100 text-green-700"
+                            : o.status === "cancelled"
+                              ? "bg-red-100 text-red-700"
+                              : o.status === "ordered"
+                                ? "bg-blue-100 text-blue-700"
+                                : "bg-zinc-100 text-zinc-700"
+                        }`}
+                      >
                         {STATUS_LABELS[o.status] ?? o.status}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums">{formatCurrency(o.totalAmountCents)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">
+                      {formatCurrency(o.totalAmountCents)}
+                    </td>
                     <td className="px-4 py-3">
-                      <Link href={`/purchases/${o.id}`} className="text-xs text-zinc-500 hover:text-zinc-900 underline">
+                      <Link
+                        href={`/purchases/${o.id}`}
+                        className="text-xs text-zinc-500 underline hover:text-zinc-900"
+                      >
                         Ver
                       </Link>
                     </td>

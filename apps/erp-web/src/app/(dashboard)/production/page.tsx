@@ -75,7 +75,7 @@ export default async function ProductionPage({
 
         <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+            <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold tracking-wide text-zinc-500 uppercase">
               <tr>
                 <th className="px-4 py-3">Número</th>
                 <th className="px-4 py-3">Status</th>
@@ -95,12 +95,22 @@ export default async function ProductionPage({
                 </tr>
               ) : (
                 orders.map((o) => {
-                  const s = STATUS_LABELS[o.status] ?? { label: o.status, color: "text-zinc-600 bg-zinc-100" };
+                  const s = STATUS_LABELS[o.status] ?? {
+                    label: o.status,
+                    color: "text-zinc-600 bg-zinc-100",
+                  };
                   return (
-                    <tr key={o.id} className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50/80">
-                      <td className="px-4 py-3 font-mono text-xs font-medium text-zinc-800">{o.orderNumber}</td>
+                    <tr
+                      key={o.id}
+                      className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50/80"
+                    >
+                      <td className="px-4 py-3 font-mono text-xs font-medium text-zinc-800">
+                        {o.orderNumber}
+                      </td>
                       <td className="px-4 py-3">
-                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${s.color}`}>{s.label}</span>
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${s.color}`}>
+                          {s.label}
+                        </span>
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums">{o.quantityPlanned}</td>
                       <td className="px-4 py-3 text-right tabular-nums">{o.quantityProduced}</td>
@@ -111,7 +121,10 @@ export default async function ProductionPage({
                         {o.completedAt ? new Date(o.completedAt).toLocaleDateString("pt-BR") : "—"}
                       </td>
                       <td className="px-4 py-3">
-                        <Link href={`/production/${o.id}`} className="text-xs text-zinc-500 underline hover:text-zinc-900">
+                        <Link
+                          href={`/production/${o.id}`}
+                          className="text-xs text-zinc-500 underline hover:text-zinc-900"
+                        >
                           Ver
                         </Link>
                       </td>

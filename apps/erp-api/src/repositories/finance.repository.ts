@@ -76,14 +76,16 @@ export function createFinanceRepository(db: AppDb) {
       return result[0];
     },
 
-    async findEntries(params: {
-      type?: string;
-      accountId?: string;
-      from?: string;
-      to?: string;
-      limit?: number;
-      offset?: number;
-    } = {}): Promise<FinancialEntry[]> {
+    async findEntries(
+      params: {
+        type?: string;
+        accountId?: string;
+        from?: string;
+        to?: string;
+        limit?: number;
+        offset?: number;
+      } = {},
+    ): Promise<FinancialEntry[]> {
       const { type, accountId, from, to, limit = 50, offset = 0 } = params;
       const conditions = [];
       if (type) conditions.push(eq(financialEntries.type, type as FinancialEntry["type"]));
@@ -100,7 +102,9 @@ export function createFinanceRepository(db: AppDb) {
     },
 
     // Accounts Payable
-    async findPayables(params: { status?: string; limit?: number; offset?: number } = {}): Promise<AccountPayable[]> {
+    async findPayables(
+      params: { status?: string; limit?: number; offset?: number } = {},
+    ): Promise<AccountPayable[]> {
       const { status, limit = 20, offset = 0 } = params;
       const conditions = [isNull(accountsPayable.archivedAt)];
       if (status) conditions.push(eq(accountsPayable.status, status as AccountPayable["status"]));
@@ -139,7 +143,9 @@ export function createFinanceRepository(db: AppDb) {
     },
 
     // Accounts Receivable
-    async findReceivables(params: { status?: string; limit?: number; offset?: number } = {}): Promise<AccountReceivable[]> {
+    async findReceivables(
+      params: { status?: string; limit?: number; offset?: number } = {},
+    ): Promise<AccountReceivable[]> {
       const { status, limit = 20, offset = 0 } = params;
       const conditions = [isNull(accountsReceivable.archivedAt)];
       if (status)
@@ -168,7 +174,10 @@ export function createFinanceRepository(db: AppDb) {
       return result[0];
     },
 
-    async updateReceivable(id: string, data: Partial<NewAccountReceivable>): Promise<AccountReceivable> {
+    async updateReceivable(
+      id: string,
+      data: Partial<NewAccountReceivable>,
+    ): Promise<AccountReceivable> {
       const result = await db
         .update(accountsReceivable)
         .set({ ...data, updatedAt: new Date().toISOString() })
@@ -178,7 +187,10 @@ export function createFinanceRepository(db: AppDb) {
       return result[0];
     },
 
-    async sumEntriesByType(from?: string, to?: string): Promise<{ income: number; expense: number }> {
+    async sumEntriesByType(
+      from?: string,
+      to?: string,
+    ): Promise<{ income: number; expense: number }> {
       const entries = await this.findEntries({ from, to, limit: 9999 });
       return entries.reduce(
         (acc, e) => {
@@ -191,7 +203,10 @@ export function createFinanceRepository(db: AppDb) {
     },
 
     async sumPayablesByStatus(): Promise<Record<string, number>> {
-      const items = await db.select().from(accountsPayable).where(isNull(accountsPayable.archivedAt));
+      const items = await db
+        .select()
+        .from(accountsPayable)
+        .where(isNull(accountsPayable.archivedAt));
       return items.reduce(
         (acc, p) => {
           acc[p.status] = (acc[p.status] ?? 0) + (p.amountCents - p.paidAmountCents);

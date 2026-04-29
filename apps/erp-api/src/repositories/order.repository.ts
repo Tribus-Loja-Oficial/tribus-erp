@@ -1,4 +1,4 @@
-import { eq, and, isNull, desc, like } from "drizzle-orm";
+import { eq, and, isNull, desc } from "drizzle-orm";
 import type { AppDb } from "../db/client.js";
 import {
   orders,

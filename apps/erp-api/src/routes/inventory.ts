@@ -13,10 +13,17 @@ const addMovementSchema = z.object({
   variantId: z.string().optional(),
   locationId: z.string().min(1),
   type: z.enum([
-    "purchase", "sale", "return", "adjustment",
-    "production_in", "production_out",
-    "transfer_in", "transfer_out",
-    "damaged", "reservation", "release_reservation",
+    "purchase",
+    "sale",
+    "return",
+    "adjustment",
+    "production_in",
+    "production_out",
+    "transfer_in",
+    "transfer_out",
+    "damaged",
+    "reservation",
+    "release_reservation",
   ]),
   quantity: z.number().int().min(1),
   unitCostCents: z.number().int().min(0).optional(),
@@ -47,7 +54,8 @@ inventory.get("/locations", async (c) => {
 inventory.post("/locations", async (c) => {
   const body = await c.req.json().catch(() => null);
   const parsed = createLocationSchema.safeParse(body);
-  if (!parsed.success) return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
   try {
     const config = getEnv(c.env);
     const db = createDb(config.db);
@@ -63,7 +71,8 @@ inventory.post("/locations", async (c) => {
 inventory.post("/movements", async (c) => {
   const body = await c.req.json().catch(() => null);
   const parsed = addMovementSchema.safeParse(body);
-  if (!parsed.success) return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
   try {
     const config = getEnv(c.env);
     const db = createDb(config.db);

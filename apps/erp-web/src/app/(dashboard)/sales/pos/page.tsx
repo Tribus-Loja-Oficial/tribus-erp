@@ -50,18 +50,28 @@ export default async function PosPage({
       <Header title="PDV" />
       <div className="flex flex-1 flex-col gap-6 p-6">
         <p className="text-sm text-zinc-600">
-          Use <Link className="underline" href="/finance/cash">Caixa</Link> para abrir sessão antes de vender.
+          Use{" "}
+          <Link className="underline" href="/finance/cash">
+            Caixa
+          </Link>{" "}
+          para abrir sessão antes de vender.
         </p>
         <ErrorBanner message={sp.error} />
         <div className="mx-auto w-full max-w-lg rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
           <h2 className="mb-4 text-sm font-semibold text-zinc-800">Venda rápida</h2>
           {openSessions.length === 0 ? (
-            <p className="text-sm text-amber-700">Abra uma sessão de caixa em Financeiro → Caixa.</p>
+            <p className="text-sm text-amber-700">
+              Abra uma sessão de caixa em Financeiro → Caixa.
+            </p>
           ) : (
             <form action={createPosSaleAction} className="space-y-3 text-sm">
               <div>
                 <label className="mb-1 block font-medium text-zinc-700">Sessão</label>
-                <select name="cashSessionId" required className="w-full rounded-md border border-zinc-300 px-3 py-2">
+                <select
+                  name="cashSessionId"
+                  required
+                  className="w-full rounded-md border border-zinc-300 px-3 py-2"
+                >
                   {openSessions.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.id.slice(0, 8)}… ({s.cashRegisterId})
@@ -71,7 +81,10 @@ export default async function PosPage({
               </div>
               <div>
                 <label className="mb-1 block font-medium text-zinc-700">Cliente (opcional)</label>
-                <select name="customerId" className="w-full rounded-md border border-zinc-300 px-3 py-2">
+                <select
+                  name="customerId"
+                  className="w-full rounded-md border border-zinc-300 px-3 py-2"
+                >
                   <option value="">Venda direta</option>
                   {customers.map((r) => (
                     <option key={r.customer.id} value={r.customer.id}>
@@ -81,8 +94,13 @@ export default async function PosPage({
                 </select>
               </div>
               <div>
-                <label className="mb-1 block font-medium text-zinc-700">Produto (opcional — baixa estoque)</label>
-                <select name="productId" className="mb-2 w-full rounded-md border border-zinc-300 px-3 py-2">
+                <label className="mb-1 block font-medium text-zinc-700">
+                  Produto (opcional — baixa estoque)
+                </label>
+                <select
+                  name="productId"
+                  className="mb-2 w-full rounded-md border border-zinc-300 px-3 py-2"
+                >
                   <option value="">Sem vínculo / serviço</option>
                   {products.map((p) => (
                     <option key={p.id} value={p.id}>
@@ -91,26 +109,47 @@ export default async function PosPage({
                   ))}
                 </select>
                 <label className="mb-1 block font-medium text-zinc-700">SKU na nota</label>
-                <input name="sku" required className="w-full rounded-md border border-zinc-300 px-3 py-2" />
+                <input
+                  name="sku"
+                  required
+                  className="w-full rounded-md border border-zinc-300 px-3 py-2"
+                />
               </div>
               <div>
                 <label className="mb-1 block font-medium text-zinc-700">Descrição</label>
-                <input name="itemName" required className="w-full rounded-md border border-zinc-300 px-3 py-2" />
+                <input
+                  name="itemName"
+                  required
+                  className="w-full rounded-md border border-zinc-300 px-3 py-2"
+                />
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="mb-1 block font-medium text-zinc-700">Qtd</label>
-                  <input name="quantity" type="number" min={1} defaultValue={1} className="w-full rounded-md border border-zinc-300 px-3 py-2" />
+                  <input
+                    name="quantity"
+                    type="number"
+                    min={1}
+                    defaultValue={1}
+                    className="w-full rounded-md border border-zinc-300 px-3 py-2"
+                  />
                 </div>
                 <div>
                   <label className="mb-1 block font-medium text-zinc-700">Preço (R$)</label>
-                  <input name="unitPrice" required className="w-full rounded-md border border-zinc-300 px-3 py-2" />
+                  <input
+                    name="unitPrice"
+                    required
+                    className="w-full rounded-md border border-zinc-300 px-3 py-2"
+                  />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="mb-1 block font-medium text-zinc-700">Pagamento</label>
-                  <select name="paymentMethod" className="w-full rounded-md border border-zinc-300 px-3 py-2">
+                  <select
+                    name="paymentMethod"
+                    className="w-full rounded-md border border-zinc-300 px-3 py-2"
+                  >
                     <option value="cash">Dinheiro</option>
                     <option value="pix">PIX</option>
                     <option value="credit_card">Crédito</option>
@@ -119,10 +158,17 @@ export default async function PosPage({
                 </div>
                 <div>
                   <label className="mb-1 block font-medium text-zinc-700">Valor pago (R$)</label>
-                  <input name="paymentAmount" required className="w-full rounded-md border border-zinc-300 px-3 py-2" />
+                  <input
+                    name="paymentAmount"
+                    required
+                    className="w-full rounded-md border border-zinc-300 px-3 py-2"
+                  />
                 </div>
               </div>
-              <button type="submit" className="mt-2 w-full rounded-md bg-zinc-900 py-2 font-medium text-white hover:bg-zinc-800">
+              <button
+                type="submit"
+                className="mt-2 w-full rounded-md bg-zinc-900 py-2 font-medium text-white hover:bg-zinc-800"
+              >
                 Finalizar venda
               </button>
             </form>

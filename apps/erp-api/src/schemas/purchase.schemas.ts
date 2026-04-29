@@ -10,7 +10,10 @@ export const purchaseOrderItemSchema = z.object({
 export const createPurchaseOrderSchema = z.object({
   supplierId: z.string().optional(),
   issueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  expectedDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  expectedDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
   freightAmountCents: z.number().int().nonnegative().default(0),
   discountAmountCents: z.number().int().nonnegative().default(0),
   taxAmountCents: z.number().int().nonnegative().default(0),

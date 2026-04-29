@@ -48,8 +48,13 @@ export default async function NewPurchasePage({
           <form action={createPurchaseOrderAction} className="space-y-4 text-sm">
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <label className="mb-1 block font-medium text-zinc-700">Fornecedor (opcional)</label>
-                <select name="supplierId" className="w-full rounded-md border border-zinc-300 px-3 py-2">
+                <label className="mb-1 block font-medium text-zinc-700">
+                  Fornecedor (opcional)
+                </label>
+                <select
+                  name="supplierId"
+                  className="w-full rounded-md border border-zinc-300 px-3 py-2"
+                >
                   <option value="">—</option>
                   {suppliers.map((r) => (
                     <option key={r.supplier.id} value={r.supplier.id}>
@@ -60,15 +65,29 @@ export default async function NewPurchasePage({
               </div>
               <div>
                 <label className="mb-1 block font-medium text-zinc-700">Data de emissão</label>
-                <input name="issueDate" type="date" required defaultValue={today} className="w-full rounded-md border border-zinc-300 px-3 py-2" />
+                <input
+                  name="issueDate"
+                  type="date"
+                  required
+                  defaultValue={today}
+                  className="w-full rounded-md border border-zinc-300 px-3 py-2"
+                />
               </div>
               <div>
                 <label className="mb-1 block font-medium text-zinc-700">Previsão de entrega</label>
-                <input name="expectedDate" type="date" className="w-full rounded-md border border-zinc-300 px-3 py-2" />
+                <input
+                  name="expectedDate"
+                  type="date"
+                  className="w-full rounded-md border border-zinc-300 px-3 py-2"
+                />
               </div>
               <div>
                 <label className="mb-1 block font-medium text-zinc-700">Frete (R$)</label>
-                <input name="freight" defaultValue="0" className="w-full rounded-md border border-zinc-300 px-3 py-2" />
+                <input
+                  name="freight"
+                  defaultValue="0"
+                  className="w-full rounded-md border border-zinc-300 px-3 py-2"
+                />
               </div>
             </div>
 
@@ -77,7 +96,10 @@ export default async function NewPurchasePage({
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="md:col-span-2">
                   <label className="mb-1 block font-medium text-zinc-700">Produto (opcional)</label>
-                  <select name="productId" className="w-full rounded-md border border-zinc-300 px-3 py-2">
+                  <select
+                    name="productId"
+                    className="w-full rounded-md border border-zinc-300 px-3 py-2"
+                  >
                     <option value="">Sem vínculo</option>
                     {products.map((p) => (
                       <option key={p.id} value={p.id}>
@@ -88,26 +110,55 @@ export default async function NewPurchasePage({
                 </div>
                 <div className="md:col-span-2">
                   <label className="mb-1 block font-medium text-zinc-700">Descrição do item</label>
-                  <input name="itemDescription" required className="w-full rounded-md border border-zinc-300 px-3 py-2" placeholder="Ex: Fio de couro 2mm" />
+                  <input
+                    name="itemDescription"
+                    required
+                    className="w-full rounded-md border border-zinc-300 px-3 py-2"
+                    placeholder="Ex: Fio de couro 2mm"
+                  />
                 </div>
                 <div>
                   <label className="mb-1 block font-medium text-zinc-700">Quantidade</label>
-                  <input name="itemQty" type="number" min="0.001" step="0.001" defaultValue="1" required className="w-full rounded-md border border-zinc-300 px-3 py-2" />
+                  <input
+                    name="itemQty"
+                    type="number"
+                    min="0.001"
+                    step="0.001"
+                    defaultValue="1"
+                    required
+                    className="w-full rounded-md border border-zinc-300 px-3 py-2"
+                  />
                 </div>
                 <div>
-                  <label className="mb-1 block font-medium text-zinc-700">Preço unitário (R$)</label>
-                  <input name="itemPrice" required className="w-full rounded-md border border-zinc-300 px-3 py-2" placeholder="0.00" />
+                  <label className="mb-1 block font-medium text-zinc-700">
+                    Preço unitário (R$)
+                  </label>
+                  <input
+                    name="itemPrice"
+                    required
+                    className="w-full rounded-md border border-zinc-300 px-3 py-2"
+                    placeholder="0.00"
+                  />
                 </div>
               </div>
-              <p className="mt-2 text-xs text-zinc-500">Para múltiplos itens, utilize a API diretamente ou edite após criar.</p>
+              <p className="mt-2 text-xs text-zinc-500">
+                Para múltiplos itens, utilize a API diretamente ou edite após criar.
+              </p>
             </fieldset>
 
             <div>
               <label className="mb-1 block font-medium text-zinc-700">Observações</label>
-              <textarea name="notes" rows={2} className="w-full rounded-md border border-zinc-300 px-3 py-2" />
+              <textarea
+                name="notes"
+                rows={2}
+                className="w-full rounded-md border border-zinc-300 px-3 py-2"
+              />
             </div>
 
-            <button type="submit" className="w-full rounded-md bg-zinc-900 py-2 font-medium text-white hover:bg-zinc-800">
+            <button
+              type="submit"
+              className="w-full rounded-md bg-zinc-900 py-2 font-medium text-white hover:bg-zinc-800"
+            >
               Criar ordem de compra
             </button>
           </form>
