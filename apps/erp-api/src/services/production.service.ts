@@ -35,6 +35,7 @@ export function createProductionService(db: AppDb) {
         updatedAt: now(),
         archivedAt: null,
       });
+      if (!bom) throw new Error("Failed to insert BOM");
 
       for (const item of input.items) {
         const component = await productsRepo.findById(item.componentProductId);
@@ -105,6 +106,7 @@ export function createProductionService(db: AppDb) {
         updatedAt: now(),
         archivedAt: null,
       });
+      if (!order) throw new Error("Failed to insert production order");
 
       // Pre-populate consumptions from BOM if available
       if (bomId) {
@@ -139,7 +141,8 @@ export function createProductionService(db: AppDb) {
     async startProductionOrder(id: string, input: StartProductionOrderInput, actorId?: string) {
       const order = await productionRepo.findProductionOrderById(id);
       if (!order) throw new NotFoundError("Production order", id);
-      if (order.status !== "planned") throw new BadRequestError("Order must be in 'planned' state to start");
+      if (order.status !== "planned")
+        throw new BadRequestError("Order must be in 'planned' state to start");
 
       const updated = await productionRepo.updateProductionOrder(id, {
         status: "in_progress",
@@ -161,10 +164,15 @@ export function createProductionService(db: AppDb) {
       return updated;
     },
 
-    async completeProductionOrder(id: string, input: CompleteProductionOrderInput, actorId?: string) {
+    async completeProductionOrder(
+      id: string,
+      input: CompleteProductionOrderInput,
+      actorId?: string,
+    ) {
       const order = await productionRepo.findProductionOrderById(id);
       if (!order) throw new NotFoundError("Production order", id);
-      if (order.status !== "in_progress") throw new BadRequestError("Order must be in 'in_progress' state to complete");
+      if (order.status !== "in_progress")
+        throw new BadRequestError("Order must be in 'in_progress' state to complete");
 
       const consumptions = await productionRepo.findConsumptionsByOrder(id);
 

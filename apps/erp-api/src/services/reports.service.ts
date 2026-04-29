@@ -82,15 +82,22 @@ export function createReportsService(db: AppDb) {
           .from(financialEntries)
           .where(and(gte(financialEntries.date, start), lte(financialEntries.date, end)));
 
-        const income = entries.filter((e) => e.type === "income").reduce((s, e) => s + e.amountCents, 0);
-        const expense = entries.filter((e) => e.type === "expense").reduce((s, e) => s + e.amountCents, 0);
+        const income = entries
+          .filter((e) => e.type === "income")
+          .reduce((s, e) => s + e.amountCents, 0);
+        const expense = entries
+          .filter((e) => e.type === "expense")
+          .reduce((s, e) => s + e.amountCents, 0);
 
         rows.push({ month: label, income, expense, balance: income - expense });
 
         if (from && to) break;
       }
 
-      const accounts = await db.select().from(financialAccounts).where(eq(financialAccounts.isActive, true));
+      const accounts = await db
+        .select()
+        .from(financialAccounts)
+        .where(eq(financialAccounts.isActive, true));
       const currentBalance = accounts.reduce((s, a) => s + a.currentBalanceCents, 0);
 
       return { rows, currentBalance };
@@ -136,7 +143,8 @@ export function createReportsService(db: AppDb) {
           const totalCost = costPriceCents * item.totalQty;
           const totalRevenue = item.totalRevenue;
           const grossMargin = totalRevenue - totalCost;
-          const marginPct = totalRevenue > 0 ? ((grossMargin / totalRevenue) * 100).toFixed(2) : "0.00";
+          const marginPct =
+            totalRevenue > 0 ? ((grossMargin / totalRevenue) * 100).toFixed(2) : "0.00";
 
           return {
             productId: item.productId,
@@ -172,8 +180,9 @@ export function createReportsService(db: AppDb) {
       const byChannel: Record<string, { count: number; totalCents: number }> = {};
       for (const o of allOrders) {
         if (!byChannel[o.channel]) byChannel[o.channel] = { count: 0, totalCents: 0 };
-        byChannel[o.channel].count++;
-        byChannel[o.channel].totalCents += o.totalCents;
+        const entry = byChannel[o.channel]!;
+        entry.count++;
+        entry.totalCents += o.totalCents;
       }
 
       const totalRevenue = Object.values(byChannel).reduce((s, v) => s + v.totalCents, 0);
@@ -213,36 +222,57 @@ export function createReportsService(db: AppDb) {
     async getPayablesReceivablesSummary() {
       const now = new Date().toISOString().slice(0, 10);
 
-      const [overduePayables, upcomingPayables, overdueReceivables, upcomingReceivables] = await Promise.all([
-        db
-          .select()
-          .from(accountsPayable)
-          .where(and(isNull(accountsPayable.archivedAt), eq(accountsPayable.status, "open"), lte(accountsPayable.dueDate, now))),
-        db
-          .select()
-          .from(accountsPayable)
-          .where(and(isNull(accountsPayable.archivedAt), eq(accountsPayable.status, "open")))
-          .limit(20),
-        db
-          .select()
-          .from(accountsReceivable)
-          .where(and(isNull(accountsReceivable.archivedAt), eq(accountsReceivable.status, "open"), lte(accountsReceivable.dueDate, now))),
-        db
-          .select()
-          .from(accountsReceivable)
-          .where(and(isNull(accountsReceivable.archivedAt), eq(accountsReceivable.status, "open")))
-          .limit(20),
-      ]);
+      const [overduePayables, upcomingPayables, overdueReceivables, upcomingReceivables] =
+        await Promise.all([
+          db
+            .select()
+            .from(accountsPayable)
+            .where(
+              and(
+                isNull(accountsPayable.archivedAt),
+                eq(accountsPayable.status, "open"),
+                lte(accountsPayable.dueDate, now),
+              ),
+            ),
+          db
+            .select()
+            .from(accountsPayable)
+            .where(and(isNull(accountsPayable.archivedAt), eq(accountsPayable.status, "open")))
+            .limit(20),
+          db
+            .select()
+            .from(accountsReceivable)
+            .where(
+              and(
+                isNull(accountsReceivable.archivedAt),
+                eq(accountsReceivable.status, "open"),
+                lte(accountsReceivable.dueDate, now),
+              ),
+            ),
+          db
+            .select()
+            .from(accountsReceivable)
+            .where(
+              and(isNull(accountsReceivable.archivedAt), eq(accountsReceivable.status, "open")),
+            )
+            .limit(20),
+        ]);
 
       return {
         payables: {
           overdueCount: overduePayables.length,
-          overdueCents: overduePayables.reduce((s, p) => s + (p.amountCents - p.paidAmountCents), 0),
+          overdueCents: overduePayables.reduce(
+            (s, p) => s + (p.amountCents - p.paidAmountCents),
+            0,
+          ),
           upcoming: upcomingPayables.slice(0, 10),
         },
         receivables: {
           overdueCount: overdueReceivables.length,
-          overdueCents: overdueReceivables.reduce((s, r) => s + (r.amountCents - r.receivedAmountCents), 0),
+          overdueCents: overdueReceivables.reduce(
+            (s, r) => s + (r.amountCents - r.receivedAmountCents),
+            0,
+          ),
           upcoming: upcomingReceivables.slice(0, 10),
         },
       };
