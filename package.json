@@ -1,0 +1,45 @@
+{
+  "name": "tribus-erp",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev -w @tribus-erp/api",
+    "dev:web": "npm run dev -w @tribus-erp/web",
+    "build": "npm run build -w @tribus-erp/core && npm run build -w @tribus-erp/api && npm run build -w @tribus-erp/web",
+    "typecheck": "npm run typecheck -w @tribus-erp/core && npm run typecheck -w @tribus-erp/api && npm run typecheck -w @tribus-erp/web",
+    "lint": "npm run lint -w @tribus-erp/core && npm run lint -w @tribus-erp/api && npm run lint -w @tribus-erp/web",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\" --ignore-path .gitignore",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md}\" --ignore-path .gitignore",
+    "test": "npm run test -w @tribus-erp/core && npm run test -w @tribus-erp/api && npm run test -w @tribus-erp/web",
+    "test:coverage": "npm run test:coverage -w @tribus-erp/core && npm run test:coverage -w @tribus-erp/api && npm run test:coverage -w @tribus-erp/web",
+    "quality:check": "npm run format:check && npm run typecheck && npm run lint && npm run test:coverage",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.26.0",
+    "eslint": "^9.26.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.0.2",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.32.0",
+    "vitest": "^3.2.4",
+    "@vitest/coverage-v8": "^3.2.4"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md}": [
+      "prettier --write"
+    ]
+  }
+}

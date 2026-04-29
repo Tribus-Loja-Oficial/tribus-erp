@@ -1,0 +1,12 @@
+export interface Env {
+  ENVIRONMENT: string;
+  CDS_API_URL?: string;
+  CDS_JWT_ISSUER?: string;
+  CDS_JWT_AUDIENCE?: string;
+  ERP_INTERNAL_SECRET: string;
+  CDS_JWT_SECRET: string;
+  MONITOR_API_URL?: string;
+  MONITOR_COVERAGE_TOKEN?: string;
+  TRIBUS_ERP_DB: D1Database;
+  TRIBUS_ERP_R2: R2Bucket;
+}

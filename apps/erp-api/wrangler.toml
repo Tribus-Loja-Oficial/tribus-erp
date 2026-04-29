@@ -1,0 +1,40 @@
+name = "tribus-erp-api"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+ENVIRONMENT = "development"
+ERP_INTERNAL_SECRET = "64f59f36bb7724100ee81f9e4ee44c541db3a2ee262917f6ef09b0a6c6210cba"
+CDS_JWT_SECRET = "676b7447d2248e0b9836cd1b84f277916f2a32311c2fc9d33cca025704db33c6"
+
+[[d1_databases]]
+binding = "TRIBUS_ERP_DB"
+database_name = "tribus_erp_db"
+database_id = "32e05ff6-a6cb-4af1-94bb-b5548e33f68f"
+migrations_dir = "src/db/migrations"
+
+[[r2_buckets]]
+binding = "TRIBUS_ERP_R2"
+bucket_name = "tribus-erp-documents"
+
+[observability]
+enabled = true
+
+[env.production]
+name = "tribus-erp-api-production"
+
+[env.production.vars]
+ENVIRONMENT = "production"
+ERP_INTERNAL_SECRET = "64f59f36bb7724100ee81f9e4ee44c541db3a2ee262917f6ef09b0a6c6210cba"
+CDS_JWT_SECRET = "676b7447d2248e0b9836cd1b84f277916f2a32311c2fc9d33cca025704db33c6"
+
+[[env.production.d1_databases]]
+binding = "TRIBUS_ERP_DB"
+database_name = "tribus_erp_db"
+database_id = "32e05ff6-a6cb-4af1-94bb-b5548e33f68f"
+migrations_dir = "src/db/migrations"
+
+[[env.production.r2_buckets]]
+binding = "TRIBUS_ERP_R2"
+bucket_name = "tribus-erp-documents"

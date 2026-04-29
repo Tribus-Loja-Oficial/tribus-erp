@@ -1,0 +1,72 @@
+name: Build & quality checks
+
+on:
+  push:
+    branches: [main, development]
+  pull_request:
+    branches: [main, development]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Lint, Typecheck & Test
+    runs-on: ubuntu-latest
+    environment: PROD
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        env:
+          ERP_API_URL: https://example.com
+          ERP_API_INTERNAL_SECRET: "01234567890123456789012345678901"
+          AUTH_SECRET: "01234567890123456789012345678901"
+        run: npm run typecheck
+
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Tests (unit + coverage)
+        env:
+          ERP_API_URL: https://example.com
+          ERP_API_INTERNAL_SECRET: "01234567890123456789012345678901"
+          AUTH_SECRET: "01234567890123456789012345678901"
+        run: npm run test
+
+      - name: Coverage snapshot (erp-api)
+        env:
+          ERP_API_URL: https://example.com
+          ERP_API_INTERNAL_SECRET: "01234567890123456789012345678901"
+          AUTH_SECRET: "01234567890123456789012345678901"
+        run: cd apps/erp-api && npx vitest run --coverage --reporter=json --outputFile=.vitest-coverage.json
+
+      - name: Publish coverage snapshot
+        if: github.event_name == 'push' && vars.MONITOR_API_URL != ''
+        env:
+          MONITOR_API_URL: ${{ vars.MONITOR_API_URL }}
+          MONITOR_COVERAGE_TOKEN: ${{ vars.MONITOR_COVERAGE_TOKEN }}
+        run: node scripts/publish-coverage.mjs apps/erp-api/.vitest-coverage.json
