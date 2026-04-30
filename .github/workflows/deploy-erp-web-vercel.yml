@@ -7,6 +7,7 @@ name: Deploy — ERP Web (Vercel)
 #
 # Usa abordagem simplificada do tribus-storefront: vercel deploy direto
 # A Vercel faz o build automaticamente em seus servidores.
+
 on:
   workflow_run:
     workflows: ["Build & quality checks"]
@@ -56,9 +57,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: apps/erp-web/package-lock.json
-
+          cache: "npm"
       - name: Install dependencies in app directory
         working-directory: apps/erp-web
         run: npm ci
@@ -97,12 +96,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: apps/erp-web/package-lock.json
-
+          cache: "npm"
       - name: Install dependencies in app directory
         working-directory: apps/erp-web
         run: npm ci
+
       - name: Deploy ERP Web to Vercel (preview)
         working-directory: apps/erp-web
         run: npx --yes vercel@41 deploy --yes --token "$VERCEL_TOKEN"
