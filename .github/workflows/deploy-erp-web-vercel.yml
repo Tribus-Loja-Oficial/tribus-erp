@@ -5,12 +5,10 @@ name: Deploy — ERP Web (Vercel)
 # - Pull request    → deploy de preview
 # - workflow_dispatch → deploy de produção manual
 #
-# Usa vercel build (local) + vercel deploy --prebuilt para evitar que a Vercel
-# reconstrua nos servidores deles (onde o monorepo falha com npm install).
-# O projeto Vercel deve ter configurado:
-#   Root Directory: apps/erp-web
-#   Install Command (override): cd ../.. && npm ci
-#   Build Command (override): cd ../.. && npm run build -w @tribus-erp/core && npm run build -w @tribus-erp/web
+# Builda localmente com VERCEL=1 para que o Next.js gere .vercel/output/
+# diretamente, evitando o `vercel build` (que falha com spawn sh ENOENT no CI).
+# Em seguida usa vercel deploy --prebuilt para subir o output sem rebuild.
+# Na Vercel o projeto deve ter "Don't build anything" no Ignored Build Step.
 
 on:
   workflow_run:
@@ -72,8 +70,10 @@ jobs:
         run: npx --yes vercel@latest pull --yes --environment=production --token "$VERCEL_TOKEN"
 
       - name: Build ERP Web (Vercel output)
-        working-directory: apps/erp-web
-        run: npx --yes vercel@latest build --prod --token "$VERCEL_TOKEN"
+        env:
+          VERCEL: "1"
+          VERCEL_ENV: "production"
+        run: npm run build -w @tribus-erp/core && npm run build -w @tribus-erp/web
 
       - name: Deploy ERP Web to Vercel (production)
         working-directory: apps/erp-web
@@ -120,8 +120,10 @@ jobs:
         run: npx --yes vercel@latest pull --yes --environment=preview --token "$VERCEL_TOKEN"
 
       - name: Build ERP Web (Vercel output)
-        working-directory: apps/erp-web
-        run: npx --yes vercel@latest build --token "$VERCEL_TOKEN"
+        env:
+          VERCEL: "1"
+          VERCEL_ENV: "preview"
+        run: npm run build -w @tribus-erp/core && npm run build -w @tribus-erp/web
 
       - name: Deploy ERP Web to Vercel (preview)
         working-directory: apps/erp-web
