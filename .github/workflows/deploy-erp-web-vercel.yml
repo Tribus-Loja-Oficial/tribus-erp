@@ -59,7 +59,7 @@ jobs:
           node-version: "22"
 
       - name: Deploy ERP Web to Vercel (production)
-        run: npx --yes vercel@latest deploy --prod --yes --token "$VERCEL_TOKEN" --cwd apps/erp-web
+        run: npx --yes vercel@latest deploy --prod --yes --token "$VERCEL_TOKEN"
 
   deploy-preview:
     name: Vercel Preview (ERP Web)
@@ -93,5 +93,5 @@ jobs:
           node-version: "22"
 
       - name: Deploy ERP Web to Vercel (preview)
-        run: npx --yes vercel@47 deploy --yes --token "$VERCEL_TOKEN" --cwd apps/erp-web
+        run: npx --yes vercel@latest deploy --yes --token "$VERCEL_TOKEN"
 
