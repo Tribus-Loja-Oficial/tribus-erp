@@ -57,6 +57,13 @@ jobs:
           AUTH_SECRET: "01234567890123456789012345678901"
         run: npm run test
 
+      - name: Build (erp-web)
+        env:
+          ERP_API_URL: https://example.com
+          ERP_API_INTERNAL_SECRET: "01234567890123456789012345678901"
+          AUTH_SECRET: "01234567890123456789012345678901"
+        run: npm run build -w @tribus-erp/core && npm run build -w @tribus-erp/web
+
       - name: Coverage snapshot (erp-api)
         env:
           ERP_API_URL: https://example.com

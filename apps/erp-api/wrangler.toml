@@ -22,7 +22,7 @@ bucket_name = "tribus-erp-documents"
 enabled = true
 
 [env.production]
-name = "tribus-erp-api-production"
+name = "tribus-erp-api"
 
 [env.production.vars]
 ENVIRONMENT = "production"

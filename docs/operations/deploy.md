@@ -47,23 +47,61 @@ Credenciais necessárias no **GitHub Environment `PROD`**:
 
 ## Web (`erp-web`) — Vercel
 
-> Deploy da erp-web ainda não está automatizado. A ser definido.
+### Deploy automático (CI/CD)
+
+O deploy de produção é acionado automaticamente após o CI passar em push para `main`.
+
+Workflow: `.github/workflows/deploy-erp-web-vercel.yml`
+
+Passos:
+
+1. CI (`ci.yml`) executa: typecheck, lint, testes, build do erp-web, coverage snapshot.
+2. Deploy Vercel aguarda o CI verde (via `workflow_run`).
+3. `npm ci` + `npm run build -w @tribus-erp/core && npm run build -w @tribus-erp/web`
+4. `vercel deploy --prod` a partir de `apps/erp-web/`.
+
+Pull requests geram **preview deploys** automaticamente.
+
+Credenciais necessárias no **GitHub Environment `PROD`**:
+
+| Variável                  | Descrição                                   |
+| ------------------------- | ------------------------------------------- |
+| `VERCEL_TOKEN`            | Token da API Vercel                         |
+| `VERCEL_ORG_ID`           | ID da organização Vercel                    |
+| `VERCEL_PROJECT_ID`       | ID do projeto erp-web na Vercel             |
+| `ERP_API_URL`             | URL da erp-api em produção (usada no build) |
+| `ERP_API_INTERNAL_SECRET` | Secret erp-web → erp-api (usada no build)   |
+| `AUTH_SECRET`             | Secret NextAuth (usada no build)            |
+
+### Setup inicial do projeto Vercel
+
+Antes do primeiro deploy automático, vincular o projeto manualmente:
+
+```bash
+cd apps/erp-web
+npx vercel link
+# Escolher a organização e criar/vincular o projeto
+```
+
+Isso cria `apps/erp-web/.vercel/project.json` com `projectId` e `orgId` — commitar este arquivo.
 
 ### Deploy manual (Vercel CLI)
 
 ```bash
 cd apps/erp-web
-vercel --prod
+ERP_API_URL=... ERP_API_INTERNAL_SECRET=... AUTH_SECRET=... vercel --prod
 ```
 
-### Variáveis de ambiente necessárias (Vercel)
+### Variáveis de ambiente de runtime (Vercel Dashboard)
+
+Configurar no dashboard Vercel → Settings → Environment Variables:
 
 | Variável                  | Descrição                               |
 | ------------------------- | --------------------------------------- |
 | `ERP_API_URL`             | URL da erp-api em produção              |
 | `ERP_API_INTERNAL_SECRET` | Secret para autenticar chamadas API→ERP |
 | `NEXTAUTH_URL`            | URL pública da erp-web                  |
-| `NEXTAUTH_SECRET`         | Secret para cifrar sessão NextAuth      |
+| `AUTH_SECRET`             | Secret para cifrar sessão NextAuth      |
 | `CDS_JWT_SECRET`          | Secret para validar JWT do CDS          |
 
 ---
