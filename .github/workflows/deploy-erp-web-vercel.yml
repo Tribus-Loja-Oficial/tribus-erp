@@ -1,4 +1,4 @@
-está name: Deploy — ERP Web (Vercel)
+name: Deploy — ERP Web (Vercel)
 
 # Roda após "Build & quality checks" ser concluído com sucesso.
 # - Push para main  → deploy de produção
