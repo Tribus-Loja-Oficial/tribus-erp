@@ -1,4 +1,4 @@
-import { env } from "../config/env.js";
+import { env } from "../config/env";
 
 type HttpMethod = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
 
