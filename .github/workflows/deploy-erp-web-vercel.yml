@@ -57,15 +57,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
+
       - name: Install root dependencies (skip prepare)
         run: npm ci --ignore-scripts
 
-      - name: Install app dependencies
-        working-directory: apps/erp-web
-        run: npm ci --ignore-scripts
-
       - name: Deploy ERP Web to Vercel (production)
-        working-directory: apps/erp-web
         run: npx --yes vercel@41 deploy --prod --yes --token "$VERCEL_TOKEN"
 
   deploy-preview:
@@ -98,14 +94,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
+
       - name: Install root dependencies (skip prepare)
         run: npm ci --ignore-scripts
 
-      - name: Install app dependencies
-        working-directory: apps/erp-web
-        run: npm ci --ignore-scripts
-
       - name: Deploy ERP Web to Vercel (preview)
-        working-directory: apps/erp-web
         run: npx --yes vercel@41 deploy --yes --token "$VERCEL_TOKEN"
 
