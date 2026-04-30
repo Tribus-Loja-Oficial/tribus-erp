@@ -13,7 +13,7 @@
     "test:coverage": "vitest run --coverage --reporter=json --outputFile=.vitest-coverage.json"
   },
   "dependencies": {
-    "@tribus-erp/core": "0.1.0",
+    "@tribus-erp/core": "file:../../packages/core",
     "@radix-ui/react-alert-dialog": "^1.1.14",
     "@radix-ui/react-avatar": "^1.1.10",
     "@radix-ui/react-dialog": "^1.1.14",
