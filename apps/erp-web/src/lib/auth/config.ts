@@ -4,11 +4,8 @@ import { z } from "zod";
 
 const credentialsSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(8),
+  password: z.string().min(1),
 });
-
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? "admin@tribus.com.br";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "tribus2025admin";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
@@ -21,18 +18,37 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const parsed = credentialsSchema.safeParse(credentials);
         if (!parsed.success) return null;
 
-        const { email, password } = parsed.data;
+        const apiUrl = process.env.ERP_API_URL;
+        const apiSecret = process.env.ERP_API_INTERNAL_SECRET;
+        if (!apiUrl || !apiSecret) return null;
 
-        if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
-          return {
-            id: "admin",
-            name: "Administrador",
-            email: ADMIN_EMAIL,
-            role: "admin",
+        try {
+          const res = await fetch(`${apiUrl}/internal/auth/verify`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${apiSecret}`,
+            },
+            body: JSON.stringify({ email: parsed.data.email, password: parsed.data.password }),
+          });
+
+          if (!res.ok) return null;
+
+          const data = (await res.json()) as {
+            user: { id: string; email: string; name: string; role: string } | null;
           };
-        }
 
-        return null;
+          if (!data.user) return null;
+
+          return {
+            id: data.user.id,
+            name: data.user.name,
+            email: data.user.email,
+            role: data.user.role,
+          };
+        } catch {
+          return null;
+        }
       },
     }),
   ],
