@@ -64,16 +64,18 @@ jobs:
           AUTH_SECRET: "01234567890123456789012345678901"
         run: npm run build -w @tribus-erp/core && npm run build -w @tribus-erp/web
 
-      - name: Coverage snapshot (erp-api)
+      - name: Coverage snapshot
         env:
           ERP_API_URL: https://example.com
           ERP_API_INTERNAL_SECRET: "01234567890123456789012345678901"
           AUTH_SECRET: "01234567890123456789012345678901"
-        run: cd apps/erp-api && npx vitest run --coverage --reporter=json --outputFile=.vitest-coverage.json
+        run: |
+          cd apps/erp-api && npx vitest run --coverage --reporter=json --outputFile=.vitest-coverage.json
+          cd ../../apps/erp-web && npx vitest run --coverage --reporter=json --outputFile=.vitest-coverage.json
 
       - name: Publish coverage snapshot
         if: github.event_name == 'push' && vars.MONITOR_API_URL != ''
         env:
           MONITOR_API_URL: ${{ vars.MONITOR_API_URL }}
           MONITOR_COVERAGE_TOKEN: ${{ vars.MONITOR_COVERAGE_TOKEN }}
-        run: node scripts/publish-coverage.mjs apps/erp-api/.vitest-coverage.json
+        run: node scripts/publish-coverage.mjs apps/erp-api/.vitest-coverage.json apps/erp-web/.vitest-coverage.json

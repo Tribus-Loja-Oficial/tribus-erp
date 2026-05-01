@@ -65,10 +65,16 @@ async function main() {
     throw new Error('Missing MONITOR_API_URL or MONITOR_COVERAGE_TOKEN.')
   }
 
-  const reportPath = process.argv[2] ?? '.vitest-coverage.json'
-  const content = await readFile(reportPath, 'utf8')
-  const parsed = JSON.parse(content)
-  const totals = getTotalsFromCoverageMap(parsed.coverageMap ?? {})
+  const reportPaths = process.argv.slice(2)
+  if (reportPaths.length === 0) reportPaths.push('.vitest-coverage.json')
+
+  const mergedCoverageMap = {}
+  for (const reportPath of reportPaths) {
+    const content = await readFile(reportPath, 'utf8')
+    const parsed = JSON.parse(content)
+    Object.assign(mergedCoverageMap, parsed.coverageMap ?? {})
+  }
+  const totals = getTotalsFromCoverageMap(mergedCoverageMap)
 
   const runUrl =
     process.env.GITHUB_SERVER_URL && process.env.GITHUB_REPOSITORY && process.env.GITHUB_RUN_ID
