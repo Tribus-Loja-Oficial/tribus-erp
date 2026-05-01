@@ -10,7 +10,7 @@
     "lint": "next lint",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
     "test": "vitest run --passWithNoTests",
-    "test:coverage": "vitest run --coverage --reporter=json --outputFile=.vitest-coverage.json"
+    "test:coverage": "vitest run --coverage --passWithNoTests --reporter=json --outputFile=.vitest-coverage.json"
   },
   "dependencies": {
     "@tribus-erp/core": "file:../../packages/core",

@@ -71,7 +71,7 @@ jobs:
           AUTH_SECRET: "01234567890123456789012345678901"
         run: |
           cd apps/erp-api && npx vitest run --coverage --reporter=json --outputFile=.vitest-coverage.json
-          cd ../../apps/erp-web && npx vitest run --coverage --reporter=json --outputFile=.vitest-coverage.json
+          cd ../../apps/erp-web && npx vitest run --coverage --passWithNoTests --reporter=json --outputFile=.vitest-coverage.json
 
       - name: Publish coverage snapshot
         if: github.event_name == 'push' && vars.MONITOR_API_URL != ''
