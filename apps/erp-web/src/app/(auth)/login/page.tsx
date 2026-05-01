@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
@@ -36,11 +37,18 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-zinc-50">
       <div className="w-full max-w-sm px-4">
         <div className="mb-8 text-center">
-          <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-600">
-            <span className="text-sm font-bold text-white">T</span>
+          <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg bg-white shadow-sm ring-1 ring-black/[0.06]">
+            <Image
+              src="/tribus-erp.png"
+              alt=""
+              width={32}
+              height={32}
+              className="h-8 w-8 rounded-md object-contain"
+              priority
+            />
           </div>
           <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">Tribus ERP</h1>
-          <p className="mt-1 text-sm text-zinc-500">Entre com sua conta</p>
+          <p className="mt-1 text-sm text-zinc-500">Plataforma Operacional</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

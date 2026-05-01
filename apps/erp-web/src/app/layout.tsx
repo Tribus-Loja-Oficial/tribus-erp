@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Tribus ERP",
-  description: "Sistema de gestão operacional da Tribus Antigravity",
+  description: "Plataforma operacional de gestão da Tribus",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

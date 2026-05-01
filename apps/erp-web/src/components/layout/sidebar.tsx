@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -85,8 +86,27 @@ export function Sidebar() {
 
   return (
     <aside className="flex h-screen w-64 flex-col border-r border-zinc-200 bg-white">
-      <div className="flex h-16 items-center border-b border-zinc-200 px-6">
-        <span className="text-lg font-bold tracking-tight text-zinc-900">Tribus ERP</span>
+      <div className="flex min-h-[3.25rem] items-center gap-3 border-b border-zinc-200/90 bg-white px-4 py-2 shadow-[inset_0_1px_0_0_rgba(0,0,0,0.04)]">
+        <Image
+          src="/tribus-erp.png"
+          alt=""
+          width={32}
+          height={32}
+          priority
+          aria-hidden
+          className="h-8 w-8 shrink-0 self-center rounded-lg bg-white object-contain shadow-sm ring-1 ring-black/[0.06]"
+        />
+        <div className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-semibold tracking-tight text-zinc-900">
+            Tribus ERP
+          </span>
+          <span
+            className="mt-0.5 block truncate text-[10px] leading-tight font-medium tracking-wide text-zinc-500"
+            title="Plataforma Operacional"
+          >
+            Plataforma Operacional
+          </span>
+        </div>
       </div>
       <nav className="flex-1 overflow-y-auto px-3 py-4">
         {navGroups.map((group) => (
