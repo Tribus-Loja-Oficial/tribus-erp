@@ -19,35 +19,6 @@ function optionalId(raw: FormDataEntryValue | null): string | undefined {
   return v.length ? v : undefined;
 }
 
-export async function createProductAction(formData: FormData) {
-  const sku = String(formData.get("sku") ?? "").trim();
-  const name = String(formData.get("name") ?? "").trim();
-  if (!sku || !name)
-    redirect("/products/new?error=" + encodeURIComponent("SKU e nome são obrigatórios"));
-  try {
-    await erpApiFetch({
-      method: "POST",
-      path: "/products",
-      body: {
-        sku,
-        name,
-        status: String(formData.get("status") ?? "draft"),
-        productType: "simple",
-        salePriceCents: moneyToCents(formData.get("salePrice")),
-        costPriceCents: moneyToCents(formData.get("costPrice") ?? "0"),
-        minStock: Number(formData.get("minStock") ?? "0") || 0,
-        unitOfMeasure: "un",
-      },
-    });
-    revalidatePath("/products");
-  } catch (e) {
-    redirect(
-      "/products/new?error=" + encodeURIComponent(e instanceof Error ? e.message : "Erro ao criar"),
-    );
-  }
-  redirect("/products");
-}
-
 export async function createCustomerAction(formData: FormData) {
   const legalName = String(formData.get("legalName") ?? "").trim();
   if (!legalName) redirect("/customers/new?error=" + encodeURIComponent("Nome é obrigatório"));
@@ -325,40 +296,6 @@ export async function createPosSaleAction(formData: FormData) {
     );
   }
   redirect("/sales/pos");
-}
-
-export async function updateProductAction(formData: FormData) {
-  const id = String(formData.get("id") ?? "").trim();
-  if (!id) redirect("/products?error=" + encodeURIComponent("ID inválido"));
-  try {
-    await erpApiFetch({
-      method: "PATCH",
-      path: `/products/${id}`,
-      body: {
-        sku: optionalId(formData.get("sku")),
-        name: optionalId(formData.get("name")),
-        status: optionalId(formData.get("status")),
-        salePriceCents: formData.get("salePrice")
-          ? moneyToCents(formData.get("salePrice"))
-          : undefined,
-        costPriceCents: formData.get("costPrice")
-          ? moneyToCents(formData.get("costPrice"))
-          : undefined,
-        minStock: formData.get("minStock") !== null ? Number(formData.get("minStock")) : undefined,
-        ncm: optionalId(formData.get("ncm")),
-        barcode: optionalId(formData.get("barcode")),
-        shortDescription: optionalId(formData.get("shortDescription")),
-      },
-    });
-    revalidatePath("/products");
-    revalidatePath(`/products/${id}`);
-  } catch (e) {
-    redirect(
-      `/products/${id}?error=` +
-        encodeURIComponent(e instanceof Error ? e.message : "Erro ao salvar"),
-    );
-  }
-  redirect(`/products/${id}?success=` + encodeURIComponent("Produto atualizado"));
 }
 
 export async function updateOrderStatusAction(formData: FormData) {

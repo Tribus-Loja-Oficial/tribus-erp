@@ -112,6 +112,9 @@ export const productCollections = sqliteTable("product_collections", {
   description: text("description"),
   niche: text("niche"),
   season: text("season"),
+  status: text("status", { enum: ["draft", "active", "archived"] })
+    .notNull()
+    .default("active"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
   archivedAt: text("archived_at"),
@@ -126,18 +129,29 @@ export const products = sqliteTable(
     slug: text("slug").notNull().unique(),
     description: text("description"),
     shortDescription: text("short_description"),
+    internalName: text("internal_name"),
+    internalDescription: text("internal_description"),
     productType: text("product_type", {
-      enum: ["simple", "kit", "bundle", "service", "raw_material"],
+      enum: [
+        "finished_product",
+        "raw_material",
+        "packaging",
+        "kit",
+        "bundle",
+        "service",
+        "consumable",
+      ],
     })
       .notNull()
-      .default("simple"),
+      .default("finished_product"),
     categoryId: text("category_id").references(() => productCategories.id),
     collectionId: text("collection_id").references(() => productCollections.id),
     niche: text("niche"),
+    brand: text("brand"),
     status: text("status", { enum: ["draft", "active", "inactive", "archived"] })
       .notNull()
       .default("draft"),
-    unitOfMeasure: text("unit_of_measure").notNull().default("un"),
+    unitOfMeasure: text("unit_of_measure").notNull().default("unit"),
     barcode: text("barcode"),
     ncm: text("ncm"),
     cest: text("cest"),
@@ -146,24 +160,71 @@ export const products = sqliteTable(
     costPriceCents: integer("cost_price_cents").notNull().default(0),
     salePriceCents: integer("sale_price_cents").notNull().default(0),
     compareAtPriceCents: integer("compare_at_price_cents"),
+    promotionalPriceCents: integer("promotional_price_cents"),
+    eventPriceCents: integer("event_price_cents"),
+    wholesalePriceCents: integer("wholesale_price_cents"),
+    controlsStock: integer("controls_stock", { mode: "boolean" }).notNull().default(true),
     currentStock: integer("current_stock").notNull().default(0),
     minStock: integer("min_stock").notNull().default(0),
     maxStock: integer("max_stock"),
+    idealStock: integer("ideal_stock"),
+    defaultStockLocationId: text("default_stock_location_id").references(() => stockLocations.id),
     weightGrams: integer("weight_grams"),
-    heightCm: real("height_cm"),
+    lengthCm: real("length_cm"),
     widthCm: real("width_cm"),
-    depthCm: real("depth_cm"),
+    heightCm: real("height_cm"),
+    producedInternally: integer("produced_internally", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    averageProductionTimeMinutes: integer("average_production_time_minutes"),
+    sellable: integer("sellable", { mode: "boolean" }).notNull().default(true),
+    availableForEcommerce: integer("available_for_ecommerce", { mode: "boolean" })
+      .notNull()
+      .default(true),
+    availableForPos: integer("available_for_pos", { mode: "boolean" }).notNull().default(true),
+    availableForEvents: integer("available_for_events", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    mainImageFileId: text("main_image_file_id"),
     imagesJson: text("images_json").default("[]"),
     attributesJson: text("attributes_json").default("{}"),
     metadataJson: text("metadata_json").default("{}"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
     archivedAt: text("archived_at"),
+    deletedAt: text("deleted_at"),
   },
   (t) => [
     index("products_status_idx").on(t.status),
     index("products_category_idx").on(t.categoryId),
     index("products_sku_idx").on(t.sku),
+  ],
+);
+
+export const productCompositions = sqliteTable(
+  "product_compositions",
+  {
+    id: text("id").primaryKey(),
+    parentProductId: text("parent_product_id")
+      .notNull()
+      .references(() => products.id),
+    childProductId: text("child_product_id")
+      .notNull()
+      .references(() => products.id),
+    quantity: real("quantity").notNull(),
+    compositionType: text("composition_type", {
+      enum: ["packaging", "bom", "kit", "bundle", "accessory", "included"],
+    }).notNull(),
+    required: integer("required", { mode: "boolean" }).notNull().default(true),
+    isDefault: integer("is_default", { mode: "boolean" }).notNull().default(true),
+    notes: text("notes"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    archivedAt: text("archived_at"),
+  },
+  (t) => [
+    index("product_compositions_parent_idx").on(t.parentProductId),
+    index("product_compositions_child_idx").on(t.childProductId),
   ],
 );
 
@@ -837,6 +898,8 @@ export type Supplier = typeof suppliers.$inferSelect;
 export type NewSupplier = typeof suppliers.$inferInsert;
 export type Product = typeof products.$inferSelect;
 export type NewProduct = typeof products.$inferInsert;
+export type ProductComposition = typeof productCompositions.$inferSelect;
+export type NewProductComposition = typeof productCompositions.$inferInsert;
 export type ProductVariant = typeof productVariants.$inferSelect;
 export type NewProductVariant = typeof productVariants.$inferInsert;
 export type StockLocation = typeof stockLocations.$inferSelect;

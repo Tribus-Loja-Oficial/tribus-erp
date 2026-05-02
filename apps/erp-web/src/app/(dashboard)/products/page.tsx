@@ -8,6 +8,7 @@ interface Product {
   sku: string;
   name: string;
   status: string;
+  productType: string;
   salePriceCents: number;
   currentStock: number;
   minStock: number;
@@ -44,6 +45,7 @@ export default async function ProductsPage() {
               <tr>
                 <th className="px-4 py-3">SKU</th>
                 <th className="px-4 py-3">Nome</th>
+                <th className="px-4 py-3">Tipo</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3 text-right">Preço</th>
                 <th className="px-4 py-3 text-right">Estoque</th>
@@ -53,7 +55,7 @@ export default async function ProductsPage() {
             <tbody>
               {products.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center text-zinc-500">
+                  <td colSpan={7} className="px-4 py-12 text-center text-zinc-500">
                     Nenhum produto encontrado. Crie o primeiro ou verifique a API.
                   </td>
                 </tr>
@@ -65,6 +67,9 @@ export default async function ProductsPage() {
                   >
                     <td className="px-4 py-3 font-mono text-xs">{p.sku}</td>
                     <td className="px-4 py-3 font-medium text-zinc-900">{p.name}</td>
+                    <td className="max-w-[140px] truncate px-4 py-3 text-xs text-zinc-600">
+                      {p.productType?.replace(/_/g, " ") ?? "—"}
+                    </td>
                     <td className="px-4 py-3 text-zinc-600 capitalize">{p.status}</td>
                     <td className="px-4 py-3 text-right tabular-nums">
                       {formatCurrency(p.salePriceCents)}

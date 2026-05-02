@@ -4,6 +4,7 @@ import {
   updateProductSchema,
   listProductsSchema,
   createVariantSchema,
+  createProductCompositionSchema,
 } from "../../../src/schemas/product.schemas.js";
 
 describe("createProductSchema", () => {
@@ -11,7 +12,7 @@ describe("createProductSchema", () => {
     const result = createProductSchema.safeParse({
       sku: "PROD-001",
       name: "Pulseira Gold",
-      productType: "simple",
+      productType: "finished_product",
       salePriceCents: 9900,
       costPriceCents: 3000,
     });
@@ -19,12 +20,19 @@ describe("createProductSchema", () => {
   });
 
   it("rejects missing sku", () => {
-    const result = createProductSchema.safeParse({ name: "Test" });
+    const result = createProductSchema.safeParse({
+      name: "Test",
+      productType: "finished_product",
+    });
     expect(result.success).toBe(false);
   });
 
   it("rejects empty sku", () => {
-    const result = createProductSchema.safeParse({ sku: "", name: "Test" });
+    const result = createProductSchema.safeParse({
+      sku: "",
+      name: "Test",
+      productType: "finished_product",
+    });
     expect(result.success).toBe(false);
   });
 
@@ -32,19 +40,23 @@ describe("createProductSchema", () => {
     const result = createProductSchema.safeParse({
       sku: "X",
       name: "Y",
+      productType: "finished_product",
       salePriceCents: -1,
     });
     expect(result.success).toBe(false);
   });
 
-  it("defaults productType to simple", () => {
+  it("rejects missing productType", () => {
     const result = createProductSchema.safeParse({ sku: "X", name: "Y" });
-    if (!result.success) throw new Error();
-    expect(result.data.productType).toBe("simple");
+    expect(result.success).toBe(false);
   });
 
   it("defaults status to draft", () => {
-    const result = createProductSchema.safeParse({ sku: "X", name: "Y" });
+    const result = createProductSchema.safeParse({
+      sku: "X",
+      name: "Y",
+      productType: "packaging",
+    });
     if (!result.success) throw new Error();
     expect(result.data.status).toBe("draft");
   });
@@ -86,6 +98,11 @@ describe("listProductsSchema", () => {
     const result = listProductsSchema.safeParse({ limit: "200" });
     expect(result.success).toBe(false);
   });
+
+  it("accepts productType filter", () => {
+    const result = listProductsSchema.safeParse({ productType: "packaging" });
+    expect(result.success).toBe(true);
+  });
 });
 
 describe("createVariantSchema", () => {
@@ -97,5 +114,25 @@ describe("createVariantSchema", () => {
       salePriceCents: 5000,
     });
     expect(result.success).toBe(true);
+  });
+});
+
+describe("createProductCompositionSchema", () => {
+  it("accepts valid row", () => {
+    const result = createProductCompositionSchema.safeParse({
+      childProductId: "child-1",
+      quantity: 2,
+      compositionType: "bom",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects zero quantity", () => {
+    const result = createProductCompositionSchema.safeParse({
+      childProductId: "child-1",
+      quantity: 0,
+      compositionType: "bom",
+    });
+    expect(result.success).toBe(false);
   });
 });

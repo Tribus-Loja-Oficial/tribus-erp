@@ -2,7 +2,14 @@ export type PartyType = "individual" | "company";
 export type DocumentType = "cpf" | "cnpj" | "foreign" | "unknown";
 export type PartyRole = "customer" | "supplier" | "employee" | "carrier" | "contact";
 
-export type ProductType = "simple" | "kit" | "bundle" | "service" | "raw_material";
+export type ProductType =
+  | "finished_product"
+  | "raw_material"
+  | "packaging"
+  | "kit"
+  | "bundle"
+  | "service"
+  | "consumable";
 export type ProductStatus = "draft" | "active" | "inactive" | "archived";
 
 export type StockMovementType =

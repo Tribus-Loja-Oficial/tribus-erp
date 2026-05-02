@@ -2,7 +2,9 @@ import type { AppDb } from "../db/client.js";
 import { generateId } from "../utils/id.js";
 import { NotFoundError, ConflictError } from "../errors/app-error.js";
 import { createProductRepository } from "../repositories/product.repository.js";
+import { createProductCompositionRepository } from "../repositories/product-composition.repository.js";
 import { createAuditRepository } from "../repositories/audit.repository.js";
+import { calculateEstimatedProductCost } from "../domain/product-cost.js";
 import type {
   CreateProductInput,
   UpdateProductInput,
@@ -21,8 +23,17 @@ function slugify(text: string): string {
     .replace(/^-|-$/g, "");
 }
 
+function defaultControlsStock(productType: CreateProductInput["productType"]): boolean {
+  return productType !== "service";
+}
+
+function defaultSellable(productType: CreateProductInput["productType"]): boolean {
+  return productType === "finished_product" || productType === "kit" || productType === "bundle";
+}
+
 export function createProductService(db: AppDb) {
   const productsRepo = createProductRepository(db);
+  const compositionsRepo = createProductCompositionRepository(db);
   const auditRepo = createAuditRepository(db);
   const now = () => new Date().toISOString();
 
@@ -31,34 +42,61 @@ export function createProductService(db: AppDb) {
       const existing = await productsRepo.findBySku(input.sku);
       if (existing) throw new ConflictError(`SKU '${input.sku}' already exists`);
 
-      const slug = slugify(input.name);
+      const slug = input.slug ? slugify(input.slug) : slugify(input.name);
+      const controlsStock = input.controlsStock ?? defaultControlsStock(input.productType);
+      const sellable = input.sellable ?? defaultSellable(input.productType);
+
       const product = await productsRepo.insert({
         id: generateId(),
-        ...input,
+        sku: input.sku,
+        name: input.name,
         slug,
         description: input.description ?? null,
         shortDescription: input.shortDescription ?? null,
+        internalName: input.internalName ?? null,
+        internalDescription: input.internalDescription ?? null,
+        productType: input.productType,
         categoryId: input.categoryId ?? null,
         collectionId: input.collectionId ?? null,
         niche: input.niche ?? null,
+        brand: input.brand ?? null,
+        status: input.status,
+        unitOfMeasure: input.unitOfMeasure,
         barcode: input.barcode ?? null,
         ncm: input.ncm ?? null,
         cest: input.cest ?? null,
         cfopDefault: input.cfopDefault ?? null,
-        origin: input.origin ?? "0",
+        origin: input.origin,
+        costPriceCents: input.costPriceCents,
+        salePriceCents: input.salePriceCents,
         compareAtPriceCents: input.compareAtPriceCents ?? null,
-        maxStock: input.maxStock ?? null,
-        weightGrams: input.weightGrams ?? null,
-        heightCm: null,
-        widthCm: null,
-        depthCm: null,
+        promotionalPriceCents: input.promotionalPriceCents ?? null,
+        eventPriceCents: input.eventPriceCents ?? null,
+        wholesalePriceCents: input.wholesalePriceCents ?? null,
+        controlsStock,
         currentStock: 0,
-        imagesJson: "[]",
+        minStock: input.minStock,
+        maxStock: input.maxStock ?? null,
+        idealStock: input.idealStock ?? null,
+        defaultStockLocationId: input.defaultStockLocationId ?? null,
+        weightGrams: input.weightGrams ?? null,
+        lengthCm: input.lengthCm ?? null,
+        widthCm: input.widthCm ?? null,
+        heightCm: input.heightCm ?? null,
+        producedInternally: input.producedInternally ?? false,
+        averageProductionTimeMinutes: input.averageProductionTimeMinutes ?? null,
+        sellable,
+        availableForEcommerce: input.availableForEcommerce ?? true,
+        availableForPos: input.availableForPos ?? true,
+        availableForEvents: input.availableForEvents ?? false,
+        mainImageFileId: input.mainImageFileId ?? null,
+        imagesJson: JSON.stringify(input.imagesJson?.length ? input.imagesJson : []),
         attributesJson: "{}",
-        metadataJson: "{}",
+        metadataJson: input.metadata ? JSON.stringify(input.metadata) : "{}",
         createdAt: now(),
         updatedAt: now(),
         archivedAt: null,
+        deletedAt: null,
       });
 
       await auditRepo.insert({
@@ -90,6 +128,40 @@ export function createProductService(db: AppDb) {
       return productsRepo.findLowStock();
     },
 
+    async getOperationalDetail(id: string) {
+      const product = await this.findById(id);
+      const compositions = await compositionsRepo.findActiveByParentId(id);
+      const childIds = [...new Set(compositions.map((c) => c.childProductId))];
+      const children = await productsRepo.findByIds(childIds);
+      const childMap = new Map(children.map((c) => [c.id, c]));
+
+      const lines = compositions.map((c) => ({
+        compositionType: c.compositionType,
+        quantity: c.quantity,
+        childCostPriceCents: childMap.get(c.childProductId)?.costPriceCents ?? 0,
+      }));
+
+      const costEstimate = calculateEstimatedProductCost(product.costPriceCents, lines);
+
+      const compositionsWithChild = compositions.map((c) => {
+        const ch = childMap.get(c.childProductId);
+        const lineCost = Math.round(c.quantity * (ch?.costPriceCents ?? 0));
+        return {
+          ...c,
+          childSku: ch?.sku ?? null,
+          childName: ch?.name ?? null,
+          childCostPriceCents: ch?.costPriceCents ?? 0,
+          lineCostCents: lineCost,
+        };
+      });
+
+      return { product, compositions: compositionsWithChild, children, costEstimate };
+    },
+
+    async listAuditLogsForProduct(productId: string) {
+      return auditRepo.findByEntity("product", productId, 100);
+    },
+
     async update(id: string, input: UpdateProductInput, actorId?: string) {
       const existing = await productsRepo.findById(id);
       if (!existing) throw new NotFoundError("Product", id);
@@ -99,7 +171,15 @@ export function createProductService(db: AppDb) {
         if (skuConflict) throw new ConflictError(`SKU '${input.sku}' already exists`);
       }
 
-      const updated = await productsRepo.update(id, input);
+      const { metadata, slug: slugInput, imagesJson, ...rest } = input;
+      const patch: Record<string, unknown> = { ...rest };
+      if (slugInput !== undefined) patch.slug = slugify(slugInput);
+      if (metadata !== undefined) patch.metadataJson = JSON.stringify(metadata);
+      if (imagesJson !== undefined) patch.imagesJson = JSON.stringify(imagesJson);
+
+      const filtered = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
+
+      const updated = await productsRepo.update(id, filtered as never);
 
       await auditRepo.insert({
         id: generateId(),
@@ -168,6 +248,7 @@ export function createProductService(db: AppDb) {
         description: input.description ?? null,
         niche: input.niche ?? null,
         season: input.season ?? null,
+        status: input.status,
         createdAt: now(),
         updatedAt: now(),
         archivedAt: null,

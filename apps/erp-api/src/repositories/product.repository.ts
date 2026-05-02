@@ -13,6 +13,7 @@ import {
 export interface ListProductsParams {
   q?: string;
   status?: string;
+  productType?: string;
   categoryId?: string;
   niche?: string;
   limit?: number;
@@ -40,9 +41,11 @@ export function createProductRepository(db: AppDb) {
     },
 
     async findMany(params: ListProductsParams = {}): Promise<Product[]> {
-      const { q, status, categoryId, niche, limit = 20, offset = 0 } = params;
+      const { q, status, productType, categoryId, niche, limit = 20, offset = 0 } = params;
       const conditions = [isNull(products.archivedAt)];
       if (status) conditions.push(eq(products.status, status as Product["status"]));
+      if (productType)
+        conditions.push(eq(products.productType, productType as Product["productType"]));
       if (categoryId) conditions.push(eq(products.categoryId, categoryId));
       if (niche) conditions.push(eq(products.niche, niche));
       if (q) {
@@ -62,7 +65,7 @@ export function createProductRepository(db: AppDb) {
         .select()
         .from(products)
         .where(and(eq(products.status, "active"), isNull(products.archivedAt)));
-      return all.filter((p) => p.currentStock <= p.minStock);
+      return all.filter((p) => p.controlsStock && p.minStock > 0 && p.currentStock <= p.minStock);
     },
 
     async insert(data: NewProduct): Promise<Product> {

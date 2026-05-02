@@ -10,7 +10,10 @@ import {
   listProductsSchema,
   createCategorySchema,
   createVariantSchema,
+  createProductCompositionSchema,
+  updateProductCompositionSchema,
 } from "../schemas/product.schemas.js";
+import { createProductCompositionService } from "../services/product-composition.service.js";
 
 const products = new Hono<{ Bindings: Env }>();
 
@@ -98,6 +101,96 @@ products.get("/collections", async (c) => {
     const service = createProductService(db);
     const data = await service.findCollections();
     return c.json({ data });
+  } catch (err) {
+    const { message, code, status } = toApiError(err);
+    return c.json({ message, code }, status);
+  }
+});
+
+products.get("/:id/detail", async (c) => {
+  try {
+    const config = getEnv(c.env);
+    const db = createDb(config.db);
+    const service = createProductService(db);
+    const data = await service.getOperationalDetail(c.req.param("id"));
+    return c.json({ data });
+  } catch (err) {
+    const { message, code, status } = toApiError(err);
+    return c.json({ message, code }, status);
+  }
+});
+
+products.get("/:id/audit", async (c) => {
+  try {
+    const config = getEnv(c.env);
+    const db = createDb(config.db);
+    const service = createProductService(db);
+    const data = await service.listAuditLogsForProduct(c.req.param("id"));
+    return c.json({ data });
+  } catch (err) {
+    const { message, code, status } = toApiError(err);
+    return c.json({ message, code }, status);
+  }
+});
+
+products.get("/:id/compositions", async (c) => {
+  try {
+    const config = getEnv(c.env);
+    const db = createDb(config.db);
+    const compositionService = createProductCompositionService(db);
+    const data = await compositionService.listByParent(c.req.param("id"));
+    return c.json({ data });
+  } catch (err) {
+    const { message, code, status } = toApiError(err);
+    return c.json({ message, code }, status);
+  }
+});
+
+products.post("/:id/compositions", async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const parsed = createProductCompositionSchema.safeParse(body);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  try {
+    const config = getEnv(c.env);
+    const db = createDb(config.db);
+    const compositionService = createProductCompositionService(db);
+    const data = await compositionService.add(c.req.param("id"), parsed.data);
+    return c.json({ data }, 201);
+  } catch (err) {
+    const { message, code, status } = toApiError(err);
+    return c.json({ message, code }, status);
+  }
+});
+
+products.patch("/:id/compositions/:compositionId", async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const parsed = updateProductCompositionSchema.safeParse(body);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  try {
+    const config = getEnv(c.env);
+    const db = createDb(config.db);
+    const compositionService = createProductCompositionService(db);
+    const data = await compositionService.update(
+      c.req.param("id"),
+      c.req.param("compositionId"),
+      parsed.data,
+    );
+    return c.json({ data });
+  } catch (err) {
+    const { message, code, status } = toApiError(err);
+    return c.json({ message, code }, status);
+  }
+});
+
+products.delete("/:id/compositions/:compositionId", async (c) => {
+  try {
+    const config = getEnv(c.env);
+    const db = createDb(config.db);
+    const compositionService = createProductCompositionService(db);
+    await compositionService.archive(c.req.param("id"), c.req.param("compositionId"));
+    return c.json({ success: true });
   } catch (err) {
     const { message, code, status } = toApiError(err);
     return c.json({ message, code }, status);
