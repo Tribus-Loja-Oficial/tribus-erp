@@ -1,7 +1,7 @@
 -- Products: operational model (types, logistics, composition) + product_compositions
 -- Migrates legacy product_type 'simple' -> 'finished_product', unit 'un' -> 'unit', depth_cm -> length_cm
 
--- Nota: não usar BEGIN TRANSACTION / COMMIT aqui — o D1 remoto rejeita com wrangler d1 migrations apply.
+-- Nota: não usar transações SQL explícitas neste arquivo — o Wrangler envolve a migração sozinho.
 PRAGMA foreign_keys = OFF;
 
 ALTER TABLE product_collections ADD COLUMN status TEXT NOT NULL DEFAULT 'active';
