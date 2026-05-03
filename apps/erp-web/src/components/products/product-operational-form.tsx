@@ -24,22 +24,26 @@ export interface CompositionRow {
   childProductId: string;
   compositionType: string;
   quantity: number;
+  quantityUnit?: string | null;
+  packagingChannel?: string | null;
   required: boolean;
   isDefault: boolean;
   notes: string | null;
   childSku?: string | null;
   childName?: string | null;
+  childProductType?: string | null;
+  childCostPriceCents?: number;
+  childUnitCostCents?: number;
   lineCostCents?: number;
 }
 
-export interface CostEstimate {
-  baseCostCents: number;
-  bomCostCents: number;
-  packagingCostCents: number;
-  kitCostCents: number;
-  bundleCostCents: number;
-  otherCompositionCostCents: number;
-  totalEstimatedCostCents: number;
+export interface ProductCostBreakdown {
+  materialCostCents: number;
+  packagingOnlineCostCents: number;
+  packagingPresentialCostCents: number;
+  laborCostCents: number;
+  onlineTotalCostCents: number;
+  presentialTotalCostCents: number;
 }
 
 export interface ProductAuditLogRow {
@@ -83,9 +87,13 @@ const PRODUCT_TYPES: { value: string; label: string }[] = [
   { value: "consumable", label: "Consumível interno" },
 ];
 
-const COMPOSITION_TYPES: { value: string; label: string }[] = [
+const COMPOSITION_TYPES_ADD: { value: string; label: string }[] = [
+  { value: "bom", label: "BOM / materiais de produção" },
   { value: "packaging", label: "Embalagem" },
-  { value: "bom", label: "BOM / ficha técnica" },
+];
+
+const COMPOSITION_TYPES_EDIT: { value: string; label: string }[] = [
+  ...COMPOSITION_TYPES_ADD,
   { value: "kit", label: "Kit" },
   { value: "bundle", label: "Bundle" },
   { value: "accessory", label: "Acessório" },
@@ -112,8 +120,17 @@ function inputToCents(raw: string): number {
   return Math.round(n * 100);
 }
 
-function pctMargin(saleCents: number, totalCostCents: number): number | null {
-  if (saleCents <= 0) return null;
+/** Centavos com decimais (ex.: custo por cm). */
+function inputToFractionalCents(raw: string): number | undefined {
+  const t = raw.trim();
+  if (!t) return undefined;
+  const n = Number(t.replace(",", "."));
+  if (!Number.isFinite(n) || n < 0) return undefined;
+  return n * 100;
+}
+
+function pctMargin(saleCents: number, totalCostCents: number | null | undefined): number | null {
+  if (saleCents <= 0 || totalCostCents == null) return null;
   return ((saleCents - totalCostCents) / saleCents) * 100;
 }
 
@@ -171,7 +188,7 @@ interface ProductOperationalFormProps {
   productId?: string;
   initialProduct: Record<string, unknown>;
   initialCompositions?: CompositionRow[];
-  costEstimate?: CostEstimate | null;
+  costBreakdown?: ProductCostBreakdown | null;
   categories: SelectOption[];
   collections: SelectOption[];
   locations: SelectOption[];
@@ -183,7 +200,7 @@ export function ProductOperationalForm({
   productId,
   initialProduct,
   initialCompositions = [],
-  costEstimate,
+  costBreakdown,
   categories,
   collections,
   locations,
@@ -288,6 +305,31 @@ export function ProductOperationalForm({
       ? String(initialProduct.averageProductionTimeMinutes)
       : "",
   );
+  const [laborCostPerHour, setLaborCostPerHour] = useState(
+    initialProduct.laborCostPerHourCents != null
+      ? centsToInput(Number(initialProduct.laborCostPerHourCents))
+      : "",
+  );
+  const [productionProfileNotes, setProductionProfileNotes] = useState(
+    String(initialProduct.productionProfileNotes ?? ""),
+  );
+  const [purchaseUnit, setPurchaseUnit] = useState(String(initialProduct.purchaseUnit ?? ""));
+  const [purchaseQuantity, setPurchaseQuantity] = useState(
+    initialProduct.purchaseQuantity != null ? String(initialProduct.purchaseQuantity) : "",
+  );
+  const [consumptionUnit, setConsumptionUnit] = useState(
+    String(initialProduct.consumptionUnit ?? ""),
+  );
+  const [acquisitionCost, setAcquisitionCost] = useState(
+    initialProduct.acquisitionCostCents != null
+      ? centsToInput(Number(initialProduct.acquisitionCostCents))
+      : "",
+  );
+  const [costPerConsumptionUnit, setCostPerConsumptionUnit] = useState(
+    initialProduct.costPerConsumptionUnitCents != null
+      ? (Number(initialProduct.costPerConsumptionUnitCents) / 100).toFixed(4)
+      : "",
+  );
 
   const [sellable, setSellable] = useState(
     initialProduct.sellable !== undefined ? Boolean(initialProduct.sellable) : true,
@@ -317,16 +359,24 @@ export function ProductOperationalForm({
   );
 
   const [compChildId, setCompChildId] = useState("");
-  const [compType, setCompType] = useState("packaging");
+  const [compType, setCompType] = useState("bom");
   const [compQty, setCompQty] = useState("1");
+  const [compQtyUnit, setCompQtyUnit] = useState("");
+  const [compPackagingChannel, setCompPackagingChannel] = useState<"online" | "presential">(
+    "online",
+  );
   const [compRequired, setCompRequired] = useState(true);
   const [compDefault, setCompDefault] = useState(true);
   const [compNotes, setCompNotes] = useState("");
 
   const [editCompId, setEditCompId] = useState<string | null>(null);
   const [editCompChildId, setEditCompChildId] = useState("");
-  const [editCompType, setEditCompType] = useState("packaging");
+  const [editCompType, setEditCompType] = useState("bom");
   const [editCompQty, setEditCompQty] = useState("1");
+  const [editCompQtyUnit, setEditCompQtyUnit] = useState("");
+  const [editCompPackagingChannel, setEditCompPackagingChannel] = useState<"online" | "presential">(
+    "online",
+  );
   const [editCompRequired, setEditCompRequired] = useState(true);
   const [editCompDefault, setEditCompDefault] = useState(true);
   const [editCompNotes, setEditCompNotes] = useState("");
@@ -334,29 +384,42 @@ export function ProductOperationalForm({
   const saleCents = useMemo(() => inputToCents(salePrice), [salePrice]);
   const costCents = useMemo(() => inputToCents(costPrice), [costPrice]);
 
-  const estimatedTotalCost = useMemo(() => {
-    if (costEstimate) return costEstimate.totalEstimatedCostCents;
+  const primaryTotalCostCents = useMemo(() => {
+    if (costBreakdown) return costBreakdown.onlineTotalCostCents;
     return costCents;
-  }, [costEstimate, costCents]);
+  }, [costBreakdown, costCents]);
 
-  const marginPct = pctMargin(saleCents, estimatedTotalCost);
-  const markupVal = markup(saleCents, estimatedTotalCost);
+  const marginOnlinePct = pctMargin(saleCents, costBreakdown?.onlineTotalCostCents ?? null);
+  const marginPresentialPct = pctMargin(saleCents, costBreakdown?.presentialTotalCostCents ?? null);
+  const markupVal = markup(saleCents, primaryTotalCostCents);
 
-  const compositionSumLines = useMemo(
-    () => initialCompositions.reduce((acc, r) => acc + (r.lineCostCents ?? 0), 0),
+  const bomRows = useMemo(
+    () => initialCompositions.filter((r) => r.compositionType === "bom"),
+    [initialCompositions],
+  );
+  const packagingRows = useMemo(
+    () => initialCompositions.filter((r) => r.compositionType === "packaging"),
     [initialCompositions],
   );
 
-  const compositionFromEstimate = useMemo(() => {
-    if (!costEstimate) return null;
-    return (
-      costEstimate.bomCostCents +
-      costEstimate.packagingCostCents +
-      costEstimate.kitCostCents +
-      costEstimate.bundleCostCents +
-      costEstimate.otherCompositionCostCents
-    );
-  }, [costEstimate]);
+  function productTypeLabel(t: string | null | undefined): string {
+    const m: Record<string, string> = {
+      finished_product: "Produto final",
+      raw_material: "Matéria-prima",
+      packaging: "Embalagem",
+      consumable: "Consumível",
+      kit: "Kit",
+      bundle: "Bundle",
+      service: "Serviço",
+    };
+    return (t && m[t]) || t || "—";
+  }
+
+  function packagingChannelLabel(ch: string | null | undefined): string {
+    if (ch === "online") return "Online";
+    if (ch === "presential") return "Presencial";
+    return "—";
+  }
 
   function buildPayload(): Record<string, unknown> {
     const galleryLines = parseGalleryFileIdLines(galleryFileIdsText);
@@ -397,6 +460,13 @@ export function ProductOperationalForm({
       heightCm: heightCm.trim() ? Number(heightCm) : undefined,
       producedInternally,
       averageProductionTimeMinutes: nonNegativeIntFromInput(averageProductionTimeMinutes),
+      laborCostPerHourCents: laborCostPerHour.trim() ? inputToCents(laborCostPerHour) : null,
+      productionProfileNotes: productionProfileNotes.trim() || null,
+      purchaseUnit: purchaseUnit.trim() || null,
+      purchaseQuantity: purchaseQuantity.trim() ? Number(purchaseQuantity.replace(",", ".")) : null,
+      consumptionUnit: consumptionUnit.trim() || null,
+      acquisitionCostCents: acquisitionCost.trim() ? inputToCents(acquisitionCost) : null,
+      costPerConsumptionUnitCents: inputToFractionalCents(costPerConsumptionUnit) ?? null,
       sellable,
       availableForEcommerce,
       availableForPos,
@@ -522,13 +592,16 @@ export function ProductOperationalForm({
       await addProductCompositionAction(productId, {
         childProductId: compChildId,
         quantity: qty,
+        quantityUnit: compQtyUnit.trim() || undefined,
         compositionType: compType,
+        packagingChannel: compType === "packaging" ? compPackagingChannel : undefined,
         required: compRequired,
         isDefault: compDefault,
         notes: compNotes.trim() || undefined,
       });
       setCompChildId("");
       setCompQty("1");
+      setCompQtyUnit("");
       setCompNotes("");
       router.refresh();
     } catch (e) {
@@ -553,6 +626,8 @@ export function ProductOperationalForm({
     setEditCompChildId(row.childProductId);
     setEditCompType(row.compositionType);
     setEditCompQty(String(row.quantity));
+    setEditCompQtyUnit(row.quantityUnit ?? "");
+    setEditCompPackagingChannel(row.packagingChannel === "presential" ? "presential" : "online");
     setEditCompRequired(row.required);
     setEditCompDefault(row.isDefault);
     setEditCompNotes(row.notes ?? "");
@@ -576,6 +651,8 @@ export function ProductOperationalForm({
         childProductId: editCompChildId,
         compositionType: editCompType,
         quantity: qty,
+        quantityUnit: editCompQtyUnit.trim() || undefined,
+        packagingChannel: editCompType === "packaging" ? editCompPackagingChannel : null,
         required: editCompRequired,
         isDefault: editCompDefault,
         notes: editCompNotes.trim() || undefined,
@@ -894,35 +971,116 @@ export function ProductOperationalForm({
                       preço promocional explícito quando ambos existirem.
                     </p>
                   </div>
+                  {productType === "raw_material" ? (
+                    <div className="space-y-3 rounded-lg border border-sky-200 bg-sky-50 p-4 md:col-span-2">
+                      <p className="text-xs font-semibold text-sky-950">
+                        Compra e consumo (custo proporcional na composição)
+                      </p>
+                      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                        <div>
+                          <label className="mb-1 block text-xs text-zinc-600">
+                            Unidade de compra (texto livre)
+                          </label>
+                          <input
+                            value={purchaseUnit}
+                            onChange={(e) => setPurchaseUnit(e.target.value)}
+                            className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+                            placeholder="ex.: rolo"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs text-zinc-600">
+                            Quantidade na compra
+                          </label>
+                          <input
+                            value={purchaseQuantity}
+                            onChange={(e) => setPurchaseQuantity(e.target.value)}
+                            className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+                            placeholder="ex.: 10"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs text-zinc-600">
+                            Unidade de consumo
+                          </label>
+                          <input
+                            value={consumptionUnit}
+                            onChange={(e) => setConsumptionUnit(e.target.value)}
+                            className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+                            placeholder="ex.: cm"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs text-zinc-600">
+                            Custo de aquisição (R$)
+                          </label>
+                          <input
+                            value={acquisitionCost}
+                            onChange={(e) => setAcquisitionCost(e.target.value)}
+                            className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm tabular-nums"
+                          />
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="mb-1 block text-xs text-zinc-600">
+                            Custo por unidade de consumo (R$) — opcional se calcular pela compra
+                          </label>
+                          <input
+                            value={costPerConsumptionUnit}
+                            onChange={(e) => setCostPerConsumptionUnit(e.target.value)}
+                            className="w-full max-w-xs rounded-md border border-zinc-300 px-3 py-2 text-sm tabular-nums"
+                            placeholder="ex.: 0,045"
+                          />
+                          <p className="mt-1 text-xs text-zinc-500">
+                            Na composição, a quantidade deve estar na mesma unidade de consumo (ex.:
+                            82 cm com custo por cm).
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
                 <div className="rounded-lg border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm">
-                  <p className="font-medium text-zinc-800">Custo total estimado</p>
-                  <p className="mt-1 text-zinc-600">
-                    {formatCurrency(estimatedTotalCost)} — considera custo base
-                    {costEstimate
-                      ? " + composições (BOM, embalagens, outros)."
-                      : " (composições após salvar e recarregar)."}
+                  <p className="font-medium text-zinc-800">Custos (servidor)</p>
+                  <p className="mt-1 text-xs text-zinc-600">
+                    Custo base (campo acima) é independente. Totais com composição e produção vêm da
+                    aba Composição e do perfil de produção.
                   </p>
-                  {costEstimate && (
-                    <ul className="mt-2 grid gap-1 text-xs text-zinc-500 sm:grid-cols-2">
-                      <li>Base: {formatCurrency(costEstimate.baseCostCents)}</li>
-                      <li>BOM: {formatCurrency(costEstimate.bomCostCents)}</li>
-                      <li>Embalagens: {formatCurrency(costEstimate.packagingCostCents)}</li>
-                      <li>Kits: {formatCurrency(costEstimate.kitCostCents)}</li>
-                      <li>Bundles: {formatCurrency(costEstimate.bundleCostCents)}</li>
+                  {costBreakdown ? (
+                    <ul className="mt-2 grid gap-1 text-xs text-zinc-600 sm:grid-cols-2">
+                      <li>Materiais: {formatCurrency(costBreakdown.materialCostCents)}</li>
+                      <li>Emb. online: {formatCurrency(costBreakdown.packagingOnlineCostCents)}</li>
                       <li>
-                        Outros (acessório/incluso):{" "}
-                        {formatCurrency(costEstimate.otherCompositionCostCents)}
+                        Emb. presencial:{" "}
+                        {formatCurrency(costBreakdown.packagingPresentialCostCents)}
+                      </li>
+                      <li>Mão de obra: {formatCurrency(costBreakdown.laborCostCents)}</li>
+                      <li className="font-medium text-zinc-800">
+                        Total online: {formatCurrency(costBreakdown.onlineTotalCostCents)}
+                      </li>
+                      <li className="font-medium text-zinc-800">
+                        Total presencial: {formatCurrency(costBreakdown.presentialTotalCostCents)}
                       </li>
                     </ul>
+                  ) : (
+                    <p className="mt-2 text-xs text-zinc-500">
+                      Guarde o produto e defina composição para ver o detalhe de custos.
+                    </p>
                   )}
                   <div className="mt-3 flex flex-wrap gap-4 border-t border-zinc-200 pt-3 text-zinc-800">
                     <span>
-                      Margem:{" "}
-                      <strong>{marginPct === null ? "—" : `${marginPct.toFixed(1)}%`}</strong>
+                      Margem (online):{" "}
+                      <strong>
+                        {marginOnlinePct === null ? "—" : `${marginOnlinePct.toFixed(1)}%`}
+                      </strong>
                     </span>
                     <span>
-                      Markup:{" "}
+                      Margem (presencial):{" "}
+                      <strong>
+                        {marginPresentialPct === null ? "—" : `${marginPresentialPct.toFixed(1)}%`}
+                      </strong>
+                    </span>
+                    <span>
+                      Markup (ref. online):{" "}
                       <strong>{markupVal === null ? "—" : `${markupVal.toFixed(2)}×`}</strong>
                     </span>
                   </div>
@@ -1028,189 +1186,438 @@ export function ProductOperationalForm({
                 )}
                 {mode === "edit" && productId && (
                   <>
-                    <div className="overflow-x-auto rounded-lg border border-zinc-200">
-                      <table className="min-w-full text-left text-sm">
-                        <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold text-zinc-600 uppercase">
-                          <tr>
-                            <th className="px-3 py-2">Componente</th>
-                            <th className="px-3 py-2">Tipo</th>
-                            <th className="px-3 py-2 text-right">Qtd</th>
-                            <th className="px-3 py-2 text-right">Custo linha</th>
-                            <th className="px-3 py-2"></th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {initialCompositions.length === 0 ? (
+                    <p className="text-xs text-zinc-600">
+                      Custos são calculados no servidor a partir dos cadastros dos componentes,
+                      custo proporcional (matéria-prima) e perfil de produção.
+                    </p>
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-semibold text-zinc-900">
+                        1. Materiais de produção (BOM)
+                      </h3>
+                      <div className="overflow-x-auto rounded-lg border border-zinc-200">
+                        <table className="min-w-full text-left text-sm">
+                          <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold text-zinc-600 uppercase">
                             <tr>
-                              <td colSpan={5} className="px-3 py-6 text-center text-zinc-500">
-                                Nenhuma composição cadastrada.
-                              </td>
+                              <th className="px-3 py-2">Produto</th>
+                              <th className="px-3 py-2">Tipo</th>
+                              <th className="px-3 py-2 text-right">Qtd</th>
+                              <th className="px-3 py-2">Unid.</th>
+                              <th className="px-3 py-2 text-right">Custo unit.</th>
+                              <th className="px-3 py-2 text-right">Custo calc.</th>
+                              <th className="px-3 py-2">Obs.</th>
+                              <th className="px-3 py-2" />
                             </tr>
-                          ) : (
-                            initialCompositions.map((row) =>
-                              editCompId === row.id ? (
-                                <tr key={row.id} className="border-b border-zinc-100 bg-zinc-50">
-                                  <td colSpan={5} className="px-3 py-4">
-                                    <p className="mb-3 text-xs font-semibold text-zinc-700">
-                                      Editar linha de composição
-                                    </p>
-                                    <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-                                      <div className="lg:col-span-2">
-                                        <CompositionProductPicker
-                                          value={editCompChildId}
-                                          onChange={setEditCompChildId}
-                                          excludeProductId={productId}
-                                          selectedSku={row.childSku}
-                                          selectedName={row.childName}
-                                        />
-                                      </div>
-                                      <div>
-                                        <label className="mb-1 block text-xs text-zinc-600">
-                                          Tipo de composição
-                                        </label>
-                                        <select
-                                          value={editCompType}
-                                          onChange={(e) => setEditCompType(e.target.value)}
-                                          className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
-                                        >
-                                          {COMPOSITION_TYPES.map((c) => (
-                                            <option key={c.value} value={c.value}>
-                                              {c.label}
-                                            </option>
-                                          ))}
-                                        </select>
-                                      </div>
-                                      <div>
-                                        <label className="mb-1 block text-xs text-zinc-600">
-                                          Quantidade
-                                        </label>
-                                        <input
-                                          value={editCompQty}
-                                          onChange={(e) => setEditCompQty(e.target.value)}
-                                          className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
-                                        />
-                                      </div>
-                                    </div>
-                                    <div className="mt-3 flex flex-wrap items-center gap-4">
-                                      <label className="flex items-center gap-2 text-sm">
-                                        <input
-                                          type="checkbox"
-                                          checked={editCompRequired}
-                                          onChange={(e) => setEditCompRequired(e.target.checked)}
-                                        />
-                                        Obrigatório
-                                      </label>
-                                      <label className="flex items-center gap-2 text-sm">
-                                        <input
-                                          type="checkbox"
-                                          checked={editCompDefault}
-                                          onChange={(e) => setEditCompDefault(e.target.checked)}
-                                        />
-                                        Padrão
-                                      </label>
-                                    </div>
-                                    <div className="mt-3">
-                                      <label className="mb-1 block text-xs text-zinc-600">
-                                        Observações
-                                      </label>
-                                      <input
-                                        value={editCompNotes}
-                                        onChange={(e) => setEditCompNotes(e.target.value)}
-                                        className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
-                                      />
-                                    </div>
-                                    <div className="mt-4 flex flex-wrap gap-2">
-                                      <button
-                                        type="button"
-                                        onClick={() => saveEditComposition()}
-                                        className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
-                                      >
-                                        Salvar linha
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => cancelEditComposition()}
-                                        className="rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm text-zinc-800 hover:bg-zinc-50"
-                                      >
-                                        Cancelar
-                                      </button>
-                                    </div>
-                                  </td>
-                                </tr>
-                              ) : (
-                                <tr key={row.id} className="border-b border-zinc-100">
-                                  <td className="px-3 py-2">
-                                    <div className="font-medium text-zinc-900">
-                                      {row.childName ?? row.childProductId}
-                                    </div>
-                                    <div className="font-mono text-xs text-zinc-500">
-                                      {row.childSku}
-                                    </div>
-                                  </td>
-                                  <td className="px-3 py-2 text-zinc-700 capitalize">
-                                    {row.compositionType}
-                                  </td>
-                                  <td className="px-3 py-2 text-right tabular-nums">
-                                    {row.quantity}
-                                  </td>
-                                  <td className="px-3 py-2 text-right tabular-nums">
-                                    {formatCurrency(row.lineCostCents ?? 0)}
-                                  </td>
-                                  <td className="space-x-3 px-3 py-2 text-right whitespace-nowrap">
-                                    <button
-                                      type="button"
-                                      onClick={() => startEditComposition(row)}
-                                      className="text-xs text-zinc-600 underline hover:text-zinc-900"
-                                    >
-                                      Editar
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => removeComposition(row.id)}
-                                      className="text-xs text-red-600 hover:underline"
-                                    >
-                                      Remover
-                                    </button>
-                                  </td>
-                                </tr>
-                              ),
-                            )
-                          )}
-                        </tbody>
-                        {initialCompositions.length > 0 ? (
-                          <tfoot>
-                            <tr className="border-t border-zinc-200 bg-zinc-50 font-medium text-zinc-800">
-                              <td
-                                colSpan={3}
-                                className="px-3 py-2 text-right text-xs font-semibold tracking-wide text-zinc-600 uppercase"
-                              >
-                                Soma das linhas
-                              </td>
-                              <td className="px-3 py-2 text-right tabular-nums">
-                                {formatCurrency(compositionSumLines)}
-                              </td>
-                              <td />
-                            </tr>
-                            {costEstimate != null && compositionFromEstimate != null ? (
-                              <tr className="bg-zinc-50 text-xs text-zinc-600">
-                                <td colSpan={5} className="px-3 pt-0 pb-3">
-                                  Composição no custo estimado (sem base):{" "}
-                                  <span className="font-semibold text-zinc-800 tabular-nums">
-                                    {formatCurrency(compositionFromEstimate)}
-                                  </span>
-                                  {Math.abs(compositionFromEstimate - compositionSumLines) > 1 ? (
-                                    <span className="ml-2 text-amber-800">
-                                      Diferente da soma das linhas — revise custos dos componentes
-                                      ou recarregue após alterações.
-                                    </span>
-                                  ) : null}
+                          </thead>
+                          <tbody>
+                            {bomRows.length === 0 ? (
+                              <tr>
+                                <td colSpan={8} className="px-3 py-4 text-center text-zinc-500">
+                                  Nenhum material na BOM.
                                 </td>
                               </tr>
-                            ) : null}
-                          </tfoot>
-                        ) : null}
-                      </table>
+                            ) : (
+                              bomRows.map((row) =>
+                                editCompId === row.id ? (
+                                  <tr key={row.id} className="border-b border-zinc-100 bg-zinc-50">
+                                    <td colSpan={8} className="px-3 py-4">
+                                      <p className="mb-3 text-xs font-semibold text-zinc-700">
+                                        Editar linha (BOM)
+                                      </p>
+                                      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+                                        <div className="lg:col-span-2">
+                                          <CompositionProductPicker
+                                            value={editCompChildId}
+                                            onChange={setEditCompChildId}
+                                            excludeProductId={productId}
+                                            selectedSku={row.childSku}
+                                            selectedName={row.childName}
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="mb-1 block text-xs text-zinc-600">
+                                            Tipo
+                                          </label>
+                                          <select
+                                            value={editCompType}
+                                            onChange={(e) => setEditCompType(e.target.value)}
+                                            className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
+                                          >
+                                            {COMPOSITION_TYPES_EDIT.map((c) => (
+                                              <option key={c.value} value={c.value}>
+                                                {c.label}
+                                              </option>
+                                            ))}
+                                          </select>
+                                        </div>
+                                        <div>
+                                          <label className="mb-1 block text-xs text-zinc-600">
+                                            Quantidade
+                                          </label>
+                                          <input
+                                            value={editCompQty}
+                                            onChange={(e) => setEditCompQty(e.target.value)}
+                                            className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="mb-1 block text-xs text-zinc-600">
+                                            Unidade (uso)
+                                          </label>
+                                          <input
+                                            value={editCompQtyUnit}
+                                            onChange={(e) => setEditCompQtyUnit(e.target.value)}
+                                            className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
+                                            placeholder="ex.: cm"
+                                          />
+                                        </div>
+                                        {editCompType === "packaging" ? (
+                                          <div>
+                                            <label className="mb-1 block text-xs text-zinc-600">
+                                              Canal embalagem
+                                            </label>
+                                            <select
+                                              value={editCompPackagingChannel}
+                                              onChange={(e) =>
+                                                setEditCompPackagingChannel(
+                                                  e.target.value as "online" | "presential",
+                                                )
+                                              }
+                                              className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
+                                            >
+                                              <option value="online">Online</option>
+                                              <option value="presential">Presencial</option>
+                                            </select>
+                                          </div>
+                                        ) : null}
+                                      </div>
+                                      <div className="mt-3 flex flex-wrap items-center gap-4">
+                                        <label className="flex items-center gap-2 text-sm">
+                                          <input
+                                            type="checkbox"
+                                            checked={editCompRequired}
+                                            onChange={(e) => setEditCompRequired(e.target.checked)}
+                                          />
+                                          Obrigatório
+                                        </label>
+                                        <label className="flex items-center gap-2 text-sm">
+                                          <input
+                                            type="checkbox"
+                                            checked={editCompDefault}
+                                            onChange={(e) => setEditCompDefault(e.target.checked)}
+                                          />
+                                          Padrão
+                                        </label>
+                                      </div>
+                                      <div className="mt-3">
+                                        <label className="mb-1 block text-xs text-zinc-600">
+                                          Observações
+                                        </label>
+                                        <input
+                                          value={editCompNotes}
+                                          onChange={(e) => setEditCompNotes(e.target.value)}
+                                          className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
+                                        />
+                                      </div>
+                                      <div className="mt-4 flex flex-wrap gap-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => saveEditComposition()}
+                                          className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
+                                        >
+                                          Salvar linha
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => cancelEditComposition()}
+                                          className="rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm text-zinc-800 hover:bg-zinc-50"
+                                        >
+                                          Cancelar
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  <tr key={row.id} className="border-b border-zinc-100">
+                                    <td className="px-3 py-2">
+                                      <div className="font-medium text-zinc-900">
+                                        {row.childName ?? row.childProductId}
+                                      </div>
+                                      <div className="font-mono text-xs text-zinc-500">
+                                        {row.childSku}
+                                      </div>
+                                    </td>
+                                    <td className="px-3 py-2 text-zinc-700">
+                                      {productTypeLabel(row.childProductType)}
+                                    </td>
+                                    <td className="px-3 py-2 text-right tabular-nums">
+                                      {row.quantity}
+                                    </td>
+                                    <td className="px-3 py-2 text-zinc-600">
+                                      {row.quantityUnit ?? "—"}
+                                    </td>
+                                    <td className="px-3 py-2 text-right tabular-nums">
+                                      {formatCurrency(row.childUnitCostCents ?? 0)}
+                                    </td>
+                                    <td className="px-3 py-2 text-right tabular-nums">
+                                      {formatCurrency(row.lineCostCents ?? 0)}
+                                    </td>
+                                    <td className="max-w-[140px] truncate px-3 py-2 text-xs text-zinc-600">
+                                      {row.notes ?? "—"}
+                                    </td>
+                                    <td className="space-x-2 px-3 py-2 text-right whitespace-nowrap">
+                                      <button
+                                        type="button"
+                                        onClick={() => startEditComposition(row)}
+                                        className="text-xs text-zinc-600 underline hover:text-zinc-900"
+                                      >
+                                        Editar
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => removeComposition(row.id)}
+                                        className="text-xs text-red-600 hover:underline"
+                                      >
+                                        Remover
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ),
+                              )
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
+
+                    <div className="space-y-2 pt-4">
+                      <h3 className="text-sm font-semibold text-zinc-900">2. Embalagem</h3>
+                      <div className="overflow-x-auto rounded-lg border border-zinc-200">
+                        <table className="min-w-full text-left text-sm">
+                          <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold text-zinc-600 uppercase">
+                            <tr>
+                              <th className="px-3 py-2">Produto</th>
+                              <th className="px-3 py-2">Canal</th>
+                              <th className="px-3 py-2 text-right">Qtd</th>
+                              <th className="px-3 py-2 text-right">Custo unit.</th>
+                              <th className="px-3 py-2 text-right">Custo calc.</th>
+                              <th className="px-3 py-2" />
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {packagingRows.length === 0 ? (
+                              <tr>
+                                <td colSpan={6} className="px-3 py-4 text-center text-zinc-500">
+                                  Nenhuma embalagem cadastrada.
+                                </td>
+                              </tr>
+                            ) : (
+                              packagingRows.map((row) =>
+                                editCompId === row.id ? (
+                                  <tr key={row.id} className="border-b border-zinc-100 bg-zinc-50">
+                                    <td colSpan={6} className="px-3 py-4">
+                                      <p className="mb-3 text-xs font-semibold text-zinc-700">
+                                        Editar linha (embalagem)
+                                      </p>
+                                      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+                                        <div className="lg:col-span-2">
+                                          <CompositionProductPicker
+                                            value={editCompChildId}
+                                            onChange={setEditCompChildId}
+                                            excludeProductId={productId}
+                                            selectedSku={row.childSku}
+                                            selectedName={row.childName}
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="mb-1 block text-xs text-zinc-600">
+                                            Canal *
+                                          </label>
+                                          <select
+                                            value={editCompPackagingChannel}
+                                            onChange={(e) =>
+                                              setEditCompPackagingChannel(
+                                                e.target.value as "online" | "presential",
+                                              )
+                                            }
+                                            className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
+                                          >
+                                            <option value="online">Online</option>
+                                            <option value="presential">Presencial</option>
+                                          </select>
+                                        </div>
+                                        <div>
+                                          <label className="mb-1 block text-xs text-zinc-600">
+                                            Quantidade
+                                          </label>
+                                          <input
+                                            value={editCompQty}
+                                            onChange={(e) => setEditCompQty(e.target.value)}
+                                            className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
+                                          />
+                                        </div>
+                                      </div>
+                                      <div className="mt-4 flex flex-wrap gap-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => saveEditComposition()}
+                                          className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
+                                        >
+                                          Salvar linha
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => cancelEditComposition()}
+                                          className="rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm text-zinc-800 hover:bg-zinc-50"
+                                        >
+                                          Cancelar
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  <tr key={row.id} className="border-b border-zinc-100">
+                                    <td className="px-3 py-2">
+                                      <div className="font-medium text-zinc-900">
+                                        {row.childName ?? row.childProductId}
+                                      </div>
+                                      <div className="font-mono text-xs text-zinc-500">
+                                        {row.childSku}
+                                      </div>
+                                    </td>
+                                    <td className="px-3 py-2 text-zinc-700">
+                                      {packagingChannelLabel(row.packagingChannel)}
+                                    </td>
+                                    <td className="px-3 py-2 text-right tabular-nums">
+                                      {row.quantity}
+                                    </td>
+                                    <td className="px-3 py-2 text-right tabular-nums">
+                                      {formatCurrency(row.childUnitCostCents ?? 0)}
+                                    </td>
+                                    <td className="px-3 py-2 text-right tabular-nums">
+                                      {formatCurrency(row.lineCostCents ?? 0)}
+                                    </td>
+                                    <td className="space-x-2 px-3 py-2 text-right whitespace-nowrap">
+                                      <button
+                                        type="button"
+                                        onClick={() => startEditComposition(row)}
+                                        className="text-xs text-zinc-600 underline hover:text-zinc-900"
+                                      >
+                                        Editar
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => removeComposition(row.id)}
+                                        className="text-xs text-red-600 hover:underline"
+                                      >
+                                        Remover
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ),
+                              )
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {costBreakdown ? (
+                      <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
+                        <h3 className="text-sm font-semibold text-zinc-900">3. Resumo de custos</h3>
+                        <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+                          <div className="flex justify-between gap-2">
+                            <dt className="text-zinc-600">Custo materiais</dt>
+                            <dd className="text-zinc-900 tabular-nums">
+                              {formatCurrency(costBreakdown.materialCostCents)}
+                            </dd>
+                          </div>
+                          <div className="flex justify-between gap-2">
+                            <dt className="text-zinc-600">Embalagem online</dt>
+                            <dd className="text-zinc-900 tabular-nums">
+                              {formatCurrency(costBreakdown.packagingOnlineCostCents)}
+                            </dd>
+                          </div>
+                          <div className="flex justify-between gap-2">
+                            <dt className="text-zinc-600">Embalagem presencial</dt>
+                            <dd className="text-zinc-900 tabular-nums">
+                              {formatCurrency(costBreakdown.packagingPresentialCostCents)}
+                            </dd>
+                          </div>
+                          <div className="flex justify-between gap-2">
+                            <dt className="text-zinc-600">Mão de obra</dt>
+                            <dd className="text-zinc-900 tabular-nums">
+                              {formatCurrency(costBreakdown.laborCostCents)}
+                            </dd>
+                          </div>
+                          <div className="flex justify-between gap-2 border-t border-zinc-200 pt-2 sm:col-span-2">
+                            <dt className="font-medium text-zinc-800">Custo total online</dt>
+                            <dd className="font-medium text-zinc-900 tabular-nums">
+                              {formatCurrency(costBreakdown.onlineTotalCostCents)}
+                            </dd>
+                          </div>
+                          <div className="flex justify-between gap-2 sm:col-span-2">
+                            <dt className="font-medium text-zinc-800">Custo total presencial</dt>
+                            <dd className="font-medium text-zinc-900 tabular-nums">
+                              {formatCurrency(costBreakdown.presentialTotalCostCents)}
+                            </dd>
+                          </div>
+                        </dl>
+                      </div>
+                    ) : null}
+
+                    {initialCompositions.some(
+                      (r) => r.compositionType !== "bom" && r.compositionType !== "packaging",
+                    ) ? (
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950">
+                        Existem linhas legadas (kit, bundle, etc.). Edite-as na lista unificada
+                        abaixo ou remova e recrie como BOM/embalagem.
+                        <div className="mt-2 overflow-x-auto rounded border border-amber-200 bg-white">
+                          <table className="min-w-full text-left text-sm">
+                            <thead className="bg-zinc-50 text-xs text-zinc-600 uppercase">
+                              <tr>
+                                <th className="px-2 py-1">Componente</th>
+                                <th className="px-2 py-1">Tipo</th>
+                                <th className="px-2 py-1 text-right">Qtd</th>
+                                <th className="px-2 py-1" />
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {initialCompositions
+                                .filter(
+                                  (r) =>
+                                    r.compositionType !== "bom" &&
+                                    r.compositionType !== "packaging",
+                                )
+                                .map((row) => (
+                                  <tr key={row.id} className="border-t border-zinc-100">
+                                    <td className="px-2 py-1">
+                                      {row.childName ?? row.childProductId}
+                                    </td>
+                                    <td className="px-2 py-1">{row.compositionType}</td>
+                                    <td className="px-2 py-1 text-right">{row.quantity}</td>
+                                    <td className="px-2 py-1 text-right">
+                                      <button
+                                        type="button"
+                                        className="text-xs text-zinc-600 underline"
+                                        onClick={() => startEditComposition(row)}
+                                      >
+                                        Editar
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="ml-2 text-xs text-red-600 hover:underline"
+                                        onClick={() => removeComposition(row.id)}
+                                      >
+                                        Remover
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ) : null}
                     <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
                       <p className="mb-3 text-xs font-semibold tracking-wide text-zinc-600 uppercase">
                         Adicionar componente
@@ -1227,10 +1634,13 @@ export function ProductOperationalForm({
                           <label className="mb-1 block text-xs text-zinc-600">Tipo</label>
                           <select
                             value={compType}
-                            onChange={(e) => setCompType(e.target.value)}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setCompType(v);
+                            }}
                             className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
                           >
-                            {COMPOSITION_TYPES.map((c) => (
+                            {COMPOSITION_TYPES_ADD.map((c) => (
                               <option key={c.value} value={c.value}>
                                 {c.label}
                               </option>
@@ -1245,6 +1655,34 @@ export function ProductOperationalForm({
                             className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
                           />
                         </div>
+                        <div>
+                          <label className="mb-1 block text-xs text-zinc-600">
+                            Unidade (uso na composição)
+                          </label>
+                          <input
+                            value={compQtyUnit}
+                            onChange={(e) => setCompQtyUnit(e.target.value)}
+                            className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+                            placeholder="ex.: cm, un"
+                          />
+                        </div>
+                        {compType === "packaging" ? (
+                          <div>
+                            <label className="mb-1 block text-xs text-zinc-600">
+                              Canal embalagem *
+                            </label>
+                            <select
+                              value={compPackagingChannel}
+                              onChange={(e) =>
+                                setCompPackagingChannel(e.target.value as "online" | "presential")
+                              }
+                              className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+                            >
+                              <option value="online">Online</option>
+                              <option value="presential">Presencial</option>
+                            </select>
+                          </div>
+                        ) : null}
                       </div>
                       <div className="mt-3 flex flex-wrap items-center gap-4">
                         <label className="flex items-center gap-2 text-sm">
@@ -1499,10 +1937,12 @@ export function ProductOperationalForm({
                     </div>
                   ) : null}
                   <p className="mt-1 text-xs text-zinc-500">
-                    Cada envio: JPEG, PNG ou WebP até <strong className="font-medium">5 MB</strong>{" "}
-                    (validado no servidor). Até {MAX_GALLERY_IMAGE_SLOTS} IDs na galeria. Colar IDs
-                    na caixa não faz novo upload — só referencia ficheiros já existentes. A
-                    pré-visualização exige sessão iniciada.
+                    Cada <strong className="font-medium">imagem</strong> ao enviar: JPEG, PNG ou
+                    WebP até <strong className="font-medium">5 MB por ficheiro</strong> (não é um
+                    limite do “tamanho total” da galeria). O limite aplica-se no clique de envio; ao{" "}
+                    <strong className="font-medium">Salvar</strong> o produto só vão os IDs (texto),
+                    não os binários. Até {MAX_GALLERY_IMAGE_SLOTS} IDs. Colar IDs não refaz upload.
+                    Pré-visualização com sessão.
                   </p>
                 </div>
               </div>
@@ -1571,6 +2011,24 @@ export function ProductOperationalForm({
                 className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
               />
             </div>
+            <div className="mt-3">
+              <label className="mb-1 block text-xs text-zinc-600">Mão de obra (R$ / hora)</label>
+              <input
+                value={laborCostPerHour}
+                onChange={(e) => setLaborCostPerHour(e.target.value)}
+                className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm tabular-nums"
+                placeholder="0,00"
+              />
+            </div>
+            <div className="mt-3">
+              <label className="mb-1 block text-xs text-zinc-600">Notas de produção</label>
+              <textarea
+                value={productionProfileNotes}
+                onChange={(e) => setProductionProfileNotes(e.target.value)}
+                rows={2}
+                className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+              />
+            </div>
             <h3 className="mt-6 text-sm font-semibold text-zinc-900">Canais</h3>
             <div className="mt-2 space-y-2 text-sm">
               <label className="flex items-center gap-2">
@@ -1632,13 +2090,39 @@ export function ProductOperationalForm({
                 <dd className="text-zinc-900 tabular-nums">{formatCurrency(saleCents)}</dd>
               </div>
               <div className="flex justify-between gap-2">
-                <dt className="text-zinc-500">Custo estimado</dt>
-                <dd className="text-zinc-800 tabular-nums">{formatCurrency(estimatedTotalCost)}</dd>
+                <dt className="text-zinc-500">Custo materiais</dt>
+                <dd className="text-zinc-800 tabular-nums">
+                  {costBreakdown
+                    ? formatCurrency(costBreakdown.materialCostCents)
+                    : formatCurrency(0)}
+                </dd>
               </div>
               <div className="flex justify-between gap-2">
-                <dt className="text-zinc-500">Margem</dt>
+                <dt className="text-zinc-500">Custo online</dt>
+                <dd className="text-zinc-800 tabular-nums">
+                  {costBreakdown
+                    ? formatCurrency(costBreakdown.onlineTotalCostCents)
+                    : formatCurrency(costCents)}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-2">
+                <dt className="text-zinc-500">Custo presencial</dt>
+                <dd className="text-zinc-800 tabular-nums">
+                  {costBreakdown
+                    ? formatCurrency(costBreakdown.presentialTotalCostCents)
+                    : formatCurrency(costCents)}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-2">
+                <dt className="text-zinc-500">Margem (online)</dt>
                 <dd className="text-emerald-700 tabular-nums">
-                  {marginPct === null ? "—" : `${marginPct.toFixed(1)}%`}
+                  {marginOnlinePct === null ? "—" : `${marginOnlinePct.toFixed(1)}%`}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-2">
+                <dt className="text-zinc-500">Margem (presencial)</dt>
+                <dd className="text-emerald-700 tabular-nums">
+                  {marginPresentialPct === null ? "—" : `${marginPresentialPct.toFixed(1)}%`}
                 </dd>
               </div>
               <div className="flex justify-between gap-2">
@@ -1669,6 +2153,24 @@ export function ProductOperationalForm({
                 min={0}
                 value={averageProductionTimeMinutes}
                 onChange={(e) => setAverageProductionTimeMinutes(e.target.value)}
+                className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div className="mt-3">
+              <label className="mb-1 block text-xs text-zinc-600">Mão de obra (R$ / hora)</label>
+              <input
+                value={laborCostPerHour}
+                onChange={(e) => setLaborCostPerHour(e.target.value)}
+                className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm tabular-nums"
+                placeholder="0,00"
+              />
+            </div>
+            <div className="mt-3">
+              <label className="mb-1 block text-xs text-zinc-600">Notas de produção</label>
+              <textarea
+                value={productionProfileNotes}
+                onChange={(e) => setProductionProfileNotes(e.target.value)}
+                rows={2}
                 className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
               />
             </div>

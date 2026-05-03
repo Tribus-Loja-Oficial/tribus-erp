@@ -15,12 +15,15 @@ export async function searchProductsCatalogAction(opts: {
   q?: string;
   excludeId?: string;
   limit?: number;
+  /** Tipos elegíveis para composição (BOM/embalagem). */
+  composeCatalog?: boolean;
 }): Promise<CatalogProductSearchRow[]> {
   const searchParams: Record<string, string | number> = {
     limit: opts.limit ?? 40,
   };
   const trimmed = opts.q?.trim();
   if (trimmed) searchParams.q = trimmed;
+  if (opts.composeCatalog) searchParams.composeCatalog = 1;
 
   const res = await erpApiFetch<{ data: CatalogProductSearchRow[] }>({
     path: "/products",

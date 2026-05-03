@@ -36,6 +36,7 @@ export function CompositionProductPicker({
         q: q.trim() || undefined,
         excludeId: excludeProductId,
         limit: 40,
+        composeCatalog: true,
       })
         .then(setResults)
         .catch(() => setResults([]))
