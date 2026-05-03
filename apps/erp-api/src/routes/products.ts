@@ -157,6 +157,29 @@ products.post("/media/upload", async (c) => {
   }
 });
 
+/** Stream binário (imagem) para pré-visualização; requer Bearer interno. */
+products.get("/document-files/:id/stream", async (c) => {
+  try {
+    const config = getEnv(c.env);
+    verifyInternalToken(c.req.header("Authorization"), config.erpInternalSecret);
+
+    const db = createDb(config.db);
+    const storage = new R2StorageProvider(config.r2);
+    const mediaService = createProductMediaService(db, storage);
+    const { body, contentType } = await mediaService.streamByFileId(c.req.param("id"));
+
+    return new Response(body, {
+      headers: {
+        "Content-Type": contentType,
+        "Cache-Control": "private, max-age=300",
+      },
+    });
+  } catch (err) {
+    const { message, code, status } = toApiError(err);
+    return c.json({ message, code }, status);
+  }
+});
+
 products.get("/:id/detail", async (c) => {
   try {
     const config = getEnv(c.env);

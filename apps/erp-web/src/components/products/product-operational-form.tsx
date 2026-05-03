@@ -136,6 +136,16 @@ function parseGalleryFileIdsFromProduct(raw: unknown): string {
   return "";
 }
 
+const PRODUCT_FILE_ID_RE = /^file_[a-f0-9]{32}$/i;
+
+function isPreviewableProductFileId(raw: string): boolean {
+  return PRODUCT_FILE_ID_RE.test(raw.trim());
+}
+
+function productFilePreviewSrc(fileId: string): string {
+  return `/api/product-files/${encodeURIComponent(fileId.trim())}`;
+}
+
 interface ProductOperationalFormProps {
   mode: "new" | "edit";
   productId?: string;
@@ -279,6 +289,16 @@ export function ProductOperationalForm({
   );
   const [galleryFileIdsText, setGalleryFileIdsText] = useState(() =>
     parseGalleryFileIdsFromProduct(initialProduct.imagesJson),
+  );
+
+  const galleryPreviewIds = useMemo(
+    () =>
+      galleryFileIdsText
+        .split(/[\n,]+/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .filter(isPreviewableProductFileId),
+    [galleryFileIdsText],
   );
 
   const [compChildId, setCompChildId] = useState("");
@@ -1374,6 +1394,17 @@ export function ProductOperationalForm({
                     className="mt-2 w-full rounded-md border border-zinc-300 px-3 py-2 font-mono text-sm"
                     placeholder="file_…"
                   />
+                  {isPreviewableProductFileId(mainImageFileId) ? (
+                    <div className="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+                      <p className="mb-2 text-xs font-medium text-zinc-500">Pré-visualização</p>
+                      <img
+                        key={mainImageFileId.trim()}
+                        src={productFilePreviewSrc(mainImageFileId)}
+                        alt="Imagem principal do produto"
+                        className="max-h-52 max-w-full rounded-md object-contain"
+                      />
+                    </div>
+                  ) : null}
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-zinc-600">
@@ -1397,8 +1428,30 @@ export function ProductOperationalForm({
                     className="w-full rounded-md border border-zinc-300 px-3 py-2 font-mono text-sm"
                     placeholder={"file_abc123\nfile_def456"}
                   />
+                  {galleryPreviewIds.length > 0 ? (
+                    <div className="mt-3 space-y-2">
+                      <p className="text-xs font-medium text-zinc-500">
+                        Pré-visualização da galeria
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {galleryPreviewIds.map((fid, index) => (
+                          <div
+                            key={`${fid}-${index}`}
+                            className="h-24 w-24 shrink-0 overflow-hidden rounded-md border border-zinc-200 bg-zinc-100"
+                          >
+                            <img
+                              src={productFilePreviewSrc(fid)}
+                              alt=""
+                              className="h-full w-full object-cover"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                   <p className="mt-1 text-xs text-zinc-500">
-                    JPEG, PNG ou WebP até 5 MB. Persistido como JSON no produto após gravar.
+                    JPEG, PNG ou WebP até 5 MB. Persistido como JSON no produto após gravar. A
+                    pré-visualização só está disponível com sessão iniciada.
                   </p>
                 </div>
               </div>

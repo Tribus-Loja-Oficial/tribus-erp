@@ -4,10 +4,18 @@ import type {
   StoredObject,
   GetSignedUrlInput,
   DeleteObjectInput,
+  GetObjectOutput,
 } from "./storage-provider.js";
 
 export class R2StorageProvider implements StorageProvider {
   constructor(private readonly bucket: R2Bucket) {}
+
+  async getObject(key: string): Promise<GetObjectOutput | null> {
+    const object = await this.bucket.get(key);
+    if (!object?.body) return null;
+    const contentType = object.httpMetadata?.contentType ?? "application/octet-stream";
+    return { body: object.body, contentType };
+  }
 
   async putObject(input: PutObjectInput): Promise<StoredObject> {
     const object = await this.bucket.put(input.key, input.body, {

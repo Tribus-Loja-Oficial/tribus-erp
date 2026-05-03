@@ -48,6 +48,7 @@ Outros domínios (fiscal, etc.) podem usar `reference_type` próprio quando pass
 ## Implementação de referência
 
 - **Upload:** `POST /products/media/upload` (multipart, campo `file`; opcional `productId`), com `Authorization: Bearer` igual às outras chamadas erp-web → erp-api (`ERP_INTERNAL_SECRET` / `ERP_API_INTERNAL_SECRET` alinhados).
+- **Leitura (pré-visualização):** `GET /products/document-files/:id/stream` (Bearer interno); na Web, o utilizador autenticado acede via proxy `GET /api/product-files/[id]` que reencaminha para a API.
 - **Serviço:** `createProductMediaService` + `R2StorageProvider.putObject`.
 - **UI:** separador Mídia em `product-operational-form.tsx` — envio via server action que reencaminha o `FormData` para a rota acima.
 

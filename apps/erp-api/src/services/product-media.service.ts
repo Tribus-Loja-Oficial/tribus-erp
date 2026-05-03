@@ -3,7 +3,9 @@ import { generateId } from "../utils/id.js";
 import { createDocumentRepository } from "../repositories/document.repository.js";
 import { createProductService } from "./product.service.js";
 import type { StorageProvider } from "../storage/storage-provider.js";
-import { BadRequestError } from "../errors/app-error.js";
+import { BadRequestError, NotFoundError } from "../errors/app-error.js";
+
+const PRODUCT_FILE_ID_RE = /^file_[a-f0-9]{32}$/i;
 
 const ALLOWED_MIMES = new Map<string, string>([
   ["image/jpeg", "jpg"],
@@ -19,6 +21,25 @@ export function createProductMediaService(db: AppDb, storage: StorageProvider) {
   const now = () => new Date().toISOString();
 
   return {
+    async streamByFileId(fileId: string) {
+      const id = fileId.trim();
+      if (!PRODUCT_FILE_ID_RE.test(id)) {
+        throw new BadRequestError("Identificador de ficheiro inválido.");
+      }
+      const doc = await docs.findById(id);
+      if (!doc) throw new NotFoundError("DocumentFile", id);
+      const mime = doc.mimeType.split(";")[0]?.trim().toLowerCase() ?? "";
+      if (!ALLOWED_MIMES.has(mime)) {
+        throw new BadRequestError("Este endpoint só serve imagens JPEG, PNG ou WebP.");
+      }
+      const obj = await storage.getObject(doc.storageKey);
+      if (!obj?.body) throw new NotFoundError("StoredObject", doc.storageKey);
+      return {
+        body: obj.body,
+        contentType: doc.mimeType,
+      };
+    },
+
     async uploadProductImage(input: {
       buffer: ArrayBuffer;
       filename: string;
