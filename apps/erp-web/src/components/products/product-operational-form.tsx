@@ -136,6 +136,8 @@ function parseGalleryFileIdsFromProduct(raw: unknown): string {
   return "";
 }
 
+const MAX_PRODUCT_IMAGE_BYTES = 5 * 1024 * 1024;
+
 const PRODUCT_FILE_ID_RE = /^file_[a-f0-9]{32}$/i;
 
 function isPreviewableProductFileId(raw: string): boolean {
@@ -433,6 +435,10 @@ export function ProductOperationalForm({
     target: "main" | "gallery",
   ) {
     if (!file) return;
+    if (file.size > MAX_PRODUCT_IMAGE_BYTES) {
+      setError("Imagem demasiado grande (máx. 5 MB).");
+      return;
+    }
     setError(null);
     setSuccess(null);
     setMediaUploadKind(target);
