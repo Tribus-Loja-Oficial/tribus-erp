@@ -10,8 +10,8 @@ import {
   removeProductCompositionAction,
   updateProductCompositionAction,
   updateProductOperationalAction,
-  uploadProductMediaAction,
 } from "@/server/product-operational-actions";
+import type { UploadedProductMediaRow } from "@/lib/product-media-types";
 import { CompositionProductPicker } from "@/components/products/composition-product-picker";
 
 export interface SelectOption {
@@ -137,6 +137,7 @@ function parseGalleryFileIdsFromProduct(raw: unknown): string {
 }
 
 const MAX_PRODUCT_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_GALLERY_IMAGE_SLOTS = 100;
 
 const PRODUCT_FILE_ID_RE = /^file_[a-f0-9]{32}$/i;
 
@@ -411,6 +412,13 @@ export function ProductOperationalForm({
     setSuccess(null);
     startTransition(async () => {
       try {
+        const galleryCount = parseGalleryFileIdLines(galleryFileIdsText).length;
+        if (galleryCount > MAX_GALLERY_IMAGE_SLOTS) {
+          setError(
+            `A galeria admite no máximo ${MAX_GALLERY_IMAGE_SLOTS} imagens (IDs). Reduz o número de linhas.`,
+          );
+          return;
+        }
         const payload = buildPayload();
         if (mode === "new") {
           const id = await createProductOperationalAction(payload);
@@ -439,6 +447,13 @@ export function ProductOperationalForm({
       setError("Imagem demasiado grande (máx. 5 MB).");
       return;
     }
+    if (target === "gallery") {
+      const current = parseGalleryFileIdLines(galleryFileIdsText).length;
+      if (current >= MAX_GALLERY_IMAGE_SLOTS) {
+        setError(`A galeria já tem o máximo de ${MAX_GALLERY_IMAGE_SLOTS} imagens.`);
+        return;
+      }
+    }
     setError(null);
     setSuccess(null);
     setMediaUploadKind(target);
@@ -446,7 +461,31 @@ export function ProductOperationalForm({
       const fd = new FormData();
       fd.append("file", file);
       if (productId) fd.append("productId", productId);
-      const row = await uploadProductMediaAction(fd);
+      const res = await fetch("/api/products/media-upload", {
+        method: "POST",
+        body: fd,
+        credentials: "include",
+      });
+      let json: { message?: string; data?: UploadedProductMediaRow };
+      try {
+        json = (await res.json()) as typeof json;
+      } catch {
+        throw new Error(
+          `Resposta inválida do servidor (HTTP ${res.status}). Se o ficheiro é grande, pode ser limite da infraestrutura (ex.: Vercel).`,
+        );
+      }
+      if (!res.ok) {
+        throw new Error(
+          json.message ??
+            (res.status === 413
+              ? "Ficheiro demasiado grande para o limite do servidor web (tenta reduzir o tamanho da imagem)."
+              : `Upload falhou (HTTP ${res.status}).`),
+        );
+      }
+      if (!json.data) {
+        throw new Error("Resposta inválida: a API não devolveu os dados do ficheiro.");
+      }
+      const row = json.data;
       if (target === "main") {
         setMainImageFileId(row.id);
         setSuccess("Imagem principal enviada para o storage.");
@@ -1460,8 +1499,10 @@ export function ProductOperationalForm({
                     </div>
                   ) : null}
                   <p className="mt-1 text-xs text-zinc-500">
-                    JPEG, PNG ou WebP até 5 MB. Persistido como JSON no produto após gravar. A
-                    pré-visualização só está disponível com sessão iniciada.
+                    Cada envio: JPEG, PNG ou WebP até <strong className="font-medium">5 MB</strong>{" "}
+                    (validado no servidor). Até {MAX_GALLERY_IMAGE_SLOTS} IDs na galeria. Colar IDs
+                    na caixa não faz novo upload — só referencia ficheiros já existentes. A
+                    pré-visualização exige sessão iniciada.
                   </p>
                 </div>
               </div>

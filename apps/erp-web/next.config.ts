@@ -5,7 +5,10 @@ const nextConfig: NextConfig = {
   experimental: {
     typedRoutes: false,
   },
-  /** Default ~1 MB bloqueia uploads de mídia via Server Action (multipart). API aceita até 5 MB. */
+  /**
+   * Next.js limitava por defeito o corpo das Server Actions a ~1 MB (falhas opacas em ficheiros ~1,5 MB).
+   * Uploads de imagem passam por `POST /api/products/media-upload` (Route Handler); este limite cobre outras actions com payloads grandes.
+   */
   serverActions: {
     bodySizeLimit: "6mb",
   },

@@ -47,7 +47,8 @@ Outros domínios (fiscal, etc.) podem usar `reference_type` próprio quando pass
 
 ## Implementação de referência
 
-- **Upload:** `POST /products/media/upload` (multipart, campo `file`; opcional `productId`), com `Authorization: Bearer` igual às outras chamadas erp-web → erp-api (`ERP_INTERNAL_SECRET` / `ERP_API_INTERNAL_SECRET` alinhados).
+- **Upload (API):** `POST /products/media/upload` (multipart, campo `file`; opcional `productId`), com `Authorization: Bearer` interno.
+- **Upload (Web):** o browser envia o ficheiro para `POST /api/products/media-upload` (Route Handler com sessão); o servidor reencaminha para a API (evita o limite por defeito ~**1 MB** das **Server Actions** do Next.js no multipart).
 - **Leitura (pré-visualização):** `GET /products/document-files/:id/stream` (Bearer interno); na Web, o utilizador autenticado acede via proxy `GET /api/product-files/[id]` que reencaminha para a API.
 - **Serviço:** `createProductMediaService` + `R2StorageProvider.putObject`.
 - **UI:** separador Mídia em `product-operational-form.tsx` — envio via server action que reencaminha o `FormData` para a rota acima.
