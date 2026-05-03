@@ -34,7 +34,18 @@ export async function erpApiFetch<T>(options: FetchOptions): Promise<T> {
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error((data as { message?: string })?.message ?? `HTTP ${response.status}`);
+    const d = data as {
+      message?: string;
+      code?: string;
+      issues?: Array<{ path?: (string | number)[]; message?: string }>;
+    };
+    if (d.code === "VALIDATION_ERROR" && Array.isArray(d.issues) && d.issues.length > 0) {
+      const first = d.issues[0]!;
+      const path = first.path?.length ? first.path.join(".") : "";
+      const detail = [path, first.message].filter(Boolean).join(": ");
+      throw new Error(detail || d.message || `HTTP ${response.status}`);
+    }
+    throw new Error(d.message ?? `HTTP ${response.status}`);
   }
 
   return data as T;

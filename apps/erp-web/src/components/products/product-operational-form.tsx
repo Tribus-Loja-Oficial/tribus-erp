@@ -146,6 +146,23 @@ function productFilePreviewSrc(fileId: string): string {
   return `/api/product-files/${encodeURIComponent(fileId.trim())}`;
 }
 
+/** Mesma lógica para textarea da galeria, preview e payload (incl. `\r\n` do Windows). */
+function parseGalleryFileIdLines(text: string): string[] {
+  return text
+    .split(/[\r\n,]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/** Campos numéricos inteiros ≥ 0 no schema da API; arredonda decimais vindos de `<input type="number">`. */
+function nonNegativeIntFromInput(raw: string): number | undefined {
+  const t = raw.trim();
+  if (!t) return undefined;
+  const n = Math.round(Number(t.replace(",", ".")));
+  if (!Number.isFinite(n) || n < 0) return undefined;
+  return n;
+}
+
 interface ProductOperationalFormProps {
   mode: "new" | "edit";
   productId?: string;
@@ -292,12 +309,7 @@ export function ProductOperationalForm({
   );
 
   const galleryPreviewIds = useMemo(
-    () =>
-      galleryFileIdsText
-        .split(/[\n,]+/)
-        .map((s) => s.trim())
-        .filter(Boolean)
-        .filter(isPreviewableProductFileId),
+    () => parseGalleryFileIdLines(galleryFileIdsText).filter(isPreviewableProductFileId),
     [galleryFileIdsText],
   );
 
@@ -344,10 +356,7 @@ export function ProductOperationalForm({
   }, [costEstimate]);
 
   function buildPayload(): Record<string, unknown> {
-    const galleryLines = galleryFileIdsText
-      .split(/[\n,]+/)
-      .map((s) => s.trim())
-      .filter(Boolean);
+    const galleryLines = parseGalleryFileIdLines(galleryFileIdsText);
 
     const payload: Record<string, unknown> = {
       sku: sku.trim(),
@@ -369,9 +378,9 @@ export function ProductOperationalForm({
       wholesalePriceCents: wholesalePrice.trim() ? inputToCents(wholesalePrice) : undefined,
       compareAtPriceCents: compareAtPrice.trim() ? inputToCents(compareAtPrice) : undefined,
       controlsStock,
-      minStock: Number(minStock) || 0,
-      idealStock: idealStock.trim() ? Number(idealStock) : undefined,
-      maxStock: maxStock.trim() ? Number(maxStock) : undefined,
+      minStock: nonNegativeIntFromInput(minStock) ?? 0,
+      idealStock: nonNegativeIntFromInput(idealStock),
+      maxStock: nonNegativeIntFromInput(maxStock),
       unitOfMeasure,
       defaultStockLocationId: defaultStockLocationId || undefined,
       ncm: ncm.trim() || undefined,
@@ -379,14 +388,12 @@ export function ProductOperationalForm({
       cfopDefault: cfopDefault.trim() || undefined,
       origin: origin.trim() || "0",
       barcode: barcode.trim() || undefined,
-      weightGrams: weightGrams.trim() ? Number(weightGrams) : undefined,
+      weightGrams: nonNegativeIntFromInput(weightGrams),
       lengthCm: lengthCm.trim() ? Number(lengthCm) : undefined,
       widthCm: widthCm.trim() ? Number(widthCm) : undefined,
       heightCm: heightCm.trim() ? Number(heightCm) : undefined,
       producedInternally,
-      averageProductionTimeMinutes: averageProductionTimeMinutes.trim()
-        ? Number(averageProductionTimeMinutes)
-        : undefined,
+      averageProductionTimeMinutes: nonNegativeIntFromInput(averageProductionTimeMinutes),
       sellable,
       availableForEcommerce,
       availableForPos,
@@ -439,11 +446,8 @@ export function ProductOperationalForm({
         setSuccess("Imagem principal enviada para o storage.");
       } else {
         setGalleryFileIdsText((prev) => {
-          const lines = prev
-            .split(/[\n,]+/)
-            .map((s) => s.trim())
-            .filter(Boolean);
-          lines.push(row.id);
+          const lines = parseGalleryFileIdLines(prev);
+          if (!lines.includes(row.id)) lines.push(row.id);
           return lines.join("\n");
         });
         setSuccess("Imagem adicionada à galeria (ID anexado ao texto).");
