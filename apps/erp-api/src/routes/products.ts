@@ -14,6 +14,9 @@ import {
   updateProductCompositionSchema,
 } from "../schemas/product.schemas.js";
 import { createProductCompositionService } from "../services/product-composition.service.js";
+import { verifyInternalToken } from "../auth/verify-internal-token.js";
+import { R2StorageProvider } from "../storage/r2-storage-provider.js";
+import { createProductMediaService } from "../services/product-media.service.js";
 
 const products = new Hono<{ Bindings: Env }>();
 
@@ -101,6 +104,53 @@ products.get("/collections", async (c) => {
     const service = createProductService(db);
     const data = await service.findCollections();
     return c.json({ data });
+  } catch (err) {
+    const { message, code, status } = toApiError(err);
+    return c.json({ message, code }, status);
+  }
+});
+
+/** Multipart: campo `file`; opcional `productId` (texto) quando o produto já existe. */
+products.post("/media/upload", async (c) => {
+  try {
+    const config = getEnv(c.env);
+    verifyInternalToken(c.req.header("Authorization"), config.erpInternalSecret);
+
+    const body = await c.req.parseBody();
+    const file = body["file"];
+    if (!(file instanceof File)) {
+      return c.json({ code: "VALIDATION_ERROR", message: "Campo multipart `file` em falta." }, 400);
+    }
+    const productIdField = body["productId"];
+    const productId =
+      typeof productIdField === "string" && productIdField.trim()
+        ? productIdField.trim()
+        : undefined;
+
+    const buf = await file.arrayBuffer();
+    const db = createDb(config.db);
+    const storage = new R2StorageProvider(config.r2);
+    const mediaService = createProductMediaService(db, storage);
+    const row = await mediaService.uploadProductImage({
+      buffer: buf,
+      filename: file.name || "upload",
+      mimeType: file.type || "application/octet-stream",
+      productId,
+    });
+    return c.json(
+      {
+        data: {
+          id: row.id,
+          storageKey: row.storageKey,
+          filename: row.filename,
+          mimeType: row.mimeType,
+          sizeBytes: row.sizeBytes,
+          referenceType: row.referenceType,
+          referenceId: row.referenceId,
+        },
+      },
+      201,
+    );
   } catch (err) {
     const { message, code, status } = toApiError(err);
     return c.json({ message, code }, status);

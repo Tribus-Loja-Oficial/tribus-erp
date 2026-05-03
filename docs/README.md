@@ -85,10 +85,11 @@
 
 ## Referência
 
-| Documento                                   | Conteúdo                                                  |
-| ------------------------------------------- | --------------------------------------------------------- |
-| [reference/routes](reference/routes.md)     | Rotas da API: método, path, autenticação, service, erros. |
-| [reference/env-vars](reference/env-vars.md) | Variáveis de ambiente: obrigatoriedade, escopo, exemplo.  |
+| Documento                                                                             | Conteúdo                                                  |
+| ------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| [reference/routes](reference/routes.md)                                               | Rotas da API: método, path, autenticação, service, erros. |
+| [reference/storage-r2-and-document-files](reference/storage-r2-and-document-files.md) | Prefixos R2, `document_files`, mídia de produto.          |
+| [reference/env-vars](reference/env-vars.md)                                           | Variáveis de ambiente: obrigatoriedade, escopo, exemplo.  |
 
 ---
 

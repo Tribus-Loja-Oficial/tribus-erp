@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { formatCurrency } from "@/lib/utils";
 import {
   addProductCompositionAction,
@@ -10,6 +10,7 @@ import {
   removeProductCompositionAction,
   updateProductCompositionAction,
   updateProductOperationalAction,
+  uploadProductMediaAction,
 } from "@/server/product-operational-actions";
 import { CompositionProductPicker } from "@/components/products/composition-product-picker";
 
@@ -163,6 +164,9 @@ export function ProductOperationalForm({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const mainImageFileInputRef = useRef<HTMLInputElement>(null);
+  const galleryImageFileInputRef = useRef<HTMLInputElement>(null);
+  const [mediaUploadKind, setMediaUploadKind] = useState<"main" | "gallery" | null>(null);
 
   const [sku, setSku] = useState(String(initialProduct.sku ?? ""));
   const [name, setName] = useState(String(initialProduct.name ?? ""));
@@ -395,6 +399,46 @@ export function ProductOperationalForm({
         setError(e instanceof Error ? e.message : "Erro ao salvar");
       }
     });
+  }
+
+  async function handleProductMediaFileSelected(
+    file: File | undefined,
+    target: "main" | "gallery",
+  ) {
+    if (!file) return;
+    setError(null);
+    setSuccess(null);
+    setMediaUploadKind(target);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      if (productId) fd.append("productId", productId);
+      const row = await uploadProductMediaAction(fd);
+      if (target === "main") {
+        setMainImageFileId(row.id);
+        setSuccess("Imagem principal enviada para o storage.");
+      } else {
+        setGalleryFileIdsText((prev) => {
+          const lines = prev
+            .split(/[\n,]+/)
+            .map((s) => s.trim())
+            .filter(Boolean);
+          lines.push(row.id);
+          return lines.join("\n");
+        });
+        setSuccess("Imagem adicionada à galeria (ID anexado ao texto).");
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro no upload");
+    } finally {
+      setMediaUploadKind(null);
+      if (target === "main" && mainImageFileInputRef.current) {
+        mainImageFileInputRef.current.value = "";
+      }
+      if (target === "gallery" && galleryImageFileInputRef.current) {
+        galleryImageFileInputRef.current.value = "";
+      }
+    }
   }
 
   async function addComposition() {
@@ -1278,28 +1322,74 @@ export function ProductOperationalForm({
             )}
 
             {tab === "media" && (
-              <div className="space-y-3 text-sm text-zinc-600">
+              <div className="space-y-4 text-sm text-zinc-600">
                 <p>
-                  Referência à imagem principal e arquivos técnicos via storage abstrato (ex.: ID em{" "}
-                  <code className="rounded bg-zinc-100 px-1">mainImageFileId</code>). A UI não se
-                  acopla ao R2 — apenas persiste identificadores retornados pela camada de storage.
+                  O produto guarda o <strong className="font-medium text-zinc-700">id</strong> em{" "}
+                  <code className="rounded bg-zinc-100 px-1">document_files</code> (ex.:{" "}
+                  <code className="rounded bg-zinc-100 px-1">file_…</code>), não a chave R2. Com
+                  produto já gravado, o upload usa{" "}
+                  <code className="rounded bg-zinc-100 px-1">products/{"{id}"}/media/…</code>; em
+                  novo produto usa-se{" "}
+                  <code className="rounded bg-zinc-100 px-1">products/draft/…</code> até existir{" "}
+                  <code className="rounded bg-zinc-100 px-1">productId</code>.
                 </p>
+                <input
+                  ref={mainImageFileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    void handleProductMediaFileSelected(f, "main");
+                  }}
+                />
+                <input
+                  ref={galleryImageFileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    void handleProductMediaFileSelected(f, "gallery");
+                  }}
+                />
                 <div>
                   <label className="mb-1 block text-xs font-medium text-zinc-600">
-                    ID da imagem principal (referência)
+                    Imagem principal — ID (
+                    <code className="rounded bg-zinc-100 px-1">mainImageFileId</code>)
                   </label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={Boolean(mediaUploadKind)}
+                      onClick={() => mainImageFileInputRef.current?.click()}
+                      className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-800 shadow-sm hover:bg-zinc-50 disabled:opacity-50"
+                    >
+                      {mediaUploadKind === "main" ? "A enviar…" : "Enviar imagem…"}
+                    </button>
+                  </div>
                   <input
                     value={mainImageFileId}
                     onChange={(e) => setMainImageFileId(e.target.value)}
-                    className="w-full rounded-md border border-zinc-300 px-3 py-2 font-mono text-sm"
+                    className="mt-2 w-full rounded-md border border-zinc-300 px-3 py-2 font-mono text-sm"
                     placeholder="file_…"
                   />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-zinc-600">
                     Galeria (<code className="rounded bg-zinc-100 px-1">imagesJson</code>) — um ID
-                    de arquivo por linha
+                    por linha
                   </label>
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={Boolean(mediaUploadKind)}
+                      onClick={() => galleryImageFileInputRef.current?.click()}
+                      className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-800 shadow-sm hover:bg-zinc-50 disabled:opacity-50"
+                    >
+                      {mediaUploadKind === "gallery" ? "A enviar…" : "Adicionar imagem à galeria…"}
+                    </button>
+                  </div>
                   <textarea
                     value={galleryFileIdsText}
                     onChange={(e) => setGalleryFileIdsText(e.target.value)}
@@ -1308,8 +1398,7 @@ export function ProductOperationalForm({
                     placeholder={"file_abc123\nfile_def456"}
                   />
                   <p className="mt-1 text-xs text-zinc-500">
-                    Persistido como JSON no produto; uploads ficam na camada de storage quando o R2
-                    estiver ligado.
+                    JPEG, PNG ou WebP até 5 MB. Persistido como JSON no produto após gravar.
                   </p>
                 </div>
               </div>

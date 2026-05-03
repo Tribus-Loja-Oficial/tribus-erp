@@ -6,17 +6,12 @@ import { createDb } from "../db/client.js";
 import { createOrderService } from "../services/order.service.js";
 import { createFiscalService } from "../services/fiscal.service.js";
 import { R2StorageProvider } from "../storage/r2-storage-provider.js";
-import { toApiError, UnauthorizedError } from "../errors/app-error.js";
+import { toApiError } from "../errors/app-error.js";
+import { verifyInternalToken } from "../auth/verify-internal-token.js";
 import { ingestOrderSchema } from "../schemas/order.schemas.js";
 import { importXmlSchema } from "../schemas/fiscal.schemas.js";
 
 const internal = new Hono<{ Bindings: Env }>();
-
-function verifyInternalToken(authHeader: string | undefined, secret: string): void {
-  if (!authHeader?.startsWith("Bearer ")) throw new UnauthorizedError();
-  const token = authHeader.slice(7);
-  if (token !== secret) throw new UnauthorizedError("Invalid internal token");
-}
 
 internal.post("/orders/ingest", async (c) => {
   try {

@@ -53,18 +53,19 @@ Base URL produção: `https://tribus-erp-api.{account}.workers.dev`
 
 ## Products
 
-| Método   | Path                     | Auth | Service                   | Descrição                           |
-| -------- | ------------------------ | ---- | ------------------------- | ----------------------------------- |
-| `GET`    | `/products`              | JWT  | `product.findMany`        | Lista produtos (paginação, filtros) |
-| `POST`   | `/products`              | JWT  | `product.create`          | Cria produto                        |
-| `GET`    | `/products/low-stock`    | JWT  | `product.findLowStock`    | Produtos abaixo do estoque mínimo   |
-| `GET`    | `/products/categories`   | JWT  | `product.findCategories`  | Lista categorias                    |
-| `POST`   | `/products/categories`   | JWT  | `product.createCategory`  | Cria categoria                      |
-| `GET`    | `/products/collections`  | JWT  | `product.findCollections` | Lista coleções                      |
-| `GET`    | `/products/:id`          | JWT  | `product.findById`        | Retorna produto com variantes       |
-| `PATCH`  | `/products/:id`          | JWT  | `product.update`          | Atualiza produto                    |
-| `DELETE` | `/products/:id`          | JWT  | `product.archive`         | Arquiva produto                     |
-| `POST`   | `/products/:id/variants` | JWT  | `product.createVariant`   | Adiciona variante                   |
+| Método   | Path                     | Auth             | Service                           | Descrição                                                             |
+| -------- | ------------------------ | ---------------- | --------------------------------- | --------------------------------------------------------------------- |
+| `GET`    | `/products`              | JWT              | `product.findMany`                | Lista produtos (paginação, filtros)                                   |
+| `POST`   | `/products`              | JWT              | `product.create`                  | Cria produto                                                          |
+| `GET`    | `/products/low-stock`    | JWT              | `product.findLowStock`            | Produtos abaixo do estoque mínimo                                     |
+| `GET`    | `/products/categories`   | JWT              | `product.findCategories`          | Lista categorias                                                      |
+| `POST`   | `/products/categories`   | JWT              | `product.createCategory`          | Cria categoria                                                        |
+| `GET`    | `/products/collections`  | JWT              | `product.findCollections`         | Lista coleções                                                        |
+| `POST`   | `/products/media/upload` | Bearer (interno) | `productMedia.uploadProductImage` | Multipart: `file`; opcional `productId`. Grava R2 + `document_files`. |
+| `GET`    | `/products/:id`          | JWT              | `product.findById`                | Retorna produto com variantes                                         |
+| `PATCH`  | `/products/:id`          | JWT              | `product.update`                  | Atualiza produto                                                      |
+| `DELETE` | `/products/:id`          | JWT              | `product.archive`                 | Arquiva produto                                                       |
+| `POST`   | `/products/:id/variants` | JWT              | `product.createVariant`           | Adiciona variante                                                     |
 
 ---
 
