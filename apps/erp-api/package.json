@@ -13,6 +13,10 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler d1 migrations apply TRIBUS_ERP_DB --local",
     "db:migrate:remote": "wrangler d1 migrations apply TRIBUS_ERP_DB --remote",
+    "db:migrations:list": "node ./scripts/d1-migrations.mjs list",
+    "db:migrations:verify": "node ./scripts/d1-migrations.mjs verify",
+    "d1:migrate:local": "npm run db:migrate:local",
+    "d1:migrate:remote": "npm run db:migrate:remote",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage --reporter=json --outputFile=.vitest-coverage.json"
   },

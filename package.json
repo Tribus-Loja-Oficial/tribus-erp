@@ -12,6 +12,10 @@
   "scripts": {
     "dev:api": "npm run dev -w @tribus-erp/api",
     "dev:web": "npm run dev -w @tribus-erp/web",
+    "db:migrate:local": "npm run db:migrate:local -w @tribus-erp/api",
+    "db:migrate:remote": "npm run db:migrate:remote -w @tribus-erp/api",
+    "db:migrations:list": "npm run db:migrations:list -w @tribus-erp/api",
+    "db:migrations:verify": "npm run db:migrations:verify -w @tribus-erp/api",
     "build": "npm run build -w @tribus-erp/core && npm run build -w @tribus-erp/api && npm run build -w @tribus-erp/web",
     "typecheck": "npm run typecheck -w @tribus-erp/core && npm run typecheck -w @tribus-erp/api && npm run typecheck -w @tribus-erp/web",
     "lint": "npm run lint -w @tribus-erp/core && npm run lint -w @tribus-erp/api && npm run lint -w @tribus-erp/web",

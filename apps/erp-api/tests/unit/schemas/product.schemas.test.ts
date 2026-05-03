@@ -83,10 +83,11 @@ describe("listProductsSchema", () => {
     expect(result.data.limit).toBe(10);
   });
 
-  it("defaults page to 1", () => {
+  it("defaults page to 1 and composeCatalog to false", () => {
     const result = listProductsSchema.safeParse({});
     if (!result.success) throw new Error();
     expect(result.data.page).toBe(1);
+    expect(result.data.composeCatalog).toBe(false);
   });
 
   it("rejects page 0", () => {
@@ -102,6 +103,13 @@ describe("listProductsSchema", () => {
   it("accepts productType filter", () => {
     const result = listProductsSchema.safeParse({ productType: "packaging" });
     expect(result.success).toBe(true);
+  });
+
+  it("parses composeCatalog from query string", () => {
+    const result = listProductsSchema.safeParse({ composeCatalog: "1" });
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.composeCatalog).toBe(true);
   });
 });
 
@@ -134,5 +142,24 @@ describe("createProductCompositionSchema", () => {
       compositionType: "bom",
     });
     expect(result.success).toBe(false);
+  });
+
+  it("requires packaging channel for packaging type", () => {
+    const result = createProductCompositionSchema.safeParse({
+      childProductId: "child-1",
+      quantity: 1,
+      compositionType: "packaging",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts packaging with channel", () => {
+    const result = createProductCompositionSchema.safeParse({
+      childProductId: "child-1",
+      quantity: 1,
+      compositionType: "packaging",
+      packagingChannel: "online",
+    });
+    expect(result.success).toBe(true);
   });
 });

@@ -14,6 +14,8 @@ export interface ListProductsParams {
   q?: string;
   status?: string;
   productType?: string;
+  /** Tipos usados na busca de componentes para composição. */
+  composeCatalog?: boolean;
   categoryId?: string;
   niche?: string;
   limit?: number;
@@ -41,11 +43,30 @@ export function createProductRepository(db: AppDb) {
     },
 
     async findMany(params: ListProductsParams = {}): Promise<Product[]> {
-      const { q, status, productType, categoryId, niche, limit = 20, offset = 0 } = params;
+      const {
+        q,
+        status,
+        productType,
+        composeCatalog,
+        categoryId,
+        niche,
+        limit = 20,
+        offset = 0,
+      } = params;
       const conditions = [isNull(products.archivedAt)];
       if (status) conditions.push(eq(products.status, status as Product["status"]));
-      if (productType)
+      if (composeCatalog) {
+        conditions.push(
+          inArray(products.productType, [
+            "finished_product",
+            "raw_material",
+            "packaging",
+            "consumable",
+          ]),
+        );
+      } else if (productType) {
         conditions.push(eq(products.productType, productType as Product["productType"]));
+      }
       if (categoryId) conditions.push(eq(products.categoryId, categoryId));
       if (niche) conditions.push(eq(products.niche, niche));
       if (q) {

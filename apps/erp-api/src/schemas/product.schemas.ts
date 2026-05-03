@@ -29,6 +29,8 @@ export const compositionTypeSchema = z.enum([
   "included",
 ]);
 
+export const packagingChannelSchema = z.enum(["online", "presential"]);
+
 export const createProductSchema = z.object({
   sku: z.string().min(1).max(100),
   name: z.string().min(1).max(300),
@@ -66,6 +68,15 @@ export const createProductSchema = z.object({
   heightCm: z.number().min(0).optional(),
   producedInternally: z.boolean().optional(),
   averageProductionTimeMinutes: z.number().int().min(0).optional(),
+  /** Custo de mão de obra por hora (centavos); persiste em product_production_profiles. */
+  laborCostPerHourCents: z.number().int().min(0).nullish(),
+  productionProfileNotes: z.string().max(2000).nullish(),
+  purchaseUnit: z.string().max(80).nullish(),
+  purchaseQuantity: z.number().positive().nullish(),
+  consumptionUnit: z.string().max(80).nullish(),
+  acquisitionCostCents: z.number().int().min(0).nullish(),
+  /** Cents por unidade de consumo (ex.: por cm); pode ser fraccionário. */
+  costPerConsumptionUnitCents: z.number().min(0).nullish(),
   sellable: z.boolean().optional(),
   availableForEcommerce: z.boolean().optional(),
   availableForPos: z.boolean().optional(),
@@ -105,23 +116,54 @@ export const createCollectionSchema = z.object({
   status: z.enum(["draft", "active", "archived"]).default("active"),
 });
 
-export const createProductCompositionSchema = z
+const productCompositionBodySchema = z
   .object({
     childProductId: z.string().min(1),
     quantity: z.number().positive(),
+    quantityUnit: z.string().max(80).optional().nullable(),
     compositionType: compositionTypeSchema,
+    packagingChannel: packagingChannelSchema.optional().nullable(),
     required: z.boolean().default(true),
     isDefault: z.boolean().default(true),
     notes: z.string().max(1000).optional(),
   })
   .strict();
 
-export const updateProductCompositionSchema = createProductCompositionSchema.partial();
+function refineProductComposition(
+  data: z.infer<typeof productCompositionBodySchema>,
+  ctx: z.RefinementCtx,
+) {
+  if (data.compositionType === "packaging") {
+    if (data.packagingChannel !== "online" && data.packagingChannel !== "presential") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Embalagem exige canal online ou presencial",
+        path: ["packagingChannel"],
+      });
+    }
+  } else if (data.packagingChannel != null) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Canal de embalagem só se aplica ao tipo embalagem",
+      path: ["packagingChannel"],
+    });
+  }
+}
+
+export const createProductCompositionSchema =
+  productCompositionBodySchema.superRefine(refineProductComposition);
+
+export const updateProductCompositionSchema = productCompositionBodySchema.partial();
 
 export const listProductsSchema = z.object({
   q: z.string().max(200).optional(),
   status: z.enum(["draft", "active", "inactive", "archived"]).optional(),
   productType: productTypeSchema.optional(),
+  /** Quando true, restringe a tipos elegíveis para composição (BOM/embalagem). */
+  composeCatalog: z.preprocess(
+    (v) => v === "1" || v === "true" || v === "yes" || v === true,
+    z.boolean().default(false),
+  ),
   categoryId: z.string().optional(),
   niche: z.string().optional(),
   page: z.coerce.number().int().min(1).default(1),

@@ -2,7 +2,7 @@ import { ProductOperationalForm } from "@/components/products/product-operationa
 import { erpApiFetch } from "@/lib/api/erp-api-client";
 import type {
   CompositionRow,
-  CostEstimate,
+  ProductCostBreakdown,
   ProductAuditLogRow,
 } from "@/components/products/product-operational-form";
 import { notFound } from "next/navigation";
@@ -25,7 +25,7 @@ interface LocationRow {
 interface OperationalDetail {
   product: Record<string, unknown>;
   compositions?: CompositionRow[];
-  costEstimate?: CostEstimate | null;
+  costBreakdown?: ProductCostBreakdown | null;
 }
 
 export default async function ProductDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -70,7 +70,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
         productId={id}
         initialProduct={detail.product}
         initialCompositions={detail.compositions ?? []}
-        costEstimate={detail.costEstimate ?? null}
+        costBreakdown={detail.costBreakdown ?? null}
         categories={categories.map((c) => ({ id: c.id, name: c.name }))}
         collections={collections.map((c) => ({ id: c.id, name: c.name }))}
         locations={locations.map((l) => ({ id: l.id, name: l.name }))}

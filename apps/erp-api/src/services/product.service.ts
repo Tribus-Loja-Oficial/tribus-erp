@@ -3,8 +3,14 @@ import { generateId } from "../utils/id.js";
 import { NotFoundError, ConflictError } from "../errors/app-error.js";
 import { createProductRepository } from "../repositories/product.repository.js";
 import { createProductCompositionRepository } from "../repositories/product-composition.repository.js";
+import { createProductProductionProfileRepository } from "../repositories/product-production-profile.repository.js";
 import { createAuditRepository } from "../repositories/audit.repository.js";
-import { calculateEstimatedProductCost } from "../domain/product-cost.js";
+import {
+  calculateLaborCostCents,
+  deriveCostPerConsumptionUnitCents,
+  lineCostCentsFromComposition,
+} from "../domain/product-cost.js";
+import { createProductCostService } from "./product-cost.service.js";
 import type {
   CreateProductInput,
   UpdateProductInput,
@@ -34,6 +40,8 @@ function defaultSellable(productType: CreateProductInput["productType"]): boolea
 export function createProductService(db: AppDb) {
   const productsRepo = createProductRepository(db);
   const compositionsRepo = createProductCompositionRepository(db);
+  const profileRepo = createProductProductionProfileRepository(db);
+  const costService = createProductCostService(db);
   const auditRepo = createAuditRepository(db);
   const now = () => new Date().toISOString();
 
@@ -83,6 +91,17 @@ export function createProductService(db: AppDb) {
         lengthCm: input.lengthCm ?? null,
         widthCm: input.widthCm ?? null,
         heightCm: input.heightCm ?? null,
+        purchaseUnit: input.purchaseUnit ?? null,
+        purchaseQuantity: input.purchaseQuantity ?? null,
+        consumptionUnit: input.consumptionUnit ?? null,
+        acquisitionCostCents: input.acquisitionCostCents ?? null,
+        costPerConsumptionUnitCents:
+          input.costPerConsumptionUnitCents ??
+          deriveCostPerConsumptionUnitCents({
+            acquisitionCostCents: input.acquisitionCostCents ?? null,
+            purchaseQuantity: input.purchaseQuantity ?? null,
+          }) ??
+          null,
         producedInternally: input.producedInternally ?? false,
         averageProductionTimeMinutes: input.averageProductionTimeMinutes ?? null,
         sellable,
@@ -110,6 +129,22 @@ export function createProductService(db: AppDb) {
         createdAt: now(),
       });
 
+      const laborCalc = calculateLaborCostCents(
+        input.averageProductionTimeMinutes ?? null,
+        input.laborCostPerHourCents ?? null,
+      );
+      await profileRepo.insert({
+        id: generateId(),
+        productId: product.id,
+        producedInternally: input.producedInternally ?? false,
+        averageProductionTimeMinutes: input.averageProductionTimeMinutes ?? null,
+        laborCostPerHourCents: input.laborCostPerHourCents ?? null,
+        laborCostCalculatedCents: laborCalc,
+        notes: input.productionProfileNotes ?? null,
+        createdAt: now(),
+        updatedAt: now(),
+      });
+
       return product;
     },
 
@@ -119,7 +154,7 @@ export function createProductService(db: AppDb) {
       return product;
     },
 
-    async findMany(params: ListProductsParams & { page?: number }) {
+    async findMany(params: ListProductsParams & { page?: number; composeCatalog?: boolean }) {
       const { page = 1, limit = 20, ...rest } = params;
       return productsRepo.findMany({ ...rest, limit, offset: (page - 1) * limit });
     },
@@ -134,28 +169,41 @@ export function createProductService(db: AppDb) {
       const childIds = [...new Set(compositions.map((c) => c.childProductId))];
       const children = await productsRepo.findByIds(childIds);
       const childMap = new Map(children.map((c) => [c.id, c]));
-
-      const lines = compositions.map((c) => ({
-        compositionType: c.compositionType,
-        quantity: c.quantity,
-        childCostPriceCents: childMap.get(c.childProductId)?.costPriceCents ?? 0,
-      }));
-
-      const costEstimate = calculateEstimatedProductCost(product.costPriceCents, lines);
+      const profile = await profileRepo.findByProductId(id);
+      const costBreakdown = await costService.getBreakdownForParentProduct(id);
 
       const compositionsWithChild = compositions.map((c) => {
         const ch = childMap.get(c.childProductId);
-        const lineCost = Math.round(c.quantity * (ch?.costPriceCents ?? 0));
+        const { unitCostCents, totalCostCents } = ch
+          ? lineCostCentsFromComposition(c.quantity, ch)
+          : { unitCostCents: 0, totalCostCents: 0 };
         return {
           ...c,
           childSku: ch?.sku ?? null,
           childName: ch?.name ?? null,
+          childProductType: ch?.productType ?? null,
           childCostPriceCents: ch?.costPriceCents ?? 0,
-          lineCostCents: lineCost,
+          childUnitCostCents: unitCostCents,
+          lineCostCents: totalCostCents,
         };
       });
 
-      return { product, compositions: compositionsWithChild, children, costEstimate };
+      const mergedProduct = {
+        ...product,
+        producedInternally: profile?.producedInternally ?? product.producedInternally,
+        averageProductionTimeMinutes:
+          profile?.averageProductionTimeMinutes ?? product.averageProductionTimeMinutes,
+        laborCostPerHourCents: profile?.laborCostPerHourCents ?? null,
+        laborCostCalculatedCents: profile?.laborCostCalculatedCents ?? null,
+        productionProfileNotes: profile?.notes ?? null,
+      };
+
+      return {
+        product: mergedProduct,
+        compositions: compositionsWithChild,
+        children,
+        costBreakdown,
+      };
     },
 
     async listAuditLogsForProduct(productId: string) {
@@ -171,15 +219,71 @@ export function createProductService(db: AppDb) {
         if (skuConflict) throw new ConflictError(`SKU '${input.sku}' already exists`);
       }
 
-      const { metadata, slug: slugInput, imagesJson, ...rest } = input;
+      const {
+        metadata,
+        slug: slugInput,
+        imagesJson,
+        laborCostPerHourCents,
+        productionProfileNotes,
+        ...rest
+      } = input;
+      const existingProfile = await profileRepo.findByProductId(id);
+      const nextProduced =
+        input.producedInternally !== undefined
+          ? input.producedInternally
+          : (existingProfile?.producedInternally ?? existing.producedInternally);
+      const nextAvg =
+        input.averageProductionTimeMinutes !== undefined
+          ? input.averageProductionTimeMinutes
+          : (existingProfile?.averageProductionTimeMinutes ??
+            existing.averageProductionTimeMinutes);
+      const nextLaborHour =
+        laborCostPerHourCents !== undefined
+          ? laborCostPerHourCents
+          : (existingProfile?.laborCostPerHourCents ?? null);
+      const nextNotes =
+        productionProfileNotes !== undefined
+          ? productionProfileNotes
+          : (existingProfile?.notes ?? null);
+      const laborCalc = calculateLaborCostCents(nextAvg, nextLaborHour);
+
       const patch: Record<string, unknown> = { ...rest };
       if (slugInput !== undefined) patch.slug = slugify(slugInput);
       if (metadata !== undefined) patch.metadataJson = JSON.stringify(metadata);
       if (imagesJson !== undefined) patch.imagesJson = JSON.stringify(imagesJson);
+      patch.producedInternally = nextProduced;
+      patch.averageProductionTimeMinutes = nextAvg ?? null;
+
+      const acq = patch.acquisitionCostCents ?? existing.acquisitionCostCents;
+      const pq = patch.purchaseQuantity ?? existing.purchaseQuantity;
+      if (
+        patch.costPerConsumptionUnitCents === undefined &&
+        acq != null &&
+        pq != null &&
+        (patch.acquisitionCostCents !== undefined || patch.purchaseQuantity !== undefined)
+      ) {
+        const derived = deriveCostPerConsumptionUnitCents({
+          acquisitionCostCents: acq as number,
+          purchaseQuantity: pq as number,
+        });
+        if (derived != null) patch.costPerConsumptionUnitCents = derived;
+      }
 
       const filtered = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
 
       const updated = await productsRepo.update(id, filtered as never);
+
+      await profileRepo.upsertByProductId({
+        id: existingProfile?.id ?? generateId(),
+        productId: id,
+        producedInternally: nextProduced,
+        averageProductionTimeMinutes: nextAvg ?? null,
+        laborCostPerHourCents: nextLaborHour ?? null,
+        laborCostCalculatedCents: laborCalc,
+        notes: nextNotes ?? null,
+        createdAt: existingProfile?.createdAt ?? now(),
+        updatedAt: now(),
+      });
 
       await auditRepo.insert({
         id: generateId(),

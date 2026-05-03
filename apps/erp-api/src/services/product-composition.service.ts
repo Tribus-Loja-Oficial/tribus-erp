@@ -3,10 +3,33 @@ import { generateId } from "../utils/id.js";
 import { NotFoundError, ConflictError, ValidationError } from "../errors/app-error.js";
 import { createProductRepository } from "../repositories/product.repository.js";
 import { createProductCompositionRepository } from "../repositories/product-composition.repository.js";
+import { lineCostCentsFromComposition } from "../domain/product-cost.js";
 import type {
   CreateProductCompositionInput,
   UpdateProductCompositionInput,
 } from "../schemas/product.schemas.js";
+
+function validateCompositionRules(opts: {
+  parentProductId: string;
+  childProductId: string;
+  compositionType: string;
+  packagingChannel?: string | null;
+  quantity: number;
+}) {
+  if (!(opts.quantity > 0)) {
+    throw new ValidationError("Quantidade deve ser maior que zero");
+  }
+  if (opts.parentProductId === opts.childProductId) {
+    throw new ValidationError("O produto não pode ser componente dele mesmo");
+  }
+  if (opts.compositionType === "packaging") {
+    if (opts.packagingChannel !== "online" && opts.packagingChannel !== "presential") {
+      throw new ValidationError("Embalagem exige canal: online ou presencial");
+    }
+  } else if (opts.packagingChannel != null) {
+    throw new ValidationError("Canal de embalagem só se aplica a composição do tipo embalagem");
+  }
+}
 
 export function createProductCompositionService(db: AppDb) {
   const productsRepo = createProductRepository(db);
@@ -25,9 +48,19 @@ export function createProductCompositionService(db: AppDb) {
       if (!parent) throw new NotFoundError("Product", parentProductId);
       const child = await productsRepo.findById(input.childProductId);
       if (!child) throw new NotFoundError("Product", input.childProductId);
-      if (parentProductId === input.childProductId) {
-        throw new ValidationError("O produto não pode ser componente dele mesmo");
-      }
+
+      validateCompositionRules({
+        parentProductId,
+        childProductId: input.childProductId,
+        compositionType: input.compositionType,
+        packagingChannel: input.packagingChannel,
+        quantity: input.quantity,
+      });
+
+      const packagingChannel =
+        input.compositionType === "packaging" ? input.packagingChannel! : null;
+
+      const { unitCostCents, totalCostCents } = lineCostCentsFromComposition(input.quantity, child);
 
       try {
         return await compositionsRepo.insert({
@@ -35,7 +68,11 @@ export function createProductCompositionService(db: AppDb) {
           parentProductId,
           childProductId: input.childProductId,
           quantity: input.quantity,
+          quantityUnit: input.quantityUnit ?? null,
           compositionType: input.compositionType,
+          packagingChannel,
+          unitCostSnapshotCents: unitCostCents,
+          totalCostSnapshotCents: totalCostCents,
           required: input.required,
           isDefault: input.isDefault,
           notes: input.notes ?? null,
@@ -47,7 +84,7 @@ export function createProductCompositionService(db: AppDb) {
         const msg = e instanceof Error ? e.message : String(e);
         if (msg.includes("UNIQUE") || msg.toLowerCase().includes("unique")) {
           throw new ConflictError(
-            "Já existe composição com o mesmo produto filho e tipo para este produto",
+            "Já existe composição equivalente para este produto (verifique duplicados ou embalagem no mesmo canal).",
           );
         }
         throw e;
@@ -64,17 +101,51 @@ export function createProductCompositionService(db: AppDb) {
       if (row.parentProductId !== parentProductId) {
         throw new ValidationError("Composição não pertence a este produto");
       }
+
+      const nextType = input.compositionType ?? row.compositionType;
+      const nextChildId = input.childProductId ?? row.childProductId;
+      const nextQty = input.quantity ?? row.quantity;
+      const nextChannel =
+        input.packagingChannel !== undefined ? input.packagingChannel : row.packagingChannel;
+
+      validateCompositionRules({
+        parentProductId,
+        childProductId: nextChildId,
+        compositionType: nextType,
+        packagingChannel: nextType === "packaging" ? nextChannel : null,
+        quantity: nextQty,
+      });
+
       if (input.childProductId !== undefined) {
         if (input.childProductId === parentProductId) {
           throw new ValidationError("O produto não pode ser componente dele mesmo");
         }
-        const child = await productsRepo.findById(input.childProductId);
-        if (!child) throw new NotFoundError("Product", input.childProductId);
+        const ch = await productsRepo.findById(input.childProductId);
+        if (!ch) throw new NotFoundError("Product", input.childProductId);
       }
-      const filtered = Object.fromEntries(
-        Object.entries(input).filter(([, v]) => v !== undefined),
-      ) as UpdateProductCompositionInput;
-      return compositionsRepo.update(compositionId, filtered as never);
+
+      const child = await productsRepo.findById(nextChildId);
+      if (!child) throw new NotFoundError("Product", nextChildId);
+
+      const packagingChannel: "online" | "presential" | null =
+        nextType === "packaging" ? (nextChannel as "online" | "presential") : null;
+
+      const { unitCostCents, totalCostCents } = lineCostCentsFromComposition(nextQty, child);
+
+      const patch: Record<string, unknown> = {
+        unitCostSnapshotCents: unitCostCents,
+        totalCostSnapshotCents: totalCostCents,
+        packagingChannel,
+      };
+      if (input.childProductId !== undefined) patch.childProductId = input.childProductId;
+      if (input.quantity !== undefined) patch.quantity = input.quantity;
+      if (input.quantityUnit !== undefined) patch.quantityUnit = input.quantityUnit;
+      if (input.compositionType !== undefined) patch.compositionType = input.compositionType;
+      if (input.required !== undefined) patch.required = input.required;
+      if (input.isDefault !== undefined) patch.isDefault = input.isDefault;
+      if (input.notes !== undefined) patch.notes = input.notes;
+
+      return compositionsRepo.update(compositionId, patch as never);
     },
 
     async archive(parentProductId: string, compositionId: string) {

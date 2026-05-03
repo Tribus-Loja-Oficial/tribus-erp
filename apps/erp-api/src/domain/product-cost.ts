@@ -1,3 +1,5 @@
+import type { Product } from "../db/schema/index.js";
+
 export type CompositionCostLine = {
   compositionType: string;
   quantity: number;
@@ -12,6 +14,15 @@ export type EstimatedProductCostBreakdown = {
   bundleCostCents: number;
   otherCompositionCostCents: number;
   totalEstimatedCostCents: number;
+};
+
+export type ProductCostBreakdownCents = {
+  materialCostCents: number;
+  packagingOnlineCostCents: number;
+  packagingPresentialCostCents: number;
+  laborCostCents: number;
+  onlineTotalCostCents: number;
+  presentialTotalCostCents: number;
 };
 
 export function calculateEstimatedProductCost(
@@ -60,4 +71,85 @@ export function calculateEstimatedProductCost(
       bundleCostCents +
       otherCompositionCostCents,
   };
+}
+
+/** Custo unitário do componente na linha de composição (cents por unidade de quantidade informada na composição). */
+export function childUnitCostCentsForCompositionLine(child: Product): number {
+  const perConsumption = child.costPerConsumptionUnitCents;
+  if (perConsumption != null && Number.isFinite(perConsumption) && perConsumption >= 0) {
+    return perConsumption;
+  }
+  return Math.max(0, child.costPriceCents);
+}
+
+export function lineCostCentsFromComposition(
+  quantity: number,
+  child: Product,
+): { unitCostCents: number; totalCostCents: number } {
+  const unitCostCents = childUnitCostCentsForCompositionLine(child);
+  const totalCostCents = Math.round(quantity * unitCostCents);
+  return { unitCostCents, totalCostCents };
+}
+
+export function calculateLaborCostCents(
+  averageProductionTimeMinutes: number | null | undefined,
+  laborCostPerHourCents: number | null | undefined,
+): number {
+  if (
+    averageProductionTimeMinutes == null ||
+    laborCostPerHourCents == null ||
+    averageProductionTimeMinutes <= 0 ||
+    laborCostPerHourCents <= 0
+  ) {
+    return 0;
+  }
+  return Math.round((averageProductionTimeMinutes / 60) * laborCostPerHourCents);
+}
+
+export type CompositionRowForCost = {
+  compositionType: string;
+  quantity: number;
+  packagingChannel: string | null;
+  child: Product;
+};
+
+export function buildProductCostBreakdownCents(
+  compositions: CompositionRowForCost[],
+  laborCostCents: number,
+): ProductCostBreakdownCents {
+  let materialCostCents = 0;
+  let packagingOnlineCostCents = 0;
+  let packagingPresentialCostCents = 0;
+
+  for (const row of compositions) {
+    const { totalCostCents } = lineCostCentsFromComposition(row.quantity, row.child);
+    if (row.compositionType === "bom") {
+      materialCostCents += totalCostCents;
+    } else if (row.compositionType === "packaging") {
+      if (row.packagingChannel === "online") packagingOnlineCostCents += totalCostCents;
+      else if (row.packagingChannel === "presential")
+        packagingPresentialCostCents += totalCostCents;
+    }
+  }
+
+  const labor = Math.max(0, laborCostCents);
+  return {
+    materialCostCents,
+    packagingOnlineCostCents,
+    packagingPresentialCostCents,
+    laborCostCents: labor,
+    onlineTotalCostCents: materialCostCents + packagingOnlineCostCents + labor,
+    presentialTotalCostCents: materialCostCents + packagingPresentialCostCents + labor,
+  };
+}
+
+/** Deriva custo por unidade de consumo a partir da compra (acquisition / purchaseQuantity), em cents. */
+export function deriveCostPerConsumptionUnitCents(product: {
+  acquisitionCostCents: number | null;
+  purchaseQuantity: number | null;
+}): number | null {
+  const acq = product.acquisitionCostCents;
+  const pq = product.purchaseQuantity;
+  if (acq == null || pq == null || pq <= 0 || acq < 0) return null;
+  return acq / pq;
 }

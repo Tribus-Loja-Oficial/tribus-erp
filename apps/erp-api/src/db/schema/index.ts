@@ -173,6 +173,11 @@ export const products = sqliteTable(
     lengthCm: real("length_cm"),
     widthCm: real("width_cm"),
     heightCm: real("height_cm"),
+    purchaseUnit: text("purchase_unit"),
+    purchaseQuantity: real("purchase_quantity"),
+    consumptionUnit: text("consumption_unit"),
+    acquisitionCostCents: integer("acquisition_cost_cents"),
+    costPerConsumptionUnitCents: real("cost_per_consumption_unit_cents"),
     producedInternally: integer("produced_internally", { mode: "boolean" })
       .notNull()
       .default(false),
@@ -212,9 +217,15 @@ export const productCompositions = sqliteTable(
       .notNull()
       .references(() => products.id),
     quantity: real("quantity").notNull(),
+    quantityUnit: text("quantity_unit"),
     compositionType: text("composition_type", {
       enum: ["packaging", "bom", "kit", "bundle", "accessory", "included"],
     }).notNull(),
+    packagingChannel: text("packaging_channel", {
+      enum: ["online", "presential"],
+    }),
+    unitCostSnapshotCents: real("unit_cost_snapshot_cents"),
+    totalCostSnapshotCents: real("total_cost_snapshot_cents"),
     required: integer("required", { mode: "boolean" }).notNull().default(true),
     isDefault: integer("is_default", { mode: "boolean" }).notNull().default(true),
     notes: text("notes"),
@@ -226,6 +237,27 @@ export const productCompositions = sqliteTable(
     index("product_compositions_parent_idx").on(t.parentProductId),
     index("product_compositions_child_idx").on(t.childProductId),
   ],
+);
+
+export const productProductionProfiles = sqliteTable(
+  "product_production_profiles",
+  {
+    id: text("id").primaryKey(),
+    productId: text("product_id")
+      .notNull()
+      .unique()
+      .references(() => products.id),
+    producedInternally: integer("produced_internally", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    averageProductionTimeMinutes: integer("average_production_time_minutes"),
+    laborCostPerHourCents: integer("labor_cost_per_hour_cents"),
+    laborCostCalculatedCents: integer("labor_cost_calculated_cents"),
+    notes: text("notes"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [index("product_production_profiles_product_idx").on(t.productId)],
 );
 
 export const productVariants = sqliteTable("product_variants", {
@@ -900,6 +932,8 @@ export type Product = typeof products.$inferSelect;
 export type NewProduct = typeof products.$inferInsert;
 export type ProductComposition = typeof productCompositions.$inferSelect;
 export type NewProductComposition = typeof productCompositions.$inferInsert;
+export type ProductProductionProfile = typeof productProductionProfiles.$inferSelect;
+export type NewProductProductionProfile = typeof productProductionProfiles.$inferInsert;
 export type ProductVariant = typeof productVariants.$inferSelect;
 export type NewProductVariant = typeof productVariants.$inferInsert;
 export type StockLocation = typeof stockLocations.$inferSelect;
