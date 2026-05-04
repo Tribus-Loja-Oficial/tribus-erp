@@ -15,6 +15,7 @@ export function createProductCompositionRepository(db: AppDb) {
         .where(
           and(
             eq(productCompositions.parentProductId, parentProductId),
+            isNull(productCompositions.parentVariantId),
             isNull(productCompositions.archivedAt),
           ),
         )

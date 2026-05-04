@@ -65,7 +65,7 @@ Controla o estoque da operação por meio de locais de armazenamento e movimenta
 
 ## Regras de negócio
 
-- **`products.currentStock` e `product_variants.currentStock`** são atualizados automaticamente pelo inventory service após cada movimento.
+- **`products.currentStock` e `product_variants.currentStock`** são atualizados pelo inventory service após cada movimento. Para **`products.productKind = variable`**, o movimento deve incluir **`variantId`** (o stock do pai é só agregado). Produto **simples**: `variantId` omitido; só atualiza `products.currentStock`.
 - **Estoque negativo**: não permitido por padrão (exceto tipo `adjustment` com flag explícita).
 - **Rastreabilidade**: cada movimento tem `reference` apontando para o documento de origem (pedido, ordem de compra, ordem de produção).
 - **Custo médio**: o campo `costCents` no movimento registra o custo unitário naquele momento, permitindo cálculo de custo médio ponderado.

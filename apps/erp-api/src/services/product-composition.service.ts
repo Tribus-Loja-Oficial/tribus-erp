@@ -66,7 +66,9 @@ export function createProductCompositionService(db: AppDb) {
         return await compositionsRepo.insert({
           id: generateId(),
           parentProductId,
+          parentVariantId: null,
           childProductId: input.childProductId,
+          childVariantId: null,
           quantity: input.quantity,
           quantityUnit: input.quantityUnit ?? null,
           compositionType: input.compositionType,

@@ -125,6 +125,8 @@ export const products = sqliteTable(
   {
     id: text("id").primaryKey(),
     sku: text("sku").notNull().unique(),
+    /** Referência humana estável (ex.: PRD-0001); gerada pelo servidor. */
+    externalRef: text("external_ref").notNull().unique(),
     name: text("name").notNull(),
     slug: text("slug").notNull().unique(),
     description: text("description"),
@@ -144,6 +146,10 @@ export const products = sqliteTable(
     })
       .notNull()
       .default("finished_product"),
+    /** simple = cadastro único; variable = pai com variações vendáveis/estocáveis. */
+    productKind: text("product_kind", { enum: ["simple", "variable"] })
+      .notNull()
+      .default("simple"),
     categoryId: text("category_id").references(() => productCategories.id),
     collectionId: text("collection_id").references(() => productCollections.id),
     niche: text("niche"),
@@ -206,6 +212,47 @@ export const products = sqliteTable(
   ],
 );
 
+export const productVariants = sqliteTable(
+  "product_variants",
+  {
+    id: text("id").primaryKey(),
+    productId: text("product_id")
+      .notNull()
+      .references(() => products.id),
+    /** Referência humana estável (ex.: PRV-0001); gerada pelo servidor. */
+    externalRef: text("external_ref").notNull().unique(),
+    sku: text("sku").notNull().unique(),
+    name: text("name"),
+    attributesJson: text("attributes_json").default("{}"),
+    /** null = herdar preço de venda do produto pai */
+    salePriceCents: integer("sale_price_cents"),
+    /** null = herdar custo do produto pai */
+    costPriceCents: integer("cost_price_cents"),
+    promotionalPriceCents: integer("promotional_price_cents"),
+    eventPriceCents: integer("event_price_cents"),
+    wholesalePriceCents: integer("wholesale_price_cents"),
+    controlsStock: integer("controls_stock", { mode: "boolean" }).notNull().default(true),
+    currentStock: integer("current_stock").notNull().default(0),
+    minStock: integer("min_stock").notNull().default(0),
+    idealStock: integer("ideal_stock"),
+    barcode: text("barcode"),
+    weightGrams: integer("weight_grams"),
+    lengthCm: real("length_cm"),
+    widthCm: real("width_cm"),
+    heightCm: real("height_cm"),
+    mainImageFileId: text("main_image_file_id"),
+    metadataJson: text("metadata_json").default("{}"),
+    status: text("status", { enum: ["draft", "active", "inactive", "archived"] })
+      .notNull()
+      .default("active"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    archivedAt: text("archived_at"),
+    deletedAt: text("deleted_at"),
+  },
+  (t) => [index("product_variants_product_idx").on(t.productId)],
+);
+
 export const productCompositions = sqliteTable(
   "product_compositions",
   {
@@ -213,9 +260,13 @@ export const productCompositions = sqliteTable(
     parentProductId: text("parent_product_id")
       .notNull()
       .references(() => products.id),
+    /** Se preenchido, composição aplica-se só à variação (MVP: null = nível produto). */
+    parentVariantId: text("parent_variant_id").references(() => productVariants.id),
     childProductId: text("child_product_id")
       .notNull()
       .references(() => products.id),
+    /** Futuro: componente como variação específica. */
+    childVariantId: text("child_variant_id").references(() => productVariants.id),
     quantity: real("quantity").notNull(),
     quantityUnit: text("quantity_unit"),
     compositionType: text("composition_type", {
@@ -259,26 +310,6 @@ export const productProductionProfiles = sqliteTable(
   },
   (t) => [index("product_production_profiles_product_idx").on(t.productId)],
 );
-
-export const productVariants = sqliteTable("product_variants", {
-  id: text("id").primaryKey(),
-  productId: text("product_id")
-    .notNull()
-    .references(() => products.id),
-  sku: text("sku").notNull().unique(),
-  name: text("name").notNull(),
-  attributesJson: text("attributes_json").default("{}"),
-  salePriceCents: integer("sale_price_cents").notNull().default(0),
-  costPriceCents: integer("cost_price_cents").notNull().default(0),
-  currentStock: integer("current_stock").notNull().default(0),
-  barcode: text("barcode"),
-  status: text("status", { enum: ["active", "inactive"] })
-    .notNull()
-    .default("active"),
-  createdAt: text("created_at").notNull(),
-  updatedAt: text("updated_at").notNull(),
-  archivedAt: text("archived_at"),
-});
 
 // ─── Inventory ──────────────────────────────────────────────────────────────
 

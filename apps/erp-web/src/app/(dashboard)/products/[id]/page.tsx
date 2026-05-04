@@ -1,4 +1,5 @@
 import { ProductOperationalForm } from "@/components/products/product-operational-form";
+import type { VariantApiRow } from "@/components/products/product-variants-panel";
 import { erpApiFetch } from "@/lib/api/erp-api-client";
 import type {
   CompositionRow,
@@ -26,6 +27,7 @@ interface OperationalDetail {
   product: Record<string, unknown>;
   compositions?: CompositionRow[];
   costBreakdown?: ProductCostBreakdown | null;
+  variants?: VariantApiRow[];
 }
 
 export default async function ProductDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -70,6 +72,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
         productId={id}
         initialProduct={detail.product}
         initialCompositions={detail.compositions ?? []}
+        initialVariants={detail.variants ?? []}
         costBreakdown={detail.costBreakdown ?? null}
         categories={categories.map((c) => ({ id: c.id, name: c.name }))}
         collections={collections.map((c) => ({ id: c.id, name: c.name }))}

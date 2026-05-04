@@ -8,36 +8,42 @@ Gerencia o catálogo de produtos, variantes, categorias e coleções.
 
 ### `products`
 
-| Campo          | Tipo     | Descrição                                    |
-| -------------- | -------- | -------------------------------------------- |
-| `id`           | text PK  |                                              |
-| `name`         | text     | Nome do produto                              |
-| `slug`         | text     | URL-friendly, gerado automaticamente do nome |
-| `sku`          | text?    | Código único do produto                      |
-| `description`  | text?    |                                              |
-| `categoryId`   | text FK? | Referência a `product_categories.id`         |
-| `costCents`    | integer? | Custo unitário em centavos                   |
-| `priceCents`   | integer? | Preço de venda em centavos                   |
-| `currentStock` | integer  | Estoque atual (atualizado via movimentos)    |
-| `minStock`     | integer? | Estoque mínimo para alertas                  |
-| `unit`         | text     | Unidade de medida (ex.: `un`, `kg`, `m`)     |
-| `isActive`     | boolean  | Produto ativo para venda                     |
-| `createdAt`    | text     | ISO 8601                                     |
-| `updatedAt`    | text     | ISO 8601                                     |
-| `archivedAt`   | text?    | Soft delete                                  |
+| Campo          | Tipo     | Descrição                                                                                                            |
+| -------------- | -------- | -------------------------------------------------------------------------------------------------------------------- |
+| `id`           | text PK  |                                                                                                                      |
+| `externalRef`  | text     | Referência humana estável única (ex.: `PRD-0001`); gerada na criação; imutável                                       |
+| `productKind`  | text     | `simple` (cadastro único) ou `variable` (pai com variações); preço base do pai pode servir de fallback nas variações |
+| `name`         | text     | Nome do produto                                                                                                      |
+| `slug`         | text     | URL-friendly, gerado automaticamente do nome                                                                         |
+| `sku`          | text?    | Código único do produto                                                                                              |
+| `description`  | text?    |                                                                                                                      |
+| `categoryId`   | text FK? | Referência a `product_categories.id`                                                                                 |
+| `costCents`    | integer? | Custo unitário em centavos                                                                                           |
+| `priceCents`   | integer? | Preço de venda em centavos                                                                                           |
+| `currentStock` | integer  | Estoque atual (atualizado via movimentos)                                                                            |
+| `minStock`     | integer? | Estoque mínimo para alertas                                                                                          |
+| `unit`         | text     | Unidade de medida (ex.: `un`, `kg`, `m`)                                                                             |
+| `isActive`     | boolean  | Produto ativo para venda                                                                                             |
+| `createdAt`    | text     | ISO 8601                                                                                                             |
+| `updatedAt`    | text     | ISO 8601                                                                                                             |
+| `archivedAt`   | text?    | Soft delete                                                                                                          |
 
 ### `product_variants`
 
-| Campo          | Tipo     | Descrição                                               |
-| -------------- | -------- | ------------------------------------------------------- |
-| `id`           | text PK  |                                                         |
-| `productId`    | text FK  |                                                         |
-| `name`         | text     | Nome da variante (ex.: "Azul M")                        |
-| `sku`          | text?    | SKU da variante                                         |
-| `attributes`   | text     | JSON com atributos (ex.: `{"color":"blue","size":"M"}`) |
-| `priceCents`   | integer? | Preço específico (sobrepõe produto)                     |
-| `currentStock` | integer  | Estoque da variante                                     |
-| `isActive`     | boolean  |                                                         |
+Linha vendável/estocável ligada a um `products.id` quando `productKind = variable`.
+
+| Campo                 | Tipo    | Descrição                                       |
+| --------------------- | ------- | ----------------------------------------------- |
+| `id`                  | text PK |                                                 |
+| `productId`           | text FK | Produto pai                                     |
+| `externalRef`         | text    | Ref. estável `PRV-NNNN` (gerada na criação)     |
+| `sku`                 | text    | Único global (produto ou variação)              |
+| `name`                | text?   | Opcional                                        |
+| `attributesJson`      | text    | Mapa chave/valor (MVP)                          |
+| `salePriceCents` etc. | int?    | Preços/custos opcionais; `null` herda do pai    |
+| `currentStock`        | integer | Estoque da variação; movimentos com `variantId` |
+| `status`              | text    | `draft` / `active` / `inactive` / `archived`    |
+| `archivedAt`          | text?   | Arquivamento da variação                        |
 
 ### `product_categories`
 
@@ -63,24 +69,33 @@ Gerencia o catálogo de produtos, variantes, categorias e coleções.
 
 ## Rotas
 
-| Método   | Path                             | Descrição                                              |
-| -------- | -------------------------------- | ------------------------------------------------------ |
-| `GET`    | `/products`                      | Lista produtos (paginação, filtros)                    |
-| `POST`   | `/products`                      | Cria produto                                           |
-| `GET`    | `/products/low-stock`            | Produtos abaixo do estoque mínimo                      |
-| `GET`    | `/products/categories`           | Lista categorias                                       |
-| `POST`   | `/products/categories`           | Cria categoria                                         |
-| `GET`    | `/products/collections`          | Lista coleções                                         |
-| `GET`    | `/products/:id`                  | Retorna produto com variantes                          |
-| `PATCH`  | `/products/:id`                  | Atualiza produto                                       |
-| `DELETE` | `/products/:id`                  | Arquiva produto (soft delete)                          |
-| `POST`   | `/products/:id/permanent-delete` | Eliminação permanente (BD + R2); body `{ confirmSku }` |
-| `POST`   | `/products/:id/variants`         | Adiciona variante                                      |
+| Método   | Path                                        | Descrição                                                                                                                                     |
+| -------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`    | `/products`                                 | Lista produtos (paginação, filtros; `productKind`; agregados `variantCount`, `minEffectiveSaleCents`, `maxEffectiveSaleCents` para variáveis) |
+| `POST`   | `/products`                                 | Cria produto                                                                                                                                  |
+| `GET`    | `/products/low-stock`                       | Produtos abaixo do estoque mínimo                                                                                                             |
+| `GET`    | `/products/categories`                      | Lista categorias                                                                                                                              |
+| `POST`   | `/products/categories`                      | Cria categoria                                                                                                                                |
+| `GET`    | `/products/collections`                     | Lista coleções                                                                                                                                |
+| `GET`    | `/products/:id`                             | Retorna produto com variantes (`externalRef` incluído)                                                                                        |
+| `GET`    | `/products/:id/detail`                      | Vista operacional (produto + composições, custo, **variants**)                                                                                |
+| `GET`    | `/products/:id/variants`                    | Lista variações (vazio se produto simples)                                                                                                    |
+| `PATCH`  | `/products/:id/variants/:variantId`         | Atualiza variação                                                                                                                             |
+| `POST`   | `/products/:id/variants/:variantId/archive` | Arquiva variação                                                                                                                              |
+| `POST`   | `/products/:id/variants/:variantId/restore` | Restaura variação                                                                                                                             |
+| `PATCH`  | `/products/:id`                             | Atualiza produto                                                                                                                              |
+| `DELETE` | `/products/:id`                             | Arquiva produto (soft delete)                                                                                                                 |
+| `POST`   | `/products/:id/permanent-delete`            | Eliminação permanente (BD + R2); body `{ confirmSku }`                                                                                        |
+| `POST`   | `/products/:id/variants`                    | Adiciona variante                                                                                                                             |
 
 ---
 
 ## Regras de negócio
 
+- **`externalRef` (produto)**: `PRD-NNNN`; imutável via `PATCH`.
+- **`externalRef` (variação)**: `PRV-NNNN`; imutável; gerada na criação da variação.
+- **`productKind`**: `variable` → estoque do pai é a soma das variações ativas (sincronizado em `products.current_stock`); movimentos de inventário exigem `variantId`. `simple` → estoque no produto.
+- **`product_compositions.parentVariantId`**: reservado para composição por variação (MVP: composição apenas ao nível do produto, `parentVariantId` nulo).
 - **`slug` gerado automaticamente** do nome na criação. Deve ser único.
 - **`sku` único**: se fornecido, não pode colidir com outro produto ou variante.
 - **`currentStock` nunca alterado diretamente** — sempre via `stock_movements`. O inventory service atualiza o campo após registrar o movimento.
@@ -94,4 +109,4 @@ Gerencia o catálogo de produtos, variantes, categorias e coleções.
 
 `src/services/product.service.ts` — `createProductService(db)`
 
-Métodos: `create`, `findById`, `findMany`, `findLowStock`, `update`, `archive`, `restoreProduct`, `permanentDelete`, `createCategory`, `createCollection`, `findCategories`, `findCollections`, `createVariant`.
+Métodos: `create`, `findById`, `listProducts`, `findLowStock`, `update`, `archive`, `restoreProduct`, `permanentDelete`, `createCategory`, `createCollection`, `findCategories`, `findCollections`, `createVariant`, `listVariants`, `updateVariant`, `archiveVariant`, `restoreVariant`. Serviço dedicado: `src/services/product-variant.service.ts`.

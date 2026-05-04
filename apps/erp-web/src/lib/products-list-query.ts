@@ -6,6 +6,7 @@ export type ProductListQuery = {
   q?: string;
   status?: string;
   productType?: string;
+  productKind?: string;
   stockFilter?: string;
   channel?: string;
   sortField?: string;
@@ -39,6 +40,7 @@ export function parseProductListSearchParams(
     q: str("q"),
     status: str("status"),
     productType: str("productType"),
+    productKind: str("productKind"),
     stockFilter: str("stockFilter"),
     channel: str("channel"),
     sortField: sf || undefined,
@@ -56,6 +58,7 @@ export function productListQueryToApiParams(q: ProductListQuery): Record<string,
   if (q.q) out.q = q.q;
   if (q.status) out.status = q.status;
   if (q.productType) out.productType = q.productType;
+  if (q.productKind) out.productKind = q.productKind;
   if (q.stockFilter) out.stockFilter = q.stockFilter;
   if (q.channel) out.channel = q.channel;
   if (q.sortField) out.sortField = q.sortField;

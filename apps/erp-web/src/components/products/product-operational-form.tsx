@@ -13,6 +13,10 @@ import {
 } from "@/server/product-operational-actions";
 import type { UploadedProductMediaRow } from "@/lib/product-media-types";
 import { CompositionProductPicker } from "@/components/products/composition-product-picker";
+import {
+  ProductVariantsPanel,
+  type VariantApiRow,
+} from "@/components/products/product-variants-panel";
 
 export interface SelectOption {
   id: string;
@@ -61,6 +65,7 @@ type TabId =
   | "prices"
   | "stock"
   | "composition"
+  | "variants"
   | "fiscal"
   | "logistics"
   | "media"
@@ -71,6 +76,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "prices", label: "Preços" },
   { id: "stock", label: "Estoque" },
   { id: "composition", label: "Composição" },
+  { id: "variants", label: "Variações" },
   { id: "fiscal", label: "Fiscal" },
   { id: "logistics", label: "Logística" },
   { id: "media", label: "Mídia / Arquivos" },
@@ -188,6 +194,7 @@ interface ProductOperationalFormProps {
   productId?: string;
   initialProduct: Record<string, unknown>;
   initialCompositions?: CompositionRow[];
+  initialVariants?: VariantApiRow[];
   costBreakdown?: ProductCostBreakdown | null;
   categories: SelectOption[];
   collections: SelectOption[];
@@ -203,6 +210,7 @@ export function ProductOperationalForm({
   productId,
   initialProduct,
   initialCompositions = [],
+  initialVariants = [],
   costBreakdown,
   categories,
   collections,
@@ -225,6 +233,9 @@ export function ProductOperationalForm({
   const [internalName, setInternalName] = useState(String(initialProduct.internalName ?? ""));
   const [productType, setProductType] = useState(
     String(initialProduct.productType ?? "finished_product"),
+  );
+  const [productKind, setProductKind] = useState(
+    String(initialProduct.productKind ?? "simple") as "simple" | "variable",
   );
   const [status, setStatus] = useState(String(initialProduct.status ?? "draft"));
   const [categoryId, setCategoryId] = useState(String(initialProduct.categoryId ?? ""));
@@ -434,6 +445,7 @@ export function ProductOperationalForm({
       name: name.trim(),
       internalName: internalName.trim() || undefined,
       productType,
+      productKind,
       status,
       categoryId: categoryId || undefined,
       collectionId: collectionId || undefined,
@@ -448,7 +460,7 @@ export function ProductOperationalForm({
       eventPriceCents: eventPrice.trim() ? inputToCents(eventPrice) : undefined,
       wholesalePriceCents: wholesalePrice.trim() ? inputToCents(wholesalePrice) : undefined,
       compareAtPriceCents: compareAtPrice.trim() ? inputToCents(compareAtPrice) : undefined,
-      controlsStock,
+      controlsStock: productKind === "variable" ? false : controlsStock,
       minStock: nonNegativeIntFromInput(minStock) ?? 0,
       idealStock: nonNegativeIntFromInput(idealStock),
       maxStock: nonNegativeIntFromInput(maxStock),
@@ -472,7 +484,7 @@ export function ProductOperationalForm({
       consumptionUnit: consumptionUnit.trim() || null,
       acquisitionCostCents: acquisitionCost.trim() ? inputToCents(acquisitionCost) : null,
       costPerConsumptionUnitCents: inputToFractionalCents(costPerConsumptionUnit) ?? null,
-      sellable,
+      sellable: productKind === "variable" ? false : sellable,
       availableForEcommerce,
       availableForPos,
       availableForEvents,
@@ -693,11 +705,7 @@ export function ProductOperationalForm({
           <span className="mx-2">/</span>
           <span className="text-zinc-800">{mode === "new" ? "Novo produto" : sku || "Editar"}</span>
         </nav>
-      ) : (
-        <p className="mb-2 text-xs font-medium tracking-wide text-zinc-500 uppercase">
-          Edição rápida (popup)
-        </p>
-      )}
+      ) : null}
 
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -797,6 +805,20 @@ export function ProductOperationalForm({
                     required
                   />
                 </div>
+                {mode === "edit" ? (
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-zinc-600">Ref</label>
+                    <input
+                      readOnly
+                      tabIndex={-1}
+                      value={String(initialProduct.externalRef ?? "")}
+                      className="w-full cursor-default rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 font-mono text-sm text-zinc-800"
+                    />
+                    <p className="mt-0.5 text-xs text-zinc-500">
+                      Referência estável do sistema (PRD-NNNN); não editável.
+                    </p>
+                  </div>
+                ) : null}
                 <div>
                   <label className="mb-1 block text-xs font-medium text-zinc-600">Nome *</label>
                   <input
@@ -836,6 +858,38 @@ export function ProductOperationalForm({
                       </option>
                     ))}
                   </select>
+                </div>
+                <div className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-4 py-3 md:col-span-2">
+                  <span className="mb-2 block text-xs font-medium text-zinc-600">
+                    Estrutura do produto
+                  </span>
+                  <div className="flex flex-wrap gap-6 text-sm text-zinc-800">
+                    <label className="flex cursor-pointer items-center gap-2">
+                      <input
+                        type="radio"
+                        name="productKind"
+                        checked={productKind === "simple"}
+                        onChange={() => setProductKind("simple")}
+                      />
+                      Produto simples
+                    </label>
+                    <label className="flex cursor-pointer items-center gap-2">
+                      <input
+                        type="radio"
+                        name="productKind"
+                        checked={productKind === "variable"}
+                        onChange={() => setProductKind("variable")}
+                      />
+                      Produto com variações
+                    </label>
+                  </div>
+                  {productKind === "variable" ? (
+                    <p className="mt-2 text-xs leading-relaxed text-zinc-600">
+                      O cadastro pai agrupa variações. Estoque real, SKU de venda e preços por linha
+                      definem-se no separador <strong>Variações</strong>. O estoque mostrado no pai
+                      será a soma das variações ativas.
+                    </p>
+                  ) : null}
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-zinc-600">Status *</label>
@@ -1120,10 +1174,17 @@ export function ProductOperationalForm({
 
             {tab === "stock" && (
               <div className="grid gap-4 md:grid-cols-2">
+                {productKind === "variable" ? (
+                  <div className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-950 md:col-span-2">
+                    Este produto tem variações: o estoque movimenta-se ao nível de cada variação. O
+                    valor agregado no pai é calculado automaticamente.
+                  </div>
+                ) : null}
                 <label className="flex items-center gap-2 text-sm text-zinc-800">
                   <input
                     type="checkbox"
-                    checked={controlsStock}
+                    checked={productKind === "variable" ? false : controlsStock}
+                    disabled={productKind === "variable"}
                     onChange={(e) => setControlsStock(e.target.checked)}
                   />
                   Controla estoque?
@@ -1750,6 +1811,25 @@ export function ProductOperationalForm({
                     </div>
                   </>
                 )}
+              </div>
+            )}
+
+            {tab === "variants" && (
+              <div>
+                {mode === "new" ? (
+                  <p className="text-sm text-zinc-600">
+                    Guarde o produto primeiro. Depois poderá criar e gerir variações neste
+                    separador.
+                  </p>
+                ) : productId ? (
+                  <ProductVariantsPanel
+                    productId={productId}
+                    productKind={productKind}
+                    parentSalePriceCents={saleCents}
+                    parentCostPriceCents={costCents}
+                    variants={initialVariants}
+                  />
+                ) : null}
               </div>
             )}
 

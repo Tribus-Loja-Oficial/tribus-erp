@@ -54,6 +54,7 @@ export default async function NewProductPage() {
           availableForEvents: false,
           producedInternally: false,
           origin: "0",
+          productKind: "simple",
         }}
         categories={categories.map((c) => ({ id: c.id, name: c.name }))}
         collections={collections.map((c) => ({ id: c.id, name: c.name }))}

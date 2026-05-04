@@ -18,10 +18,13 @@ import type {
   CreateProductInput,
   UpdateProductInput,
   CreateVariantInput,
+  UpdateProductVariantInput,
   CreateCategoryInput,
   CreateCollectionInput,
   PermanentDeleteProductInput,
 } from "../schemas/product.schemas.js";
+import { createProductVariantRepository } from "../repositories/product-variant.repository.js";
+import { createProductVariantService } from "./product-variant.service.js";
 import type { ListProductsParams } from "../repositories/product.repository.js";
 
 function slugify(text: string): string {
@@ -43,6 +46,8 @@ function defaultSellable(productType: CreateProductInput["productType"]): boolea
 
 export function createProductService(db: AppDb) {
   const productsRepo = createProductRepository(db);
+  const variantsRepo = createProductVariantRepository(db);
+  const variantSvc = createProductVariantService(db);
   const compositionsRepo = createProductCompositionRepository(db);
   const profileRepo = createProductProductionProfileRepository(db);
   const costService = createProductCostService(db);
@@ -53,16 +58,27 @@ export function createProductService(db: AppDb) {
     async create(input: CreateProductInput, actorId?: string) {
       const existing = await productsRepo.findBySku(input.sku);
       if (existing) throw new ConflictError(`SKU '${input.sku}' already exists`);
+      const variantSkuHit = await variantsRepo.findBySku(input.sku);
+      if (variantSkuHit) throw new ConflictError(`SKU '${input.sku}' já existe numa variação.`);
 
       const slug = input.slug ? slugify(input.slug) : slugify(input.name);
-      const controlsStock = input.controlsStock ?? defaultControlsStock(input.productType);
-      const sellable = input.sellable ?? defaultSellable(input.productType);
+      const productKind = input.productKind ?? "simple";
+      const isVariable = productKind === "variable";
+      let controlsStock = input.controlsStock ?? defaultControlsStock(input.productType);
+      let sellable = input.sellable ?? defaultSellable(input.productType);
+      if (isVariable) {
+        controlsStock = false;
+        sellable = false;
+      }
+      const externalRef = await productsRepo.allocateNextExternalRef();
 
       const product = await productsRepo.insert({
         id: generateId(),
         sku: input.sku,
+        externalRef,
         name: input.name,
         slug,
+        productKind,
         description: input.description ?? null,
         shortDescription: input.shortDescription ?? null,
         internalName: input.internalName ?? null,
@@ -165,7 +181,34 @@ export function createProductService(db: AppDb) {
         limit,
         offset: (page - 1) * limit,
       });
-      return { items, total, page, limit };
+      const ids = items.map((p) => p.id);
+      const vRows = await variantsRepo.listActiveByProductIds(ids);
+      const byPid = new Map<string, typeof vRows>();
+      for (const v of vRows) {
+        const arr = byPid.get(v.productId) ?? [];
+        arr.push(v);
+        byPid.set(v.productId, arr);
+      }
+      const effSale = (p: (typeof items)[number], v: (typeof vRows)[number]) =>
+        v.salePriceCents ?? p.salePriceCents;
+      const itemsOut = items.map((p) => {
+        const vs = byPid.get(p.id) ?? [];
+        const variantCount = vs.length;
+        let minEffectiveSaleCents = p.salePriceCents;
+        let maxEffectiveSaleCents = p.salePriceCents;
+        if (p.productKind === "variable" && vs.length > 0) {
+          const prices = vs.map((v) => effSale(p, v));
+          minEffectiveSaleCents = Math.min(...prices);
+          maxEffectiveSaleCents = Math.max(...prices);
+        }
+        return {
+          ...p,
+          variantCount,
+          minEffectiveSaleCents,
+          maxEffectiveSaleCents,
+        };
+      });
+      return { items: itemsOut, total, page, limit };
     },
 
     /** @deprecated Use listProducts (retorna também total). */
@@ -213,11 +256,14 @@ export function createProductService(db: AppDb) {
         productionProfileNotes: profile?.notes ?? null,
       };
 
+      const variants = await variantSvc.listByProduct(id);
+
       return {
         product: mergedProduct,
         compositions: compositionsWithChild,
         children,
         costBreakdown,
+        variants,
       };
     },
 
@@ -232,6 +278,24 @@ export function createProductService(db: AppDb) {
       if (input.sku && input.sku !== existing.sku) {
         const skuConflict = await productsRepo.findBySku(input.sku);
         if (skuConflict) throw new ConflictError(`SKU '${input.sku}' already exists`);
+        const vSku = await variantsRepo.findBySku(input.sku);
+        if (vSku) throw new ConflictError(`SKU '${input.sku}' já existe numa variação.`);
+      }
+
+      if (input.productKind === "variable" && existing.productKind === "simple") {
+        if (existing.currentStock !== 0) {
+          throw new BadRequestError(
+            'Zere o estoque do produto antes de mudar a estrutura para "com variações".',
+          );
+        }
+      }
+      if (input.productKind === "simple" && existing.productKind === "variable") {
+        const activeVariants = await variantsRepo.countActiveByProductId(id);
+        if (activeVariants > 0) {
+          throw new BadRequestError(
+            "Arquive todas as variações antes de voltar a produto simples.",
+          );
+        }
       }
 
       const {
@@ -240,6 +304,7 @@ export function createProductService(db: AppDb) {
         imagesJson,
         laborCostPerHourCents,
         productionProfileNotes,
+        productKind: productKindInput,
         ...rest
       } = input;
       const existingProfile = await profileRepo.findByProductId(id);
@@ -263,6 +328,13 @@ export function createProductService(db: AppDb) {
       const laborCalc = calculateLaborCostCents(nextAvg, nextLaborHour);
 
       const patch: Record<string, unknown> = { ...rest };
+      if (productKindInput !== undefined) {
+        patch.productKind = productKindInput;
+        if (productKindInput === "variable") {
+          patch.controlsStock = false;
+          patch.sellable = false;
+        }
+      }
       if (slugInput !== undefined) patch.slug = slugify(slugInput);
       if (metadata !== undefined) patch.metadataJson = JSON.stringify(metadata);
       if (imagesJson !== undefined) patch.imagesJson = JSON.stringify(imagesJson);
@@ -287,6 +359,10 @@ export function createProductService(db: AppDb) {
       const filtered = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
 
       const updated = await productsRepo.update(id, filtered as never);
+
+      if (updated.productKind === "variable") {
+        await productsRepo.syncAggregatedStockFromVariants(id);
+      }
 
       await profileRepo.upsertByProductId({
         id: existingProfile?.id ?? generateId(),
@@ -451,21 +527,23 @@ export function createProductService(db: AppDb) {
     },
 
     async createVariant(input: CreateVariantInput) {
-      const product = await productsRepo.findById(input.productId);
-      if (!product) throw new NotFoundError("Product", input.productId);
-      const { createProductVariantRepository } =
-        await import("../repositories/product-variant.repository.js");
-      const variantsRepo = createProductVariantRepository(db);
-      return variantsRepo.insert({
-        id: generateId(),
-        ...input,
-        attributesJson: JSON.stringify(input.attributes),
-        barcode: input.barcode ?? null,
-        currentStock: 0,
-        createdAt: now(),
-        updatedAt: now(),
-        archivedAt: null,
-      });
+      return variantSvc.create(input);
+    },
+
+    async listVariants(productId: string) {
+      return variantSvc.listByProduct(productId);
+    },
+
+    async updateVariant(productId: string, variantId: string, input: UpdateProductVariantInput) {
+      return variantSvc.update(variantId, input, productId);
+    },
+
+    async archiveVariant(productId: string, variantId: string) {
+      return variantSvc.archive(variantId, productId);
+    },
+
+    async restoreVariant(productId: string, variantId: string) {
+      return variantSvc.restore(variantId, productId);
     },
 
     async createCategory(input: CreateCategoryInput) {

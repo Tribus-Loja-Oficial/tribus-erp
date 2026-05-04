@@ -46,13 +46,33 @@ export function createInventoryService(db: AppDb) {
       const product = await productsRepo.findById(input.productId);
       if (!product) throw new NotFoundError("Product", input.productId);
 
+      const isVariable = product.productKind === "variable";
+      if (isVariable && !input.variantId) {
+        throw new BadRequestError(
+          "Este produto tem variações: indique a variação para movimentar estoque.",
+        );
+      }
+      if (!isVariable && input.variantId) {
+        throw new BadRequestError("Produto simples não usa variação neste movimento.");
+      }
+
       const location = await inventoryRepo.findLocationById(input.locationId);
       if (!location) throw new NotFoundError("Stock location", input.locationId);
 
       const isOutward = OUT_TYPES.includes(input.type);
       const delta = isOutward ? -Math.abs(input.quantity) : Math.abs(input.quantity);
 
-      if (isOutward && product.currentStock + delta < 0) {
+      if (input.variantId) {
+        const variant = await variantsRepo.findById(input.variantId);
+        if (!variant || variant.productId !== input.productId) {
+          throw new BadRequestError("Variação inválida para este produto.");
+        }
+        if (isOutward && variant.controlsStock && variant.currentStock + delta < 0) {
+          throw new BadRequestError(
+            `Insufficient stock. Current: ${variant.currentStock}, Requested: ${Math.abs(input.quantity)}`,
+          );
+        }
+      } else if (isOutward && product.controlsStock && product.currentStock + delta < 0) {
         throw new BadRequestError(
           `Insufficient stock. Current: ${product.currentStock}, Requested: ${Math.abs(input.quantity)}`,
         );
@@ -73,10 +93,11 @@ export function createInventoryService(db: AppDb) {
         createdAt: now(),
       });
 
-      await productsRepo.updateStock(input.productId, delta);
-
       if (input.variantId) {
         await variantsRepo.updateStock(input.variantId, delta);
+        await productsRepo.syncAggregatedStockFromVariants(input.productId);
+      } else {
+        await productsRepo.updateStock(input.productId, delta);
       }
 
       await auditRepo.insert({
@@ -96,6 +117,11 @@ export function createInventoryService(db: AppDb) {
     async adjustStock(productId: string, newQty: number, notes: string, actorId?: string) {
       const product = await productsRepo.findById(productId);
       if (!product) throw new NotFoundError("Product", productId);
+      if (product.productKind === "variable") {
+        throw new BadRequestError(
+          "Produto com variações: ajuste o estoque em cada variação (movimento com variantId).",
+        );
+      }
 
       const delta = newQty - product.currentStock;
       const type: StockMovementType = delta >= 0 ? "adjustment" : "adjustment";

@@ -119,6 +119,23 @@ describe("listProductsSchema", () => {
     if (!result.success) return;
     expect(result.data.composeCatalog).toBe(true);
   });
+
+  it("accepts sortField externalRef", () => {
+    const result = listProductsSchema.safeParse({
+      sortField: "externalRef",
+      sortDir: "asc",
+    });
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.sortField).toBe("externalRef");
+  });
+
+  it("accepts productKind filter", () => {
+    const result = listProductsSchema.safeParse({ productKind: "variable" });
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.productKind).toBe("variable");
+  });
 });
 
 describe("createVariantSchema", () => {

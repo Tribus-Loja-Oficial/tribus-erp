@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { Fragment } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
@@ -23,10 +24,17 @@ import {
 export interface ProductListRow {
   id: string;
   sku: string;
+  /** Referência humana (ex.: PRD-0001). */
+  externalRef?: string;
   name: string;
   internalName?: string | null;
   status: string;
   productType: string;
+  /** simple | variable */
+  productKind?: string;
+  variantCount?: number;
+  minEffectiveSaleCents?: number;
+  maxEffectiveSaleCents?: number;
   salePriceCents: number;
   currentStock: number;
   minStock: number;
@@ -74,8 +82,15 @@ const CHANNELS: { value: string; label: string }[] = [
   { value: "events", label: "Eventos" },
 ];
 
+const PRODUCT_KINDS: { value: string; label: string }[] = [
+  { value: "", label: "Todas as estruturas" },
+  { value: "simple", label: "Simples" },
+  { value: "variable", label: "Com variações" },
+];
+
 const SORTABLE: { field: string; label: string }[] = [
   { field: "sku", label: "SKU" },
+  { field: "externalRef", label: "Ref" },
   { field: "name", label: "Nome" },
   { field: "type", label: "Tipo" },
   { field: "status", label: "Status" },
@@ -90,6 +105,23 @@ function typeLabel(v: string): string {
 
 function statusLabel(v: string): string {
   return STATUSES.find((s) => s.value === v)?.label ?? v;
+}
+
+function productKindLabel(k: string | undefined): string {
+  if (k === "variable") return "Variável";
+  if (k === "simple") return "Simples";
+  return "—";
+}
+
+function listPriceLabel(p: ProductListRow): string {
+  const vk = p.productKind === "variable";
+  const vmin = p.minEffectiveSaleCents ?? p.salePriceCents;
+  const vmax = p.maxEffectiveSaleCents ?? p.salePriceCents;
+  const n = p.variantCount ?? 0;
+  if (vk && n > 0 && vmin !== vmax) {
+    return `a partir de ${formatCurrency(vmin)}`;
+  }
+  return formatCurrency(vmin);
 }
 
 function sortIndicator(qp: ProductListQuery, field: string): "" | "↑" | "↓" {
@@ -358,6 +390,20 @@ export function ProductsListing({
           </select>
         </div>
         <div>
+          <label className="mb-1 block text-xs font-medium text-zinc-600">Estrutura</label>
+          <select
+            className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
+            value={qp.productKind ?? ""}
+            onChange={(e) => replaceQuery({ productKind: e.target.value || undefined, page: 1 })}
+          >
+            {PRODUCT_KINDS.map((o) => (
+              <option key={o.value || "all-k"} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
           <label className="mb-1 block text-xs font-medium text-zinc-600">Status</label>
           <select
             className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
@@ -478,18 +524,30 @@ export function ProductsListing({
                 />
               </th>
               {SORTABLE.map((col) => (
-                <th key={col.field} className="px-3 py-3">
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-1 font-semibold tracking-wide text-zinc-500 hover:text-zinc-800"
-                    onClick={() => replaceQuery(nextSort(qp, col.field))}
-                  >
-                    {col.label}
-                    <span className="text-zinc-400 tabular-nums">
-                      {sortIndicator(qp, col.field)}
-                    </span>
-                  </button>
-                </th>
+                <Fragment key={col.field}>
+                  <th className="px-3 py-3">
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 font-semibold tracking-wide text-zinc-500 hover:text-zinc-800"
+                      onClick={() => replaceQuery(nextSort(qp, col.field))}
+                    >
+                      {col.label}
+                      <span className="text-zinc-400 tabular-nums">
+                        {sortIndicator(qp, col.field)}
+                      </span>
+                    </button>
+                  </th>
+                  {col.field === "type" ? (
+                    <>
+                      <th className="px-3 py-3 text-xs font-semibold tracking-wide text-zinc-500 uppercase">
+                        Estrutura
+                      </th>
+                      <th className="px-3 py-3 text-xs font-semibold tracking-wide text-zinc-500 uppercase">
+                        Variações
+                      </th>
+                    </>
+                  ) : null}
+                </Fragment>
               ))}
               <th className="px-3 py-3 text-right">Ações</th>
             </tr>
@@ -497,7 +555,7 @@ export function ProductsListing({
           <tbody>
             {products.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-4 py-12 text-center text-zinc-600">
+                <td colSpan={12} className="px-4 py-12 text-center text-zinc-600">
                   <p className="font-medium text-zinc-800">Nenhum produto encontrado.</p>
                   <p className="mt-1 text-sm">Ajuste os filtros ou cadastre um novo produto.</p>
                   <div className="mt-4 flex justify-center gap-3">
@@ -534,6 +592,9 @@ export function ProductsListing({
                       />
                     </td>
                     <td className="px-3 py-3 font-mono text-xs">{p.sku}</td>
+                    <td className="px-3 py-3 font-mono text-xs text-zinc-700 tabular-nums">
+                      {p.externalRef ?? "—"}
+                    </td>
                     <td className="px-3 py-3">
                       <div className="flex min-w-0 items-center gap-2">
                         <button
@@ -570,10 +631,14 @@ export function ProductsListing({
                     <td className="max-w-[140px] truncate px-3 py-3 text-xs text-zinc-600">
                       {typeLabel(p.productType)}
                     </td>
-                    <td className="px-3 py-3 text-zinc-600">{statusLabel(p.status)}</td>
-                    <td className="px-3 py-3 text-right tabular-nums">
-                      {formatCurrency(p.salePriceCents)}
+                    <td className="px-3 py-3 text-xs text-zinc-700">
+                      {productKindLabel(p.productKind)}
                     </td>
+                    <td className="px-3 py-3 text-xs text-zinc-600">
+                      {p.productKind === "variable" ? `${p.variantCount ?? 0} var.` : "—"}
+                    </td>
+                    <td className="px-3 py-3 text-zinc-600">{statusLabel(p.status)}</td>
+                    <td className="px-3 py-3 text-right tabular-nums">{listPriceLabel(p)}</td>
                     <td className="px-3 py-3 text-right text-zinc-800 tabular-nums">
                       <div className="flex flex-col items-end gap-0.5">
                         <span>

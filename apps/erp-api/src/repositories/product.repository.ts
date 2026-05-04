@@ -10,7 +10,9 @@ import {
   inArray,
   gt,
   lte,
+  ne,
   count,
+  sql,
 } from "drizzle-orm";
 import {
   orderItems,
@@ -40,6 +42,7 @@ import {
 } from "../db/schema/index.js";
 import type {
   ProductListChannelFilter,
+  ProductListProductKindFilter,
   ProductListSortField,
   ProductListStockFilter,
 } from "../domain/product-list.types.js";
@@ -51,6 +54,7 @@ export interface ListProductsParams {
   composeCatalog?: boolean;
   categoryId?: string;
   niche?: string;
+  productKind?: ProductListProductKindFilter;
   stockFilter?: ProductListStockFilter;
   channel?: ProductListChannelFilter;
   sortField?: ProductListSortField;
@@ -64,8 +68,17 @@ function sanitizeSearchTerm(raw: string): string {
 }
 
 function buildListConditions(params: ListProductsParams): SQL[] {
-  const { q, status, productType, composeCatalog, categoryId, niche, stockFilter, channel } =
-    params;
+  const {
+    q,
+    status,
+    productType,
+    composeCatalog,
+    categoryId,
+    niche,
+    productKind,
+    stockFilter,
+    channel,
+  } = params;
 
   const conditions: SQL[] = [];
   const archivedOnly = status === "archived";
@@ -96,6 +109,7 @@ function buildListConditions(params: ListProductsParams): SQL[] {
 
   if (categoryId) conditions.push(eq(products.categoryId, categoryId));
   if (niche) conditions.push(eq(products.niche, niche));
+  if (productKind) conditions.push(eq(products.productKind, productKind));
 
   if (q) {
     const term = sanitizeSearchTerm(q);
@@ -161,6 +175,8 @@ function orderByClause(sortField?: ProductListSortField, sortDir?: "asc" | "desc
   switch (sortField) {
     case "sku":
       return [dir(products.sku)];
+    case "externalRef":
+      return [dir(products.externalRef)];
     case "name":
       return [dir(products.name)];
     case "type":
@@ -234,8 +250,31 @@ export function createProductRepository(db: AppDb) {
       const all = await db
         .select()
         .from(products)
-        .where(and(eq(products.status, "active"), isNull(products.archivedAt)));
+        .where(
+          and(
+            eq(products.status, "active"),
+            isNull(products.archivedAt),
+            eq(products.productKind, "simple"),
+          ),
+        );
       return all.filter((p) => p.controlsStock && p.minStock > 0 && p.currentStock <= p.minStock);
+    },
+
+    /** Próxima referência humana `PRD-NNNN` (máx. 9999 por prefixo). */
+    async allocateNextExternalRef(): Promise<string> {
+      const prefix = "PRD";
+      const pattern = `${prefix}-____`;
+      const [row] = await db
+        .select({
+          maxSeq: sql<number | null>`MAX(CAST(SUBSTR(${products.externalRef}, 5) AS INTEGER))`,
+        })
+        .from(products)
+        .where(like(products.externalRef, pattern));
+      const next = Number(row?.maxSeq ?? 0) + 1;
+      if (next > 9999) {
+        throw new Error(`${prefix} ref limit reached (max ${prefix}-9999)`);
+      }
+      return `${prefix}-${String(next).padStart(4, "0")}`;
     },
 
     async insert(data: NewProduct): Promise<Product> {
@@ -257,6 +296,9 @@ export function createProductRepository(db: AppDb) {
     async updateStock(id: string, delta: number): Promise<void> {
       const product = await this.findById(id);
       if (!product) throw new Error(`Product ${id} not found`);
+      if (product.productKind === "variable") {
+        throw new Error("Estoque de produto variável é só nas variações");
+      }
       await db
         .update(products)
         .set({
@@ -264,6 +306,36 @@ export function createProductRepository(db: AppDb) {
           updatedAt: new Date().toISOString(),
         })
         .where(eq(products.id, id));
+    },
+
+    /** Atualiza `products.current_stock` com a soma das variações ativas (produto variável). */
+    async syncAggregatedStockFromVariants(productId: string): Promise<void> {
+      const [row] = await db
+        .select({ kind: products.productKind })
+        .from(products)
+        .where(eq(products.id, productId))
+        .limit(1);
+      if (!row || row.kind !== "variable") return;
+
+      const [agg] = await db
+        .select({
+          s: sql<number>`COALESCE(SUM(${productVariants.currentStock}), 0)`,
+        })
+        .from(productVariants)
+        .where(
+          and(
+            eq(productVariants.productId, productId),
+            isNull(productVariants.archivedAt),
+            ne(productVariants.status, "archived"),
+          ),
+        );
+
+      const sum = Number(agg?.s ?? 0);
+      const now = new Date().toISOString();
+      await db
+        .update(products)
+        .set({ currentStock: sum, updatedAt: now })
+        .where(eq(products.id, productId));
     },
 
     async archive(id: string): Promise<void> {

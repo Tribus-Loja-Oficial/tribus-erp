@@ -108,6 +108,7 @@ export function ProductQuickEditModal({ productId, productLabel, onClose }: Prop
               initialProduct={payload.product}
               initialCompositions={payload.compositions}
               costBreakdown={payload.costBreakdown}
+              initialVariants={payload.variants}
               categories={payload.categories}
               collections={payload.collections}
               locations={payload.locations}

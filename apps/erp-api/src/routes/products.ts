@@ -11,6 +11,7 @@ import {
   bulkProductIdsSchema,
   createCategorySchema,
   createVariantSchema,
+  updateProductVariantSchema,
   createProductCompositionSchema,
   updateProductCompositionSchema,
   permanentDeleteProductSchema,
@@ -302,6 +303,66 @@ products.delete("/:id/compositions/:compositionId", async (c) => {
     const db = createDb(config.db);
     const compositionService = createProductCompositionService(db);
     await compositionService.archive(c.req.param("id"), c.req.param("compositionId"));
+    return c.json({ success: true });
+  } catch (err) {
+    const { message, code, status } = toApiError(err);
+    return c.json({ message, code }, status);
+  }
+});
+
+products.get("/:id/variants", async (c) => {
+  try {
+    const config = getEnv(c.env);
+    const db = createDb(config.db);
+    const service = createProductService(db);
+    const data = await service.listVariants(c.req.param("id"));
+    return c.json({ data });
+  } catch (err) {
+    const { message, code, status } = toApiError(err);
+    return c.json({ message, code }, status);
+  }
+});
+
+products.patch("/:id/variants/:variantId", async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const parsed = updateProductVariantSchema.safeParse(body);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  try {
+    const config = getEnv(c.env);
+    const db = createDb(config.db);
+    const service = createProductService(db);
+    const data = await service.updateVariant(
+      c.req.param("id"),
+      c.req.param("variantId"),
+      parsed.data,
+    );
+    return c.json({ data });
+  } catch (err) {
+    const { message, code, status } = toApiError(err);
+    return c.json({ message, code }, status);
+  }
+});
+
+products.post("/:id/variants/:variantId/archive", async (c) => {
+  try {
+    const config = getEnv(c.env);
+    const db = createDb(config.db);
+    const service = createProductService(db);
+    await service.archiveVariant(c.req.param("id"), c.req.param("variantId"));
+    return c.json({ success: true });
+  } catch (err) {
+    const { message, code, status } = toApiError(err);
+    return c.json({ message, code }, status);
+  }
+});
+
+products.post("/:id/variants/:variantId/restore", async (c) => {
+  try {
+    const config = getEnv(c.env);
+    const db = createDb(config.db);
+    const service = createProductService(db);
+    await service.restoreVariant(c.req.param("id"), c.req.param("variantId"));
     return c.json({ success: true });
   } catch (err) {
     const { message, code, status } = toApiError(err);

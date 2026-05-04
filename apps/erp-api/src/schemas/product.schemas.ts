@@ -31,6 +31,12 @@ export const compositionTypeSchema = z.enum([
 
 export const packagingChannelSchema = z.enum(["online", "presential"]);
 
+export const productKindSchema = z.enum(["simple", "variable"]);
+
+export const variantAttributesSchema = z
+  .record(z.string().min(1).max(80), z.string().min(1).max(200))
+  .default({});
+
 export const createProductSchema = z.object({
   sku: z.string().min(1).max(100),
   name: z.string().min(1).max(300),
@@ -40,6 +46,7 @@ export const createProductSchema = z.object({
   internalName: z.string().max(300).optional(),
   internalDescription: z.string().max(5000).optional(),
   productType: productTypeSchema,
+  productKind: productKindSchema.default("simple"),
   categoryId: z.string().optional(),
   collectionId: z.string().optional(),
   niche: z.string().max(100).optional(),
@@ -92,13 +99,29 @@ export const updateProductSchema = createProductSchema.partial();
 export const createVariantSchema = z.object({
   productId: z.string().min(1),
   sku: z.string().min(1).max(100),
-  name: z.string().min(1).max(200),
-  attributes: z.record(z.string()).default({}),
-  salePriceCents: z.number().int().min(0),
-  costPriceCents: z.number().int().min(0).default(0),
-  barcode: z.string().max(50).optional(),
-  status: z.enum(["active", "inactive"]).default("active"),
+  name: z.string().max(200).optional().nullable(),
+  attributes: variantAttributesSchema,
+  /** Omitido ou null = herdar do produto pai */
+  salePriceCents: z.number().int().min(0).optional().nullable(),
+  costPriceCents: z.number().int().min(0).optional().nullable(),
+  promotionalPriceCents: z.number().int().min(0).optional().nullable(),
+  eventPriceCents: z.number().int().min(0).optional().nullable(),
+  wholesalePriceCents: z.number().int().min(0).optional().nullable(),
+  controlsStock: z.boolean().default(true),
+  currentStock: z.number().int().min(0).default(0),
+  minStock: z.number().int().min(0).default(0),
+  idealStock: z.number().int().min(0).optional().nullable(),
+  barcode: z.string().max(80).optional().nullable(),
+  weightGrams: z.number().int().min(0).optional().nullable(),
+  lengthCm: z.number().min(0).optional().nullable(),
+  widthCm: z.number().min(0).optional().nullable(),
+  heightCm: z.number().min(0).optional().nullable(),
+  mainImageFileId: z.string().optional().nullable(),
+  metadata: z.record(z.string(), z.unknown()).optional().nullable(),
+  status: z.enum(["draft", "active", "inactive", "archived"]).default("active"),
 });
+
+export const updateProductVariantSchema = createVariantSchema.omit({ productId: true }).partial();
 
 export const createCategorySchema = z.object({
   name: z.string().min(1).max(100),
@@ -171,10 +194,11 @@ export const listProductsSchema = z.object({
   ),
   categoryId: z.string().optional(),
   niche: z.string().optional(),
+  productKind: productKindSchema.optional(),
   stockFilter: z.enum(["in_stock", "out_of_stock", "below_min", "not_controlled"]).optional(),
   channel: z.enum(["sellable", "ecommerce", "pos", "events"]).optional(),
   sortField: z
-    .enum(["sku", "name", "type", "status", "salePrice", "stock", "updatedAt"])
+    .enum(["sku", "externalRef", "name", "type", "status", "salePrice", "stock", "updatedAt"])
     .optional(),
   sortDir: z.enum(["asc", "desc"]).optional(),
   page: z.coerce.number().int().min(1).default(1),
@@ -193,6 +217,7 @@ export const bulkProductIdsSchema = z.object({
 export type CreateProductInput = z.infer<typeof createProductSchema>;
 export type UpdateProductInput = z.infer<typeof updateProductSchema>;
 export type CreateVariantInput = z.infer<typeof createVariantSchema>;
+export type UpdateProductVariantInput = z.infer<typeof updateProductVariantSchema>;
 export type CreateCategoryInput = z.infer<typeof createCategorySchema>;
 export type CreateCollectionInput = z.infer<typeof createCollectionSchema>;
 export type CreateProductCompositionInput = z.infer<typeof createProductCompositionSchema>;

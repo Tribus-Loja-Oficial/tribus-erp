@@ -7,11 +7,13 @@ import type {
   ProductAuditLogRow,
   ProductCostBreakdown,
 } from "@/components/products/product-operational-form";
+import type { VariantApiRow } from "@/components/products/product-variants-panel";
 
 export interface ProductOperationalEditPayload {
   product: Record<string, unknown>;
   compositions: CompositionRow[];
   costBreakdown: ProductCostBreakdown | null;
+  variants: VariantApiRow[];
   categories: { id: string; name: string }[];
   collections: { id: string; name: string }[];
   locations: { id: string; name: string }[];
@@ -28,6 +30,7 @@ export async function getProductOperationalEditPayloadAction(
         product: Record<string, unknown>;
         compositions?: CompositionRow[];
         costBreakdown?: ProductCostBreakdown | null;
+        variants?: VariantApiRow[];
       };
     }>({ path: `/products/${productId}/detail` }),
     erpApiFetch<{ data: { id: string; name: string }[] }>({ path: "/products/categories" }),
@@ -54,6 +57,7 @@ export async function getProductOperationalEditPayloadAction(
     product: detail.product,
     compositions: detail.compositions ?? [],
     costBreakdown: detail.costBreakdown ?? null,
+    variants: detail.variants ?? [],
     categories: cRes.data ?? [],
     collections: colRes.data ?? [],
     locations: locRes.data ?? [],
