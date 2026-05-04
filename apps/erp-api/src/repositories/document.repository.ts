@@ -1,4 +1,4 @@
-import { eq, desc } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import type { AppDb } from "../db/client.js";
 import { documentFiles, type DocumentFile, type NewDocumentFile } from "../db/schema/index.js";
 
@@ -9,12 +9,22 @@ export function createDocumentRepository(db: AppDb) {
       return result[0] ?? null;
     },
 
-    async findByReference(referenceType: string, _referenceId: string): Promise<DocumentFile[]> {
+    async findByReference(referenceType: string, referenceId: string): Promise<DocumentFile[]> {
       return db
         .select()
         .from(documentFiles)
-        .where(eq(documentFiles.referenceType, referenceType))
+        .where(
+          and(
+            eq(documentFiles.referenceType, referenceType),
+            eq(documentFiles.referenceId, referenceId),
+          ),
+        )
         .orderBy(desc(documentFiles.createdAt));
+    },
+
+    /** Imagens de produto ligadas por `reference_type` + `reference_id`. */
+    async findProductImageFiles(productId: string): Promise<DocumentFile[]> {
+      return this.findByReference("product_image", productId);
     },
 
     async findMany(params: { limit?: number; offset?: number } = {}): Promise<DocumentFile[]> {
@@ -40,6 +50,10 @@ export function createDocumentRepository(db: AppDb) {
         .where(eq(documentFiles.storageKey, storageKey))
         .limit(1);
       return result[0] ?? null;
+    },
+
+    async deleteById(id: string): Promise<void> {
+      await db.delete(documentFiles).where(eq(documentFiles.id, id));
     },
   };
 }

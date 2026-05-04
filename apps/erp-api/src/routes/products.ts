@@ -13,6 +13,7 @@ import {
   createVariantSchema,
   createProductCompositionSchema,
   updateProductCompositionSchema,
+  permanentDeleteProductSchema,
 } from "../schemas/product.schemas.js";
 import { createProductCompositionService } from "../services/product-composition.service.js";
 import { verifyInternalToken } from "../auth/verify-internal-token.js";
@@ -345,6 +346,25 @@ products.post("/:id/restore", async (c) => {
     const service = createProductService(db);
     await service.restoreProduct(c.req.param("id"));
     return c.json({ success: true });
+  } catch (err) {
+    const { message, code, status } = toApiError(err);
+    return c.json({ message, code }, status);
+  }
+});
+
+/** Eliminação permanente (BD + R2). `DELETE /products/:id` continua a ser apenas arquivar. */
+products.post("/:id/permanent-delete", async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const parsed = permanentDeleteProductSchema.safeParse(body);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  try {
+    const config = getEnv(c.env);
+    const db = createDb(config.db);
+    const service = createProductService(db);
+    const storage = new R2StorageProvider(config.r2);
+    const result = await service.permanentDelete(c.req.param("id"), parsed.data, storage);
+    return c.json({ success: true, deletedFileCount: result.deletedFileCount });
   } catch (err) {
     const { message, code, status } = toApiError(err);
     return c.json({ message, code }, status);

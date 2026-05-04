@@ -1,7 +1,10 @@
 import type { AppDb } from "../db/client.js";
+import type { DocumentFile } from "../db/schema/index.js";
 import { generateId } from "../utils/id.js";
-import { NotFoundError, ConflictError } from "../errors/app-error.js";
+import { NotFoundError, ConflictError, BadRequestError } from "../errors/app-error.js";
 import { createProductRepository } from "../repositories/product.repository.js";
+import { createDocumentRepository } from "../repositories/document.repository.js";
+import type { StorageProvider } from "../storage/storage-provider.js";
 import { createProductCompositionRepository } from "../repositories/product-composition.repository.js";
 import { createProductProductionProfileRepository } from "../repositories/product-production-profile.repository.js";
 import { createAuditRepository } from "../repositories/audit.repository.js";
@@ -17,6 +20,7 @@ import type {
   CreateVariantInput,
   CreateCategoryInput,
   CreateCollectionInput,
+  PermanentDeleteProductInput,
 } from "../schemas/product.schemas.js";
 import type { ListProductsParams } from "../repositories/product.repository.js";
 
@@ -379,6 +383,71 @@ export function createProductService(db: AppDb) {
         });
       }
       return { restored };
+    },
+
+    /**
+     * Elimina permanentemente o produto na BD (cascata acordada) e remove imagens em R2 + `document_files`.
+     * Chamar só após validar `confirmSku` no pedido.
+     */
+    async permanentDelete(
+      productId: string,
+      input: PermanentDeleteProductInput,
+      storage: StorageProvider,
+      actorId?: string,
+    ) {
+      const product = await productsRepo.findByIdIncludingArchived(productId);
+      if (!product) throw new NotFoundError("Product", productId);
+      if (product.sku.trim() !== input.confirmSku.trim()) {
+        throw new BadRequestError("O SKU de confirmação não coincide com o produto.");
+      }
+
+      const docs = createDocumentRepository(db);
+      const refDocs = await docs.findProductImageFiles(productId);
+      const idSet = new Set<string>();
+      for (const d of refDocs) idSet.add(d.id);
+      if (product.mainImageFileId) idSet.add(product.mainImageFileId);
+      try {
+        const arr = JSON.parse(product.imagesJson || "[]") as unknown;
+        if (Array.isArray(arr)) {
+          for (const x of arr) {
+            if (typeof x === "string" && x) idSet.add(x);
+          }
+        }
+      } catch {
+        /* ignore malformed gallery json */
+      }
+
+      const documentsToPurge: DocumentFile[] = [];
+      for (const fid of idSet) {
+        const row = await docs.findById(fid);
+        if (row) documentsToPurge.push(row);
+      }
+
+      await productsRepo.permanentDeleteCascade(productId);
+
+      let deletedFiles = 0;
+      for (const doc of documentsToPurge) {
+        try {
+          await storage.deleteObject({ key: doc.storageKey });
+        } catch {
+          /* objeto R2 pode já não existir */
+        }
+        await docs.deleteById(doc.id);
+        deletedFiles += 1;
+      }
+
+      await auditRepo.insert({
+        id: generateId(),
+        actorId: actorId ?? null,
+        actorType: "user",
+        action: "product.permanent_deleted",
+        entityType: "product",
+        entityId: productId,
+        metadataJson: JSON.stringify({ sku: product.sku, deletedFileCount: deletedFiles }),
+        createdAt: now(),
+      });
+
+      return { deletedFileCount: deletedFiles };
     },
 
     async createVariant(input: CreateVariantInput) {

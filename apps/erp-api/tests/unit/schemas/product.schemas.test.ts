@@ -5,6 +5,7 @@ import {
   listProductsSchema,
   createVariantSchema,
   createProductCompositionSchema,
+  permanentDeleteProductSchema,
 } from "../../../src/schemas/product.schemas.js";
 
 describe("createProductSchema", () => {
@@ -168,5 +169,19 @@ describe("createProductCompositionSchema", () => {
       packagingChannel: "online",
     });
     expect(result.success).toBe(true);
+  });
+});
+
+describe("permanentDeleteProductSchema", () => {
+  it("accepts confirmSku", () => {
+    const result = permanentDeleteProductSchema.safeParse({ confirmSku: "SKU-001" });
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.confirmSku).toBe("SKU-001");
+  });
+
+  it("rejects empty confirmSku", () => {
+    const result = permanentDeleteProductSchema.safeParse({ confirmSku: "" });
+    expect(result.success).toBe(false);
   });
 });

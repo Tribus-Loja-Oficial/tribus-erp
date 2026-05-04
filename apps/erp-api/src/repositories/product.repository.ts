@@ -12,6 +12,21 @@ import {
   lte,
   count,
 } from "drizzle-orm";
+import {
+  orderItems,
+  fiscalDocumentItems,
+  purchaseOrderItems,
+  stockMovements,
+  productVariants,
+  productionOrders,
+  productionOrderConsumptions,
+  productionOrderLosses,
+  billOfMaterials,
+  bomItems,
+  productCompositions,
+  productProductionProfiles,
+  productTagAssignments,
+} from "../db/schema/index.js";
 import type { SQL } from "drizzle-orm";
 import type { AppDb } from "../db/client.js";
 import {
@@ -334,6 +349,91 @@ export function createProductRepository(db: AppDb) {
     async findByIds(ids: string[]): Promise<Product[]> {
       if (ids.length === 0) return [];
       return db.select().from(products).where(inArray(products.id, ids));
+    },
+
+    /**
+     * Apaga o produto e dados “próprios” (cascata). Preserva pedidos/faturas/compras anulando `product_id` onde permitido.
+     */
+    async permanentDeleteCascade(productId: string): Promise<void> {
+      await db.transaction(async (tx) => {
+        const variantRows = await tx
+          .select({ id: productVariants.id })
+          .from(productVariants)
+          .where(eq(productVariants.productId, productId));
+        const variantIds = variantRows.map((r) => r.id);
+
+        const orderItemCond =
+          variantIds.length > 0
+            ? or(eq(orderItems.productId, productId), inArray(orderItems.variantId, variantIds))!
+            : eq(orderItems.productId, productId);
+        await tx.update(orderItems).set({ productId: null, variantId: null }).where(orderItemCond);
+
+        await tx
+          .update(fiscalDocumentItems)
+          .set({ productId: null })
+          .where(eq(fiscalDocumentItems.productId, productId));
+
+        await tx
+          .update(purchaseOrderItems)
+          .set({ productId: null })
+          .where(eq(purchaseOrderItems.productId, productId));
+
+        const smCond =
+          variantIds.length > 0
+            ? or(
+                eq(stockMovements.productId, productId),
+                inArray(stockMovements.variantId, variantIds),
+              )!
+            : eq(stockMovements.productId, productId);
+        await tx.delete(stockMovements).where(smCond);
+
+        const poRows = await tx
+          .select({ id: productionOrders.id })
+          .from(productionOrders)
+          .where(eq(productionOrders.productId, productId));
+        const productionOrderIds = poRows.map((r) => r.id);
+        if (productionOrderIds.length > 0) {
+          await tx
+            .delete(productionOrderConsumptions)
+            .where(inArray(productionOrderConsumptions.productionOrderId, productionOrderIds));
+          await tx
+            .delete(productionOrderLosses)
+            .where(inArray(productionOrderLosses.productionOrderId, productionOrderIds));
+        }
+        await tx.delete(productionOrders).where(eq(productionOrders.productId, productId));
+
+        const bomRows = await tx
+          .select({ id: billOfMaterials.id })
+          .from(billOfMaterials)
+          .where(eq(billOfMaterials.productId, productId));
+        const bomIds = bomRows.map((r) => r.id);
+        if (bomIds.length > 0) {
+          await tx.delete(bomItems).where(inArray(bomItems.bomId, bomIds));
+          await tx.delete(billOfMaterials).where(inArray(billOfMaterials.id, bomIds));
+        }
+        await tx.delete(bomItems).where(eq(bomItems.componentProductId, productId));
+
+        await tx
+          .delete(productCompositions)
+          .where(
+            or(
+              eq(productCompositions.parentProductId, productId),
+              eq(productCompositions.childProductId, productId),
+            )!,
+          );
+
+        await tx
+          .delete(productProductionProfiles)
+          .where(eq(productProductionProfiles.productId, productId));
+
+        await tx
+          .delete(productTagAssignments)
+          .where(eq(productTagAssignments.productId, productId));
+
+        await tx.delete(productVariants).where(eq(productVariants.productId, productId));
+
+        await tx.delete(products).where(eq(products.id, productId));
+      });
     },
   };
 }

@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { formatCurrency } from "@/lib/utils";
 import {
   DEFAULT_PRODUCT_LIST_LIMIT,
@@ -14,6 +14,7 @@ import {
 import {
   archiveProductAction,
   archiveProductsBulkAction,
+  permanentDeleteProductAction,
   restoreProductAction,
   restoreProductsBulkAction,
 } from "@/server/product-list-actions";
@@ -138,6 +139,7 @@ export function ProductsListing({
     | null
     | { type: "archive-one"; id: string; name: string }
     | { type: "restore-one"; id: string; name: string }
+    | { type: "permanent-delete"; id: string; name: string; sku: string }
     | { type: "archive-bulk" }
     | { type: "restore-bulk" }
   >(null);
@@ -218,6 +220,26 @@ export function ProductsListing({
         setModal(null);
         setSelected(new Set());
         setNotice({ type: "ok", text: "Produto restaurado com sucesso." });
+        router.refresh();
+      } catch (e) {
+        setNotice({
+          type: "err",
+          text:
+            e instanceof Error ? e.message : "Não foi possível concluir a ação. Tente novamente.",
+        });
+      }
+    });
+  }
+
+  async function runPermanentDelete(confirmSku: string) {
+    if (!modal || modal.type !== "permanent-delete") return;
+    setNotice(null);
+    startTransition(async () => {
+      try {
+        await permanentDeleteProductAction(modal.id, confirmSku);
+        setModal(null);
+        setSelected(new Set());
+        setNotice({ type: "ok", text: "Produto eliminado permanentemente." });
         router.refresh();
       } catch (e) {
         setNotice({
@@ -527,15 +549,31 @@ export function ProductsListing({
                           Editar
                         </Link>
                         {isArchivedView ? (
-                          <button
-                            type="button"
-                            className="text-xs text-emerald-700 underline hover:text-emerald-900"
-                            onClick={() =>
-                              setModal({ type: "restore-one", id: p.id, name: p.name })
-                            }
-                          >
-                            Restaurar
-                          </button>
+                          <>
+                            <button
+                              type="button"
+                              className="text-xs text-emerald-700 underline hover:text-emerald-900"
+                              onClick={() =>
+                                setModal({ type: "restore-one", id: p.id, name: p.name })
+                              }
+                            >
+                              Restaurar
+                            </button>
+                            <button
+                              type="button"
+                              className="text-xs text-red-700 underline hover:text-red-900"
+                              onClick={() =>
+                                setModal({
+                                  type: "permanent-delete",
+                                  id: p.id,
+                                  name: p.name,
+                                  sku: p.sku,
+                                })
+                              }
+                            >
+                              Eliminar para sempre
+                            </button>
+                          </>
                         ) : (
                           <button
                             type="button"
@@ -624,6 +662,15 @@ export function ProductsListing({
           pending={pending}
         />
       )}
+      {modal?.type === "permanent-delete" && (
+        <PermanentDeleteModal
+          productName={modal.name}
+          sku={modal.sku}
+          pending={pending}
+          onCancel={() => setModal(null)}
+          onConfirm={runPermanentDelete}
+        />
+      )}
       {modal?.type === "archive-bulk" && (
         <ConfirmModal
           title="Arquivar produtos selecionados?"
@@ -697,6 +744,75 @@ function ConfirmModal({
             className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
           >
             {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PermanentDeleteModal({
+  productName,
+  sku,
+  pending,
+  onCancel,
+  onConfirm,
+}: {
+  productName: string;
+  sku: string;
+  pending: boolean;
+  onCancel: () => void;
+  onConfirm: (confirmSku: string) => void;
+}) {
+  const [value, setValue] = useState("");
+  useEffect(() => {
+    setValue("");
+  }, [sku, productName]);
+
+  const canSubmit = value.trim() === sku.trim() && sku.length > 0;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="max-w-md rounded-xl border border-red-200 bg-white p-6 shadow-lg">
+        <h3 className="text-lg font-semibold text-red-900">Eliminar permanentemente?</h3>
+        <div className="mt-3 space-y-3 text-sm text-zinc-700">
+          <p>
+            Esta ação remove o produto da base de dados, movimentos e ordens de produção associados,
+            e apaga as imagens no armazenamento. Linhas de pedidos e documentos fiscais antigos
+            mantêm valores, mas deixam de referenciar este produto.
+          </p>
+          <p className="font-medium text-zinc-900">{productName}</p>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-zinc-600">
+              Escreva o SKU para confirmar: <code className="rounded bg-zinc-100 px-1">{sku}</code>
+            </span>
+            <input
+              type="text"
+              autoComplete="off"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              disabled={pending}
+              className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm disabled:opacity-50"
+              placeholder={sku}
+            />
+          </label>
+        </div>
+        <div className="mt-6 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={pending}
+            className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-50 disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={() => onConfirm(value)}
+            disabled={pending || !canSubmit}
+            className="rounded-md bg-red-700 px-4 py-2 text-sm font-medium text-white hover:bg-red-800 disabled:opacity-50"
+          >
+            Eliminar para sempre
           </button>
         </div>
       </div>

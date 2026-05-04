@@ -63,18 +63,19 @@ Gerencia o catálogo de produtos, variantes, categorias e coleções.
 
 ## Rotas
 
-| Método   | Path                     | Descrição                           |
-| -------- | ------------------------ | ----------------------------------- |
-| `GET`    | `/products`              | Lista produtos (paginação, filtros) |
-| `POST`   | `/products`              | Cria produto                        |
-| `GET`    | `/products/low-stock`    | Produtos abaixo do estoque mínimo   |
-| `GET`    | `/products/categories`   | Lista categorias                    |
-| `POST`   | `/products/categories`   | Cria categoria                      |
-| `GET`    | `/products/collections`  | Lista coleções                      |
-| `GET`    | `/products/:id`          | Retorna produto com variantes       |
-| `PATCH`  | `/products/:id`          | Atualiza produto                    |
-| `DELETE` | `/products/:id`          | Arquiva produto (soft delete)       |
-| `POST`   | `/products/:id/variants` | Adiciona variante                   |
+| Método   | Path                             | Descrição                                              |
+| -------- | -------------------------------- | ------------------------------------------------------ |
+| `GET`    | `/products`                      | Lista produtos (paginação, filtros)                    |
+| `POST`   | `/products`                      | Cria produto                                           |
+| `GET`    | `/products/low-stock`            | Produtos abaixo do estoque mínimo                      |
+| `GET`    | `/products/categories`           | Lista categorias                                       |
+| `POST`   | `/products/categories`           | Cria categoria                                         |
+| `GET`    | `/products/collections`          | Lista coleções                                         |
+| `GET`    | `/products/:id`                  | Retorna produto com variantes                          |
+| `PATCH`  | `/products/:id`                  | Atualiza produto                                       |
+| `DELETE` | `/products/:id`                  | Arquiva produto (soft delete)                          |
+| `POST`   | `/products/:id/permanent-delete` | Eliminação permanente (BD + R2); body `{ confirmSku }` |
+| `POST`   | `/products/:id/variants`         | Adiciona variante                                      |
 
 ---
 
@@ -84,6 +85,7 @@ Gerencia o catálogo de produtos, variantes, categorias e coleções.
 - **`sku` único**: se fornecido, não pode colidir com outro produto ou variante.
 - **`currentStock` nunca alterado diretamente** — sempre via `stock_movements`. O inventory service atualiza o campo após registrar o movimento.
 - **Soft delete via `archivedAt`**: produtos arquivados não aparecem em listas mas mantêm histórico de movimentos e itens de pedido.
+- **`POST /products/:id/permanent-delete`**: remove o produto, dados operacionais ligados (movimentos, variantes, composições, OPs de produção deste produto, etc.), limpa imagens em R2 e linhas em `document_files`. Em pedidos, faturas e linhas de compra preserva totais anulando `product_id` onde o modelo permite. Exige `confirmSku` igual ao SKU do produto.
 - **Alerta de low stock**: `GET /products/low-stock` retorna produtos onde `currentStock <= minStock`.
 
 ---
@@ -92,4 +94,4 @@ Gerencia o catálogo de produtos, variantes, categorias e coleções.
 
 `src/services/product.service.ts` — `createProductService(db)`
 
-Métodos: `create`, `findById`, `findMany`, `findLowStock`, `update`, `archive`, `createCategory`, `createCollection`, `findCategories`, `findCollections`, `createVariant`.
+Métodos: `create`, `findById`, `findMany`, `findLowStock`, `update`, `archive`, `restoreProduct`, `permanentDelete`, `createCategory`, `createCollection`, `findCategories`, `findCollections`, `createVariant`.

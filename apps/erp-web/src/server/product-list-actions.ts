@@ -30,3 +30,12 @@ export async function restoreProductsBulkAction(ids: string[]) {
   });
   revalidatePath("/products");
 }
+
+export async function permanentDeleteProductAction(id: string, confirmSku: string) {
+  await erpApiFetch({
+    method: "POST",
+    path: `/products/${id}/permanent-delete`,
+    body: { confirmSku: confirmSku.trim() },
+  });
+  revalidatePath("/products");
+}

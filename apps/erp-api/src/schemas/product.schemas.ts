@@ -181,6 +181,11 @@ export const listProductsSchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(20),
 });
 
+export const permanentDeleteProductSchema = z.object({
+  /** Deve corresponder exatamente ao SKU do produto a eliminar. */
+  confirmSku: z.string().min(1).max(100),
+});
+
 export const bulkProductIdsSchema = z.object({
   ids: z.array(z.string().min(1)).min(1).max(100),
 });
@@ -194,3 +199,4 @@ export type CreateProductCompositionInput = z.infer<typeof createProductComposit
 export type UpdateProductCompositionInput = z.infer<typeof updateProductCompositionSchema>;
 export type ListProductsInput = z.infer<typeof listProductsSchema>;
 export type BulkProductIdsInput = z.infer<typeof bulkProductIdsSchema>;
+export type PermanentDeleteProductInput = z.infer<typeof permanentDeleteProductSchema>;
