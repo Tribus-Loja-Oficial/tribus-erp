@@ -11,6 +11,7 @@ import {
   productListQueryToApiParams,
   type ProductListQuery,
 } from "@/lib/products-list-query";
+import { ProductQuickEditModal } from "@/components/products/product-quick-edit-modal";
 import {
   archiveProductAction,
   archiveProductsBulkAction,
@@ -133,6 +134,8 @@ export function ProductsListing({
   );
 
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [openRowActionsId, setOpenRowActionsId] = useState<string | null>(null);
+  const [quickEdit, setQuickEdit] = useState<{ id: string; name: string } | null>(null);
   const [notice, setNotice] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
   const [modal, setModal] = useState<
@@ -145,6 +148,22 @@ export function ProductsListing({
   >(null);
 
   const isArchivedView = qp.status === "archived";
+
+  useEffect(() => {
+    if (openRowActionsId == null) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const el = document.getElementById(`product-row-actions-${openRowActionsId}`);
+      if (el && !el.contains(e.target as Node)) setOpenRowActionsId(null);
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+  }, [openRowActionsId]);
+
+  const searchParamsKey = searchParams.toString();
+  useEffect(() => {
+    setOpenRowActionsId(null);
+    setQuickEdit(null);
+  }, [searchParamsKey]);
 
   const replaceQuery = useCallback(
     (patch: Partial<ProductListQuery>) => {
@@ -340,55 +359,29 @@ export function ProductsListing({
         </div>
         <div>
           <label className="mb-1 block text-xs font-medium text-zinc-600">Status</label>
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
-              value={qp.status ?? ""}
-              onChange={(e) => {
-                const v = e.target.value || undefined;
-                if (v === "archived") {
-                  replaceQuery({
-                    status: "archived",
-                    page: 1,
-                    stockFilter: undefined,
-                    channel: undefined,
-                  });
-                } else {
-                  replaceQuery({ status: v, page: 1 });
-                }
-              }}
-            >
-              {STATUSES.map((o) => (
-                <option key={o.value || "all-s"} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-            {isArchivedView ? (
-              <button
-                type="button"
-                onClick={() => replaceQuery({ status: undefined, page: 1 })}
-                className="text-xs font-medium whitespace-nowrap text-zinc-700 underline hover:text-zinc-900"
-              >
-                Voltar ao catálogo
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() =>
-                  replaceQuery({
-                    status: "archived",
-                    page: 1,
-                    stockFilter: undefined,
-                    channel: undefined,
-                  })
-                }
-                className="text-xs font-medium whitespace-nowrap text-zinc-700 underline hover:text-zinc-900"
-              >
-                Ver arquivados (apagar definitivo)
-              </button>
-            )}
-          </div>
+          <select
+            className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
+            value={qp.status ?? ""}
+            onChange={(e) => {
+              const v = e.target.value || undefined;
+              if (v === "archived") {
+                replaceQuery({
+                  status: "archived",
+                  page: 1,
+                  stockFilter: undefined,
+                  channel: undefined,
+                });
+              } else {
+                replaceQuery({ status: v, page: 1 });
+              }
+            }}
+          >
+            {STATUSES.map((o) => (
+              <option key={o.value || "all-s"} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
         </div>
         <div>
           <label className="mb-1 block text-xs font-medium text-zinc-600">Estoque</label>
@@ -472,7 +465,7 @@ export function ProductsListing({
         </div>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
+      <div className="overflow-visible rounded-xl border border-zinc-200 bg-white shadow-sm">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold tracking-wide text-zinc-500 uppercase">
             <tr>
@@ -541,7 +534,39 @@ export function ProductsListing({
                       />
                     </td>
                     <td className="px-3 py-3 font-mono text-xs">{p.sku}</td>
-                    <td className="px-3 py-3 font-medium text-zinc-900">{p.name}</td>
+                    <td className="px-3 py-3">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <button
+                          type="button"
+                          className="shrink-0 rounded-md p-1.5 text-zinc-500 hover:bg-zinc-200/80 hover:text-zinc-900"
+                          title="Editar em popup"
+                          aria-label={`Editar ${p.name} em popup`}
+                          onClick={() => setQuickEdit({ id: p.id, name: p.name })}
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth={1.75}
+                            className="h-4 w-4"
+                            aria-hidden
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"
+                            />
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                            />
+                          </svg>
+                        </button>
+                        <span className="min-w-0 truncate font-medium text-zinc-900">{p.name}</span>
+                      </div>
+                    </td>
                     <td className="max-w-[140px] truncate px-3 py-3 text-xs text-zinc-600">
                       {typeLabel(p.productType)}
                     </td>
@@ -572,73 +597,112 @@ export function ProductsListing({
                           })
                         : "—"}
                     </td>
-                    <td className="px-3 py-3 text-right">
-                      <div className="flex flex-wrap justify-end gap-2">
-                        <Link
-                          href={`/products/${p.id}`}
-                          className="text-xs text-zinc-600 underline hover:text-zinc-900"
+                    <td className="relative px-3 py-3 text-right">
+                      <div
+                        id={`product-row-actions-${p.id}`}
+                        className="relative inline-flex flex-col items-end"
+                      >
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 rounded-md border border-zinc-300 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-800 shadow-sm hover:bg-zinc-50"
+                          aria-expanded={openRowActionsId === p.id}
+                          aria-haspopup="menu"
+                          aria-controls={`product-row-actions-menu-${p.id}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenRowActionsId((cur) => (cur === p.id ? null : p.id));
+                          }}
                         >
-                          Ver
-                        </Link>
-                        <Link
-                          href={`/products/${p.id}`}
-                          className="text-xs text-zinc-600 underline hover:text-zinc-900"
-                        >
-                          Editar
-                        </Link>
-                        {isArchivedView ? (
-                          <>
-                            <button
-                              type="button"
-                              className="text-xs text-emerald-700 underline hover:text-emerald-900"
-                              onClick={() =>
-                                setModal({ type: "restore-one", id: p.id, name: p.name })
-                              }
+                          Ações
+                          <span className="text-zinc-500" aria-hidden>
+                            ▾
+                          </span>
+                        </button>
+                        {openRowActionsId === p.id ? (
+                          <div
+                            id={`product-row-actions-menu-${p.id}`}
+                            role="menu"
+                            className="absolute top-full right-0 z-30 mt-1 min-w-[11rem] rounded-md border border-zinc-200 bg-white py-1 text-left shadow-lg"
+                          >
+                            <Link
+                              href={`/products/${p.id}`}
+                              role="menuitem"
+                              className="block px-3 py-2 text-xs text-zinc-800 hover:bg-zinc-50"
+                              onClick={() => setOpenRowActionsId(null)}
                             >
-                              Restaurar
-                            </button>
-                            <button
-                              type="button"
-                              className="text-xs text-red-700 underline hover:text-red-900"
-                              onClick={() =>
-                                setModal({
-                                  type: "permanent-delete",
-                                  id: p.id,
-                                  name: p.name,
-                                  sku: p.sku,
-                                })
-                              }
+                              Ver
+                            </Link>
+                            <Link
+                              href={`/products/${p.id}`}
+                              role="menuitem"
+                              className="block px-3 py-2 text-xs text-zinc-800 hover:bg-zinc-50"
+                              onClick={() => setOpenRowActionsId(null)}
                             >
-                              Apagar definitivamente
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            <button
-                              type="button"
-                              className="text-xs text-amber-800 underline hover:text-amber-950"
-                              onClick={() =>
-                                setModal({ type: "archive-one", id: p.id, name: p.name })
-                              }
-                            >
-                              Arquivar
-                            </button>
-                            <button
-                              type="button"
-                              className="text-xs text-red-700 underline hover:text-red-900"
-                              onClick={() =>
-                                setModal({
-                                  type: "permanent-delete",
-                                  id: p.id,
-                                  name: p.name,
-                                  sku: p.sku,
-                                })
-                              }
-                            >
-                              Apagar definitivamente
-                            </button>
-                          </>
-                        )}
+                              Editar
+                            </Link>
+                            {isArchivedView ? (
+                              <>
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  className="block w-full px-3 py-2 text-left text-xs text-emerald-800 hover:bg-emerald-50"
+                                  onClick={() => {
+                                    setOpenRowActionsId(null);
+                                    setModal({ type: "restore-one", id: p.id, name: p.name });
+                                  }}
+                                >
+                                  Restaurar
+                                </button>
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  className="block w-full px-3 py-2 text-left text-xs text-red-700 hover:bg-red-50"
+                                  onClick={() => {
+                                    setOpenRowActionsId(null);
+                                    setModal({
+                                      type: "permanent-delete",
+                                      id: p.id,
+                                      name: p.name,
+                                      sku: p.sku,
+                                    });
+                                  }}
+                                >
+                                  Apagar definitivamente
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  className="block w-full px-3 py-2 text-left text-xs text-amber-900 hover:bg-amber-50"
+                                  onClick={() => {
+                                    setOpenRowActionsId(null);
+                                    setModal({ type: "archive-one", id: p.id, name: p.name });
+                                  }}
+                                >
+                                  Arquivar
+                                </button>
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  className="block w-full px-3 py-2 text-left text-xs text-red-700 hover:bg-red-50"
+                                  onClick={() => {
+                                    setOpenRowActionsId(null);
+                                    setModal({
+                                      type: "permanent-delete",
+                                      id: p.id,
+                                      name: p.name,
+                                      sku: p.sku,
+                                    });
+                                  }}
+                                >
+                                  Apagar definitivamente
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        ) : null}
                       </div>
                     </td>
                   </tr>
@@ -758,6 +822,12 @@ export function ProductsListing({
           pending={pending}
         />
       )}
+
+      <ProductQuickEditModal
+        productId={quickEdit?.id ?? null}
+        productLabel={quickEdit?.name}
+        onClose={() => setQuickEdit(null)}
+      />
     </div>
   );
 }

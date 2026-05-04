@@ -193,6 +193,9 @@ interface ProductOperationalFormProps {
   collections: SelectOption[];
   locations: SelectOption[];
   initialAuditLogs?: ProductAuditLogRow[];
+  /** Quando true: layout compacto, sem breadcrumb; Cancelar / «voltar» chamam `onClose`. */
+  embedded?: boolean;
+  onClose?: () => void;
 }
 
 export function ProductOperationalForm({
@@ -205,6 +208,8 @@ export function ProductOperationalForm({
   collections,
   locations,
   initialAuditLogs = [],
+  embedded = false,
+  onClose,
 }: ProductOperationalFormProps) {
   const router = useRouter();
   const [tab, setTab] = useState<TabId>("general");
@@ -493,14 +498,19 @@ export function ProductOperationalForm({
         if (mode === "new") {
           const id = await createProductOperationalAction(payload);
           setSuccess("Produto criado.");
-          if (navigateAfter === "list") router.push("/products");
-          else router.push(`/products/${id}`);
+          if (navigateAfter === "list") {
+            if (embedded && onClose) onClose();
+            else router.push("/products");
+          } else router.push(`/products/${id}`);
           router.refresh();
         } else if (productId) {
           await updateProductOperationalAction(productId, payload);
           setSuccess("Alterações salvas.");
           router.refresh();
-          if (navigateAfter === "list") router.push("/products");
+          if (navigateAfter === "list") {
+            if (embedded && onClose) onClose();
+            else router.push("/products");
+          }
         }
       } catch (e) {
         setError(e instanceof Error ? e.message : "Erro ao salvar");
@@ -670,14 +680,24 @@ export function ProductOperationalForm({
       : null;
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6 lg:px-8">
-      <nav className="mb-2 text-sm text-zinc-500">
-        <Link href="/products" className="hover:text-zinc-800">
-          Produtos
-        </Link>
-        <span className="mx-2">/</span>
-        <span className="text-zinc-800">{mode === "new" ? "Novo produto" : sku || "Editar"}</span>
-      </nav>
+    <div
+      className={
+        embedded ? "mx-0 max-w-none px-3 py-4 sm:px-4" : "mx-auto max-w-7xl px-4 py-6 lg:px-8"
+      }
+    >
+      {!embedded ? (
+        <nav className="mb-2 text-sm text-zinc-500">
+          <Link href="/products" className="hover:text-zinc-800">
+            Produtos
+          </Link>
+          <span className="mx-2">/</span>
+          <span className="text-zinc-800">{mode === "new" ? "Novo produto" : sku || "Editar"}</span>
+        </nav>
+      ) : (
+        <p className="mb-2 text-xs font-medium tracking-wide text-zinc-500 uppercase">
+          Edição rápida (popup)
+        </p>
+      )}
 
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -703,14 +723,24 @@ export function ProductOperationalForm({
             onClick={() => save("list")}
             className="rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-50 disabled:opacity-50"
           >
-            Salvar e voltar
+            {embedded ? "Salvar e fechar" : "Salvar e voltar"}
           </button>
-          <Link
-            href="/products"
-            className="rounded-md px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-100"
-          >
-            Cancelar
-          </Link>
+          {embedded && onClose ? (
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-md px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-100"
+            >
+              Fechar
+            </button>
+          ) : (
+            <Link
+              href="/products"
+              className="rounded-md px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-100"
+            >
+              Cancelar
+            </Link>
+          )}
         </div>
       </div>
 
