@@ -39,3 +39,17 @@ export async function permanentDeleteProductAction(id: string, confirmSku: strin
   });
   revalidatePath("/products");
 }
+
+/** Uma chamada à API por produto (cada uma exige confirmSku correcto). */
+export async function permanentDeleteProductsBulkAction(
+  items: { id: string; confirmSku: string }[],
+) {
+  for (const item of items) {
+    await erpApiFetch({
+      method: "POST",
+      path: `/products/${item.id}/permanent-delete`,
+      body: { confirmSku: item.confirmSku.trim() },
+    });
+  }
+  revalidatePath("/products");
+}
