@@ -2,7 +2,16 @@
 
 import { useCallback, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { AlertCircle, CheckCircle2, FileJson2, Loader2, WandSparkles, X } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  ChevronDown,
+  FileJson2,
+  Loader2,
+  Package,
+  WandSparkles,
+  X,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   executeIngestionAction,
@@ -10,10 +19,14 @@ import {
   type IngestionExecuteResponse,
   type IngestionValidationResponse,
 } from "@/server/ingestion-actions";
+import { INGESTION_TEMPLATES } from "@/features/ingestion/lib/ingestion-templates";
+import { IngestionFieldReferencePanel } from "@/features/ingestion/components/ingestion-field-reference-panel";
+import { INGESTION_TYPE_LABELS_UI } from "@/features/ingestion/lib/ingestion-field-reference";
+import { ingestionSupportedTypesFooter } from "@/features/ingestion/lib/ingestion-field-reference";
 
 type Step = "edit" | "validated" | "result";
 
-const DEFAULT_PAYLOAD = `{
+export const INGESTION_DEFAULT_JSON = `{
   "version": "1.0",
   "mode": "create",
   "objects": [
@@ -40,262 +53,413 @@ function formatJson(text: string): string {
   }
 }
 
-export function IngestionModal() {
-  const [open, setOpen] = useState(false);
-  const [jsonText, setJsonText] = useState(DEFAULT_PAYLOAD);
+function parseJsonSafe(text: string): { ok: boolean; error: string | null } {
+  if (!text.trim()) return { ok: false, error: null };
+  try {
+    JSON.parse(text);
+    return { ok: true, error: null };
+  } catch (e) {
+    return { ok: false, error: e instanceof SyntaxError ? e.message : "JSON inválido" };
+  }
+}
+
+function ValidationPanel({ result }: { result: IngestionValidationResponse["data"] }) {
+  return (
+    <div className="flex h-full flex-col gap-3">
+      <div
+        className={cn(
+          "flex items-center gap-3 rounded-lg border px-3 py-2.5",
+          result.valid ? "border-emerald-200 bg-emerald-50/60" : "border-red-200 bg-red-50/60",
+        )}
+      >
+        {result.valid ? (
+          <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" />
+        ) : (
+          <AlertCircle className="h-5 w-5 shrink-0 text-red-600" />
+        )}
+        <div>
+          <p className="text-sm font-medium text-zinc-900">
+            {result.valid ? "Payload válido" : "Corrija os erros"}
+          </p>
+          <p className="text-xs text-zinc-600">
+            {result.summary.total} objeto(s) · tipos:{" "}
+            {Object.entries(result.summary.byType)
+              .map(([k, n]) => {
+                const label =
+                  INGESTION_TYPE_LABELS_UI[k as keyof typeof INGESTION_TYPE_LABELS_UI] ?? k;
+                return `${label} (${n})`;
+              })
+              .join(", ")}
+          </p>
+        </div>
+      </div>
+      {result.errors.length > 0 && (
+        <ul className="max-h-48 space-y-1.5 overflow-y-auto text-xs text-red-800">
+          {result.errors.map((err, i) => (
+            <li key={i} className="rounded border border-red-100 bg-white/80 px-2 py-1.5">
+              {err.objectIndex != null ? `Objeto #${err.objectIndex + 1} ` : ""}
+              {err.message}
+              {err.field ? (
+                <span className="mt-0.5 block font-mono text-[10px] text-red-600">{err.field}</span>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+      {result.warnings.length > 0 && (
+        <ul className="space-y-1 text-xs text-amber-900">
+          {result.warnings.map((w, i) => (
+            <li key={i}>{w.message}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function ResultPanel({ result }: { result: IngestionExecuteResponse["data"] }) {
+  const ok = result.failed === 0;
+  const totalFail = result.created === 0;
+  return (
+    <div className="flex h-full flex-col gap-3">
+      <div
+        className={cn(
+          "flex items-center gap-3 rounded-lg border px-3 py-2.5",
+          ok && "border-emerald-200 bg-emerald-50/60",
+          !ok && !totalFail && "border-amber-200 bg-amber-50/50",
+          totalFail && result.failed > 0 && "border-red-200 bg-red-50/60",
+        )}
+      >
+        {ok ? (
+          <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" />
+        ) : (
+          <AlertCircle className="h-5 w-5 shrink-0 text-amber-600" />
+        )}
+        <div>
+          <p className="text-sm font-medium text-zinc-900">
+            {ok ? "Ingestão concluída" : totalFail ? "Nenhum objeto criado" : "Ingestão parcial"}
+          </p>
+          <p className="text-xs text-zinc-600">
+            {result.created} criado(s), {result.failed} falha(s)
+          </p>
+        </div>
+      </div>
+      <ul className="max-h-[min(40vh,320px)] space-y-1.5 overflow-y-auto text-xs">
+        {result.items.map((item) => (
+          <li
+            key={item.index}
+            className={cn(
+              "rounded-md border px-2 py-1.5",
+              item.status === "created"
+                ? "border-emerald-200 bg-emerald-50/50"
+                : "border-red-200 bg-red-50/50",
+            )}
+          >
+            <span className="font-mono text-zinc-500">[{item.index}]</span>{" "}
+            {INGESTION_TYPE_LABELS_UI[item.type as keyof typeof INGESTION_TYPE_LABELS_UI] ??
+              item.type}{" "}
+            {item.clientRef ? (
+              <span className="font-mono text-[10px] text-zinc-500"> ref:{item.clientRef}</span>
+            ) : null}
+            {item.status === "created" ? (
+              <span className="block font-mono text-emerald-800">ID: {item.id}</span>
+            ) : (
+              <span className="block text-red-800">{item.error}</span>
+            )}
+            {item.warnings?.map((w, j) => (
+              <div key={j} className="text-amber-800">
+                {w}
+              </div>
+            ))}
+          </li>
+        ))}
+      </ul>
+      {Object.keys(result.refMap).length > 0 && (
+        <pre className="max-h-32 overflow-auto rounded bg-zinc-900 p-2 font-mono text-[10px] text-zinc-100">
+          {JSON.stringify(result.refMap, null, 2)}
+        </pre>
+      )}
+    </div>
+  );
+}
+
+interface IngestionModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+export function IngestionModal({ open, onOpenChange }: IngestionModalProps) {
+  const [jsonText, setJsonText] = useState(INGESTION_DEFAULT_JSON);
+  const [parseError, setParseError] = useState<string | null>(null);
   const [step, setStep] = useState<Step>("edit");
   const [validation, setValidation] = useState<IngestionValidationResponse["data"] | null>(null);
   const [executeResult, setExecuteResult] = useState<IngestionExecuteResponse["data"] | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [templateOpen, setTemplateOpen] = useState(false);
+  const [validatePending, setValidatePending] = useState(false);
+  const [executePending, setExecutePending] = useState(false);
 
-  const reset = useCallback(() => {
+  const resetState = useCallback(() => {
+    setJsonText(INGESTION_DEFAULT_JSON);
+    setParseError(null);
     setStep("edit");
     setValidation(null);
     setExecuteResult(null);
-    setError(null);
-    setJsonText(DEFAULT_PAYLOAD);
+    setTemplateOpen(false);
   }, []);
 
-  const handleOpenChange = (next: boolean) => {
-    setOpen(next);
-    if (!next) {
-      reset();
+  const handleOpenChange = useCallback(
+    (next: boolean) => {
+      onOpenChange(next);
+      if (!next) {
+        setTimeout(() => resetState(), 200);
+      }
+    },
+    [onOpenChange, resetState],
+  );
+
+  const handleJsonChange = useCallback(
+    (text: string) => {
+      setJsonText(text);
+      if (text.trim()) {
+        const { error } = parseJsonSafe(text);
+        setParseError(error);
+      } else {
+        setParseError(null);
+      }
+      if (step !== "edit") setStep("edit");
+    },
+    [step],
+  );
+
+  const runValidate = async () => {
+    setParseError(null);
+    const { ok, error } = parseJsonSafe(jsonText);
+    if (!ok) {
+      setParseError(error ?? "JSON inválido");
+      return;
     }
-  };
-
-  const parseBody = (): unknown => {
-    const trimmed = jsonText.trim();
-    if (!trimmed) throw new Error("Introduza um JSON.");
-    return JSON.parse(trimmed) as unknown;
-  };
-
-  const handleValidate = async () => {
-    setError(null);
-    setBusy(true);
+    setValidatePending(true);
     try {
-      const body = parseBody();
-      const res = await validateIngestionAction(body);
+      const payload = JSON.parse(jsonText) as unknown;
+      const res = await validateIngestionAction(payload);
       setValidation(res.data);
       setStep("validated");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erro ao validar");
-      setStep("edit");
+      setParseError(e instanceof Error ? e.message : "Erro ao validar");
     } finally {
-      setBusy(false);
+      setValidatePending(false);
     }
   };
 
-  const handleExecute = async () => {
-    setError(null);
-    setBusy(true);
+  const runExecute = async () => {
+    setParseError(null);
+    setExecutePending(true);
     try {
-      const body = parseBody();
-      const res = await executeIngestionAction(body);
+      const payload = JSON.parse(jsonText) as unknown;
+      const res = await executeIngestionAction(payload);
       setExecuteResult(res.data);
       setStep("result");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erro ao executar");
+      setParseError(e instanceof Error ? e.message : "Erro ao executar");
     } finally {
-      setBusy(false);
+      setExecutePending(false);
     }
   };
 
+  const jsonOk = !!jsonText.trim() && !parseError;
+  const canValidate = jsonOk && step !== "result";
+  const canExecute = step === "validated" && validation?.valid && !executePending;
+
+  const rightTitle =
+    step === "result" ? "Resultado" : step === "validated" ? "Validação" : "Referência";
+
   return (
     <Dialog.Root open={open} onOpenChange={handleOpenChange}>
-      <Dialog.Trigger asChild>
-        <button
-          type="button"
-          className={cn(
-            "flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm font-medium text-zinc-600 transition-colors",
-            "hover:bg-zinc-50 hover:text-zinc-900",
-          )}
-        >
-          <FileJson2 className="h-4 w-4 shrink-0" />
-          Ingestão JSON
-        </button>
-      </Dialog.Trigger>
       <Dialog.Portal>
-        <Dialog.Overlay className="data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-zinc-950/40" />
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-zinc-950/35 backdrop-blur-[2px]" />
         <Dialog.Content
           className={cn(
-            "fixed top-1/2 left-1/2 z-50 flex max-h-[90vh] w-[min(100vw-2rem,720px)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-xl border border-zinc-200 bg-white shadow-lg",
-            "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
+            "fixed top-1/2 left-1/2 z-50 flex h-[min(90vh,720px)] w-[min(92vw,1080px)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-xl",
           )}
         >
-          <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3">
-            <div className="flex items-center gap-2">
-              <WandSparkles className="h-5 w-5 text-violet-600" />
-              <Dialog.Title className="text-base font-semibold text-zinc-900">
-                Ingestão estruturada
-              </Dialog.Title>
+          <Dialog.Title className="sr-only">Ingestão estruturada</Dialog.Title>
+          <div className="flex shrink-0 items-center gap-3 border-b border-zinc-200 px-4 py-3 sm:px-5">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-100">
+              <Package className="h-4 w-4 text-violet-700" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-zinc-900">Nova ingestão</p>
+              <p className="truncate text-xs text-zinc-500">
+                JSON validado na API (Worker); campos em camelCase; refs com sufixo Ref
+              </p>
+            </div>
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setTemplateOpen((x) => !x)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
+              >
+                <WandSparkles className="h-3.5 w-3.5" />
+                Templates
+                <ChevronDown className="h-3.5 w-3.5" />
+              </button>
+              {templateOpen && (
+                <div className="absolute top-full right-0 z-20 mt-1 max-h-72 w-72 overflow-y-auto rounded-lg border border-zinc-200 bg-white shadow-lg">
+                  {INGESTION_TEMPLATES.map((tpl) => (
+                    <button
+                      key={tpl.id}
+                      type="button"
+                      onClick={() => {
+                        setJsonText(JSON.stringify(tpl.payload, null, 2));
+                        setParseError(null);
+                        setStep("edit");
+                        setValidation(null);
+                        setTemplateOpen(false);
+                      }}
+                      className="flex w-full flex-col gap-0.5 border-b border-zinc-100 px-3 py-2.5 text-left last:border-0 hover:bg-zinc-50"
+                    >
+                      <span className="text-xs font-medium text-zinc-900">{tpl.label}</span>
+                      <span className="text-[11px] text-zinc-500">{tpl.description}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             <Dialog.Close
-              className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"
+              className="rounded-md p-2 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"
               aria-label="Fechar"
             >
               <X className="h-4 w-4" />
             </Dialog.Close>
           </div>
 
-          <Dialog.Description className="sr-only">
-            Cole um payload JSON com version 1.0, mode create e objects. Valide antes de executar.
-          </Dialog.Description>
-
-          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-4">
-            {step !== "result" && (
-              <div className="flex min-h-0 flex-1 flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-zinc-500">Payload JSON</span>
-                  <button
-                    type="button"
-                    className="text-xs font-medium text-violet-700 hover:underline"
-                    onClick={() => setJsonText((t) => formatJson(t))}
-                  >
-                    Formatar
-                  </button>
-                </div>
-                <textarea
-                  value={jsonText}
-                  onChange={(e) => setJsonText(e.target.value)}
-                  spellCheck={false}
-                  className="min-h-[220px] flex-1 resize-y rounded-lg border border-zinc-200 bg-zinc-50/80 p-3 font-mono text-xs leading-relaxed text-zinc-900 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 focus:outline-none"
-                  disabled={busy}
-                />
-              </div>
-            )}
-
-            {error && (
-              <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                <span>{error}</span>
-              </div>
-            )}
-
-            {step === "validated" && validation && (
-              <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm">
+          <div className="flex min-h-0 flex-1 overflow-hidden">
+            <div className="flex min-w-0 flex-1 flex-col border-r border-zinc-200">
+              <div className="flex shrink-0 items-center justify-between border-b border-zinc-100 px-3 py-2 sm:px-4">
                 <div className="flex items-center gap-2">
-                  {validation.valid ? (
-                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                  ) : (
-                    <AlertCircle className="h-4 w-4 text-red-600" />
+                  <FileJson2 className="h-3.5 w-3.5 text-zinc-400" />
+                  <span className="text-xs font-medium text-zinc-500">Payload</span>
+                  {parseError && (
+                    <span className="rounded bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-800">
+                      JSON inválido
+                    </span>
                   )}
-                  <span className="font-medium text-zinc-800">
-                    {validation.valid ? "Payload válido" : "Corrija os erros antes de executar"}
-                  </span>
+                  {!parseError && jsonText.trim() && (
+                    <span className="rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-800">
+                      JSON ok
+                    </span>
+                  )}
                 </div>
-                {validation.errors.length > 0 && (
-                  <ul className="mt-2 max-h-32 space-y-1 overflow-y-auto text-xs text-red-700">
-                    {validation.errors.map((err, i) => (
-                      <li key={i}>
-                        {err.objectIndex != null ? `#${err.objectIndex + 1} ` : ""}
-                        {err.message}
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                <button
+                  type="button"
+                  disabled={!jsonText.trim()}
+                  onClick={() => {
+                    setJsonText(formatJson(jsonText));
+                    setParseError(null);
+                  }}
+                  className="text-xs font-medium text-violet-700 hover:underline disabled:opacity-40"
+                >
+                  Formatar
+                </button>
               </div>
-            )}
+              <textarea
+                value={jsonText}
+                onChange={(e) => handleJsonChange(e.target.value)}
+                spellCheck={false}
+                placeholder={`{\n  "version": "1.0",\n  "mode": "create",\n  "objects": []\n}`}
+                className="min-h-0 flex-1 resize-none bg-zinc-50/50 p-3 font-mono text-[13px] leading-relaxed text-zinc-900 focus:outline-none sm:p-4"
+              />
+              {parseError && (
+                <div className="shrink-0 border-t border-red-100 bg-red-50/80 px-3 py-2 sm:px-4">
+                  <p className="font-mono text-[11px] text-red-800">{parseError}</p>
+                </div>
+              )}
+            </div>
 
-            {step === "result" && executeResult && (
-              <div className="max-h-64 space-y-2 overflow-y-auto rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm">
-                <p className="font-medium text-zinc-800">
-                  Concluído: {executeResult.created} criado(s), {executeResult.failed} falha(s) —
-                  total {executeResult.total}
-                </p>
-                <ul className="space-y-2 text-xs">
-                  {executeResult.items.map((item) => (
-                    <li
-                      key={item.index}
-                      className={cn(
-                        "rounded-md border px-2 py-1.5",
-                        item.status === "created"
-                          ? "border-emerald-200 bg-emerald-50/80"
-                          : "border-red-200 bg-red-50/80",
-                      )}
-                    >
-                      <span className="font-mono text-zinc-600">[{item.index}]</span> {item.type}{" "}
-                      {item.status === "created" ? (
-                        <span className="text-emerald-800">→ {item.id}</span>
-                      ) : (
-                        <span className="text-red-800">{item.error}</span>
-                      )}
-                      {item.warnings?.length ? (
-                        <div className="mt-1 text-amber-800">
-                          {item.warnings.map((w, j) => (
-                            <div key={j}>{w}</div>
-                          ))}
-                        </div>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-                {Object.keys(executeResult.refMap).length > 0 && (
-                  <pre className="mt-2 overflow-x-auto rounded bg-zinc-900/90 p-2 font-mono text-[10px] text-zinc-100">
-                    {JSON.stringify(executeResult.refMap, null, 2)}
-                  </pre>
-                )}
+            <div className="flex w-[min(380px,40vw)] shrink-0 flex-col border-l border-zinc-200 bg-zinc-50/30">
+              <div className="shrink-0 border-b border-zinc-100 px-3 py-2">
+                <span className="text-xs font-medium text-zinc-500">{rightTitle}</span>
               </div>
-            )}
+              <div className="min-h-0 flex-1 overflow-y-auto p-3">
+                {step === "edit" && !validation && (
+                  <div className="flex min-h-[260px] flex-col gap-2">
+                    <p className="text-[11px] leading-snug text-zinc-600">
+                      Referência de campos <strong className="text-zinc-900">obrigatórios</strong>,{" "}
+                      <strong className="text-zinc-900">opcionais</strong> e{" "}
+                      <strong className="text-zinc-900">condicionais</strong>. Use um template para
+                      começar.
+                    </p>
+                    <IngestionFieldReferencePanel />
+                  </div>
+                )}
+                {step === "validated" && validation && <ValidationPanel result={validation} />}
+                {step === "result" && executeResult && <ResultPanel result={executeResult} />}
+              </div>
+            </div>
+          </div>
 
-            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-zinc-100 pt-3">
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-zinc-200 px-4 py-3 sm:px-5">
+            <p className="max-w-[min(100%,520px)] text-[11px] leading-snug text-zinc-500">
+              {step === "edit" && <>v1.0 · {ingestionSupportedTypesFooter()}</>}
+              {step === "validated" && validation && (
+                <>
+                  {validation.summary.total} objeto(s) ·{" "}
+                  {validation.errors.length === 0
+                    ? "sem erros"
+                    : `${validation.errors.length} erro(s)`}
+                </>
+              )}
+              {step === "result" && executeResult && (
+                <>
+                  {executeResult.created} criado(s) · {executeResult.failed} falha(s)
+                </>
+              )}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleOpenChange(false)}
+                className="rounded-lg border border-zinc-200 px-3 py-2 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
+              >
+                {step === "result" ? "Fechar" : "Cancelar"}
+              </button>
+              {step !== "result" && (
+                <button
+                  type="button"
+                  disabled={!canValidate || validatePending}
+                  onClick={() => void runValidate()}
+                  className="inline-flex min-w-[88px] items-center justify-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-800 hover:bg-zinc-50 disabled:opacity-50"
+                >
+                  {validatePending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                  Validar
+                </button>
+              )}
+              {step === "validated" && (
+                <button
+                  type="button"
+                  disabled={!canExecute || executePending}
+                  onClick={() => void runExecute()}
+                  className="inline-flex min-w-[100px] items-center justify-center gap-1.5 rounded-lg bg-violet-600 px-3 py-2 text-xs font-medium text-white hover:bg-violet-700 disabled:opacity-50"
+                >
+                  {executePending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Package className="h-3.5 w-3.5" />
+                  )}
+                  Ingerir dados
+                </button>
+              )}
               {step === "result" && (
                 <button
                   type="button"
-                  className="rounded-md border border-zinc-200 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
                   onClick={() => {
                     setStep("edit");
                     setExecuteResult(null);
                     setValidation(null);
                   }}
+                  className="rounded-lg border border-zinc-200 px-3 py-2 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
                 >
                   Novo payload
-                </button>
-              )}
-              {step === "edit" && (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void handleValidate()}
-                  className="inline-flex items-center gap-2 rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
-                >
-                  {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                  Validar
-                </button>
-              )}
-              {step === "validated" && validation?.valid && (
-                <>
-                  <button
-                    type="button"
-                    className="rounded-md border border-zinc-200 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-                    onClick={() => {
-                      setStep("edit");
-                      setValidation(null);
-                    }}
-                  >
-                    Editar
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void handleExecute()}
-                    className="inline-flex items-center gap-2 rounded-md bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"
-                  >
-                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                    Executar
-                  </button>
-                </>
-              )}
-              {step === "validated" && !validation?.valid && (
-                <button
-                  type="button"
-                  className="rounded-md border border-zinc-200 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-                  onClick={() => {
-                    setStep("edit");
-                    setValidation(null);
-                  }}
-                >
-                  Voltar a editar
                 </button>
               )}
             </div>

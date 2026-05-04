@@ -154,9 +154,20 @@ export function createProductService(db: AppDb) {
       return product;
     },
 
-    async findMany(params: ListProductsParams & { page?: number; composeCatalog?: boolean }) {
+    async listProducts(params: ListProductsParams & { page?: number; composeCatalog?: boolean }) {
       const { page = 1, limit = 20, ...rest } = params;
-      return productsRepo.findMany({ ...rest, limit, offset: (page - 1) * limit });
+      const { items, total } = await productsRepo.listPaginated({
+        ...rest,
+        limit,
+        offset: (page - 1) * limit,
+      });
+      return { items, total, page, limit };
+    },
+
+    /** @deprecated Use listProducts (retorna também total). */
+    async findMany(params: ListProductsParams & { page?: number; composeCatalog?: boolean }) {
+      const r = await this.listProducts(params);
+      return r.items;
     },
 
     async findLowStock() {
@@ -301,8 +312,11 @@ export function createProductService(db: AppDb) {
     },
 
     async archive(id: string, actorId?: string) {
-      const existing = await productsRepo.findById(id);
+      const existing = await productsRepo.findByIdIncludingArchived(id);
       if (!existing) throw new NotFoundError("Product", id);
+      if (existing.archivedAt) {
+        throw new ConflictError("Produto já está arquivado.");
+      }
       await productsRepo.archive(id);
       await auditRepo.insert({
         id: generateId(),
@@ -313,6 +327,58 @@ export function createProductService(db: AppDb) {
         entityId: id,
         createdAt: now(),
       });
+    },
+
+    async archiveProducts(ids: string[], actorId?: string) {
+      const archived = await productsRepo.archiveMany(ids);
+      if (archived > 0) {
+        await auditRepo.insert({
+          id: generateId(),
+          actorId: actorId ?? null,
+          actorType: "user",
+          action: "products.bulk_archived",
+          entityType: "product",
+          entityId: ids[0] ?? "bulk",
+          metadataJson: JSON.stringify({ count: archived, sampleIds: ids.slice(0, 20) }),
+          createdAt: now(),
+        });
+      }
+      return { archived };
+    },
+
+    async restoreProduct(id: string, actorId?: string) {
+      const row = await productsRepo.findByIdIncludingArchived(id);
+      if (!row) throw new NotFoundError("Product", id);
+      if (!row.archivedAt) {
+        throw new ConflictError("Produto não está arquivado.");
+      }
+      await productsRepo.restore(id);
+      await auditRepo.insert({
+        id: generateId(),
+        actorId: actorId ?? null,
+        actorType: "user",
+        action: "product.restored",
+        entityType: "product",
+        entityId: id,
+        createdAt: now(),
+      });
+    },
+
+    async restoreProducts(ids: string[], actorId?: string) {
+      const restored = await productsRepo.restoreMany(ids);
+      if (restored > 0) {
+        await auditRepo.insert({
+          id: generateId(),
+          actorId: actorId ?? null,
+          actorType: "user",
+          action: "products.bulk_restored",
+          entityType: "product",
+          entityId: ids[0] ?? "bulk",
+          metadataJson: JSON.stringify({ count: restored, sampleIds: ids.slice(0, 20) }),
+          createdAt: now(),
+        });
+      }
+      return { restored };
     },
 
     async createVariant(input: CreateVariantInput) {

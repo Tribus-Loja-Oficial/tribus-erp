@@ -1,0 +1,226 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tribus-erp.local/schemas/ingestion-payload-1.0.json",
+  "title": "Tribus ERP — Ingestion payload",
+  "description": "v1.0 · mode create. data fields use camelCase (ERP API). Max 200 objects. See docs/reference/ingestion-spec.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "mode", "objects"],
+  "properties": {
+    "version": { "const": "1.0" },
+    "mode": { "const": "create" },
+    "objects": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 200,
+      "items": { "$ref": "#/$defs/ingestionObject" }
+    }
+  },
+  "$defs": {
+    "ingestionObject": {
+      "oneOf": [
+        { "$ref": "#/$defs/stock_location_obj" },
+        { "$ref": "#/$defs/category_obj" },
+        { "$ref": "#/$defs/collection_obj" },
+        { "$ref": "#/$defs/party_obj" },
+        { "$ref": "#/$defs/customer_obj" },
+        { "$ref": "#/$defs/supplier_obj" },
+        { "$ref": "#/$defs/product_obj" },
+        { "$ref": "#/$defs/product_variant_obj" },
+        { "$ref": "#/$defs/product_composition_obj" },
+        { "$ref": "#/$defs/inventory_movement_obj" },
+        { "$ref": "#/$defs/order_obj" },
+        { "$ref": "#/$defs/purchase_order_obj" }
+      ]
+    },
+    "envelope": {
+      "type": "object",
+      "required": ["type", "data"],
+      "properties": {
+        "type": { "type": "string" },
+        "client_ref": { "type": "string" },
+        "data": { "type": "object" }
+      }
+    },
+    "stock_location_obj": {
+      "allOf": [
+        { "$ref": "#/$defs/envelope" },
+        {
+          "properties": {
+            "type": { "const": "stock_location" },
+            "data": {
+              "type": "object",
+              "required": ["name", "type"],
+              "properties": {
+                "name": { "type": "string" },
+                "type": {
+                  "type": "string",
+                  "enum": ["main", "event", "production", "damaged", "reserved", "third_party"]
+                },
+                "address": { "type": "string" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "category_obj": {
+      "allOf": [
+        { "$ref": "#/$defs/envelope" },
+        {
+          "properties": {
+            "type": { "const": "category" },
+            "data": {
+              "type": "object",
+              "required": ["name", "slug"],
+              "properties": {
+                "name": { "type": "string" },
+                "slug": { "type": "string" },
+                "parentId": { "type": "string" },
+                "parentCategoryRef": { "type": "string" },
+                "description": { "type": "string" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "collection_obj": {
+      "allOf": [
+        { "$ref": "#/$defs/envelope" },
+        {
+          "properties": {
+            "type": { "const": "collection" },
+            "data": { "type": "object", "required": ["name", "slug"] }
+          }
+        }
+      ]
+    },
+    "party_obj": {
+      "allOf": [
+        { "$ref": "#/$defs/envelope" },
+        {
+          "properties": {
+            "type": { "const": "party" },
+            "data": { "type": "object", "description": "createPartySchema (camelCase)" }
+          }
+        }
+      ]
+    },
+    "customer_obj": {
+      "allOf": [
+        { "$ref": "#/$defs/envelope" },
+        {
+          "properties": {
+            "type": { "const": "customer" },
+            "data": { "type": "object", "description": "createCustomerWithPartySchema" }
+          }
+        }
+      ]
+    },
+    "supplier_obj": {
+      "allOf": [
+        { "$ref": "#/$defs/envelope" },
+        {
+          "properties": {
+            "type": { "const": "supplier" },
+            "data": { "type": "object", "description": "createSupplierWithPartySchema" }
+          }
+        }
+      ]
+    },
+    "product_obj": {
+      "allOf": [
+        { "$ref": "#/$defs/envelope" },
+        {
+          "properties": {
+            "type": { "const": "product" },
+            "data": {
+              "type": "object",
+              "description": "createProduct + optional main_image_url, gallery_image_urls, categoryRef, collectionRef"
+            }
+          }
+        }
+      ]
+    },
+    "product_variant_obj": {
+      "allOf": [
+        { "$ref": "#/$defs/envelope" },
+        {
+          "properties": {
+            "type": { "const": "product_variant" },
+            "data": {
+              "type": "object",
+              "required": ["productRef", "sku", "name", "salePriceCents"],
+              "properties": { "productRef": { "type": "string" } }
+            }
+          }
+        }
+      ]
+    },
+    "product_composition_obj": {
+      "allOf": [
+        { "$ref": "#/$defs/envelope" },
+        {
+          "properties": {
+            "type": { "const": "product_composition" },
+            "data": {
+              "type": "object",
+              "required": ["parentProductRef", "quantity", "compositionType"],
+              "properties": {
+                "parentProductRef": { "type": "string" },
+                "childProductRef": { "type": "string" },
+                "childSku": { "type": "string" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "inventory_movement_obj": {
+      "allOf": [
+        { "$ref": "#/$defs/envelope" },
+        {
+          "properties": {
+            "type": { "const": "inventory_movement" },
+            "data": {
+              "type": "object",
+              "required": ["type", "quantity"],
+              "properties": {
+                "productId": { "type": "string" },
+                "productRef": { "type": "string" },
+                "locationId": { "type": "string" },
+                "locationRef": { "type": "string" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "order_obj": {
+      "allOf": [
+        { "$ref": "#/$defs/envelope" },
+        {
+          "properties": {
+            "type": { "const": "order" },
+            "data": {
+              "type": "object",
+              "description": "createOrder + customerRef; items[].productRef"
+            }
+          }
+        }
+      ]
+    },
+    "purchase_order_obj": {
+      "allOf": [
+        { "$ref": "#/$defs/envelope" },
+        {
+          "properties": {
+            "type": { "const": "purchase_order" },
+            "data": { "type": "object", "description": "createPurchaseOrder + supplierRef" }
+          }
+        }
+      ]
+    }
+  }
+}

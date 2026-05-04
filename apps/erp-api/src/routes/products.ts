@@ -8,6 +8,7 @@ import {
   createProductSchema,
   updateProductSchema,
   listProductsSchema,
+  bulkProductIdsSchema,
   createCategorySchema,
   createVariantSchema,
   createProductCompositionSchema,
@@ -29,8 +30,45 @@ products.get("/", async (c) => {
     const config = getEnv(c.env);
     const db = createDb(config.db);
     const service = createProductService(db);
-    const data = await service.findMany(parsed.data);
-    return c.json({ data });
+    const { items, total, page, limit } = await service.listProducts(parsed.data);
+    return c.json({
+      data: items,
+      meta: { total, page, limit },
+    });
+  } catch (err) {
+    const { message, code, status } = toApiError(err);
+    return c.json({ message, code }, status);
+  }
+});
+
+products.post("/bulk-archive", async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const parsed = bulkProductIdsSchema.safeParse(body);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  try {
+    const config = getEnv(c.env);
+    const db = createDb(config.db);
+    const service = createProductService(db);
+    const result = await service.archiveProducts(parsed.data.ids);
+    return c.json({ data: result });
+  } catch (err) {
+    const { message, code, status } = toApiError(err);
+    return c.json({ message, code }, status);
+  }
+});
+
+products.post("/bulk-restore", async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const parsed = bulkProductIdsSchema.safeParse(body);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  try {
+    const config = getEnv(c.env);
+    const db = createDb(config.db);
+    const service = createProductService(db);
+    const result = await service.restoreProducts(parsed.data.ids);
+    return c.json({ data: result });
   } catch (err) {
     const { message, code, status } = toApiError(err);
     return c.json({ message, code }, status);
@@ -294,6 +332,19 @@ products.patch("/:id", async (c) => {
     const service = createProductService(db);
     const data = await service.update(c.req.param("id"), parsed.data);
     return c.json({ data });
+  } catch (err) {
+    const { message, code, status } = toApiError(err);
+    return c.json({ message, code }, status);
+  }
+});
+
+products.post("/:id/restore", async (c) => {
+  try {
+    const config = getEnv(c.env);
+    const db = createDb(config.db);
+    const service = createProductService(db);
+    await service.restoreProduct(c.req.param("id"));
+    return c.json({ success: true });
   } catch (err) {
     const { message, code, status } = toApiError(err);
     return c.json({ message, code }, status);

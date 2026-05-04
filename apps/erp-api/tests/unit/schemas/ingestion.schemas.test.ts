@@ -16,6 +16,8 @@ describe("ingestionPayloadSchema", () => {
             sku: "X-1",
             name: "Test",
             productType: "finished_product",
+            salePriceCents: 100,
+            costPriceCents: 50,
           },
         },
       ],
@@ -30,17 +32,29 @@ describe("ingestionPayloadSchema", () => {
       objects: [
         {
           type: "product",
-          data: { sku: "A", name: "B", productType: "service" },
+          data: {
+            sku: "A",
+            name: "B",
+            productType: "service",
+            salePriceCents: 0,
+            costPriceCents: 0,
+          },
         },
       ],
     });
     expect(result.success).toBe(false);
   });
 
-  it("rejects more than 100 objects", () => {
-    const objects = Array.from({ length: 101 }, (_, i) => ({
+  it("rejects more than 200 objects", () => {
+    const objects = Array.from({ length: 201 }, (_, i) => ({
       type: "product" as const,
-      data: { sku: `S${i}`, name: `N${i}`, productType: "service" as const },
+      data: {
+        sku: `S${i}`,
+        name: `N${i}`,
+        productType: "service" as const,
+        salePriceCents: 0,
+        costPriceCents: 0,
+      },
     }));
     const result = ingestionPayloadSchema.safeParse({
       version: "1.0",
@@ -57,6 +71,8 @@ describe("productIngestionDataSchema", () => {
       sku: "P1",
       name: "P",
       productType: "finished_product",
+      salePriceCents: 100,
+      costPriceCents: 50,
       main_image_url: "https://example.com/a.jpg",
       gallery_image_urls: ["https://example.com/b.png"],
     });
@@ -68,6 +84,8 @@ describe("productIngestionDataSchema", () => {
       sku: "P1",
       name: "P",
       productType: "finished_product",
+      salePriceCents: 100,
+      costPriceCents: 50,
       main_image_url: "http://example.com/a.jpg",
     });
     expect(result.success).toBe(false);
@@ -78,6 +96,8 @@ describe("productIngestionDataSchema", () => {
       sku: "P1",
       name: "P",
       productType: "finished_product",
+      salePriceCents: 100,
+      costPriceCents: 50,
       gallery_image_urls: ["not-a-url"],
     });
     expect(result.success).toBe(false);

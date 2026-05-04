@@ -41,13 +41,21 @@ export type IngestionExecuteResponse = {
   };
 };
 
-export async function validateIngestionAction(
-  payload: unknown,
-): Promise<IngestionValidationResponse> {
+async function assertAdminIngestion() {
   const session = await auth();
   if (!session?.user) {
     throw new Error("Sessão expirada. Inicie sessão novamente.");
   }
+  const role = (session.user as { role?: string }).role;
+  if (role !== "admin") {
+    throw new Error("Apenas administradores podem usar a ingestão estruturada.");
+  }
+}
+
+export async function validateIngestionAction(
+  payload: unknown,
+): Promise<IngestionValidationResponse> {
+  await assertAdminIngestion();
   return erpApiFetch<IngestionValidationResponse>({
     method: "POST",
     path: "/internal/ingestion/validate",
@@ -56,10 +64,7 @@ export async function validateIngestionAction(
 }
 
 export async function executeIngestionAction(payload: unknown): Promise<IngestionExecuteResponse> {
-  const session = await auth();
-  if (!session?.user) {
-    throw new Error("Sessão expirada. Inicie sessão novamente.");
-  }
+  await assertAdminIngestion();
   const res = await erpApiFetch<IngestionExecuteResponse>({
     method: "POST",
     path: "/internal/ingestion/execute",
@@ -67,5 +72,10 @@ export async function executeIngestionAction(payload: unknown): Promise<Ingestio
     additionalOkStatuses: [207, 422],
   });
   revalidatePath("/products");
+  revalidatePath("/customers");
+  revalidatePath("/suppliers");
+  revalidatePath("/inventory");
+  revalidatePath("/orders");
+  revalidatePath("/purchases");
   return res;
 }

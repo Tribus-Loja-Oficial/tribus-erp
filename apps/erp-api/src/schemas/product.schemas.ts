@@ -129,7 +129,7 @@ const productCompositionBodySchema = z
   })
   .strict();
 
-function refineProductComposition(
+export function refineProductComposition(
   data: z.infer<typeof productCompositionBodySchema>,
   ctx: z.RefinementCtx,
 ) {
@@ -150,6 +150,11 @@ function refineProductComposition(
   }
 }
 
+/** Campos de composição sem `childProductId` (ex.: ingestão com childProductRef / childSku). */
+export const productCompositionDataWithoutChildSchema = productCompositionBodySchema.omit({
+  childProductId: true,
+});
+
 export const createProductCompositionSchema =
   productCompositionBodySchema.superRefine(refineProductComposition);
 
@@ -166,8 +171,18 @@ export const listProductsSchema = z.object({
   ),
   categoryId: z.string().optional(),
   niche: z.string().optional(),
+  stockFilter: z.enum(["in_stock", "out_of_stock", "below_min", "not_controlled"]).optional(),
+  channel: z.enum(["sellable", "ecommerce", "pos", "events"]).optional(),
+  sortField: z
+    .enum(["sku", "name", "type", "status", "salePrice", "stock", "updatedAt"])
+    .optional(),
+  sortDir: z.enum(["asc", "desc"]).optional(),
   page: z.coerce.number().int().min(1).default(1),
-  limit: z.coerce.number().int().min(1).max(100).default(20),
+  limit: z.coerce.number().int().min(1).max(200).default(20),
+});
+
+export const bulkProductIdsSchema = z.object({
+  ids: z.array(z.string().min(1)).min(1).max(100),
 });
 
 export type CreateProductInput = z.infer<typeof createProductSchema>;
@@ -178,3 +193,4 @@ export type CreateCollectionInput = z.infer<typeof createCollectionSchema>;
 export type CreateProductCompositionInput = z.infer<typeof createProductCompositionSchema>;
 export type UpdateProductCompositionInput = z.infer<typeof updateProductCompositionSchema>;
 export type ListProductsInput = z.infer<typeof listProductsSchema>;
+export type BulkProductIdsInput = z.infer<typeof bulkProductIdsSchema>;
