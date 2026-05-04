@@ -95,8 +95,15 @@ describe("listProductsSchema", () => {
     expect(result.success).toBe(false);
   });
 
-  it("rejects limit over 100", () => {
+  it("accepts limit 200 for operational listings", () => {
     const result = listProductsSchema.safeParse({ limit: "200" });
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.limit).toBe(200);
+  });
+
+  it("rejects limit over 200", () => {
+    const result = listProductsSchema.safeParse({ limit: "201" });
     expect(result.success).toBe(false);
   });
 
