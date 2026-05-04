@@ -340,17 +340,55 @@ export function ProductsListing({
         </div>
         <div>
           <label className="mb-1 block text-xs font-medium text-zinc-600">Status</label>
-          <select
-            className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
-            value={qp.status ?? ""}
-            onChange={(e) => replaceQuery({ status: e.target.value || undefined, page: 1 })}
-          >
-            {STATUSES.map((o) => (
-              <option key={o.value || "all-s"} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
+              value={qp.status ?? ""}
+              onChange={(e) => {
+                const v = e.target.value || undefined;
+                if (v === "archived") {
+                  replaceQuery({
+                    status: "archived",
+                    page: 1,
+                    stockFilter: undefined,
+                    channel: undefined,
+                  });
+                } else {
+                  replaceQuery({ status: v, page: 1 });
+                }
+              }}
+            >
+              {STATUSES.map((o) => (
+                <option key={o.value || "all-s"} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            {isArchivedView ? (
+              <button
+                type="button"
+                onClick={() => replaceQuery({ status: undefined, page: 1 })}
+                className="text-xs font-medium whitespace-nowrap text-zinc-700 underline hover:text-zinc-900"
+              >
+                Voltar ao catálogo
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() =>
+                  replaceQuery({
+                    status: "archived",
+                    page: 1,
+                    stockFilter: undefined,
+                    channel: undefined,
+                  })
+                }
+                className="text-xs font-medium whitespace-nowrap text-zinc-700 underline hover:text-zinc-900"
+              >
+                Ver arquivados (apagar definitivo)
+              </button>
+            )}
+          </div>
         </div>
         <div>
           <label className="mb-1 block text-xs font-medium text-zinc-600">Estoque</label>
@@ -571,19 +609,35 @@ export function ProductsListing({
                                 })
                               }
                             >
-                              Eliminar para sempre
+                              Apagar definitivamente
                             </button>
                           </>
                         ) : (
-                          <button
-                            type="button"
-                            className="text-xs text-amber-800 underline hover:text-amber-950"
-                            onClick={() =>
-                              setModal({ type: "archive-one", id: p.id, name: p.name })
-                            }
-                          >
-                            Arquivar
-                          </button>
+                          <>
+                            <button
+                              type="button"
+                              className="text-xs text-amber-800 underline hover:text-amber-950"
+                              onClick={() =>
+                                setModal({ type: "archive-one", id: p.id, name: p.name })
+                              }
+                            >
+                              Arquivar
+                            </button>
+                            <button
+                              type="button"
+                              className="text-xs text-red-700 underline hover:text-red-900"
+                              onClick={() =>
+                                setModal({
+                                  type: "permanent-delete",
+                                  id: p.id,
+                                  name: p.name,
+                                  sku: p.sku,
+                                })
+                              }
+                            >
+                              Apagar definitivamente
+                            </button>
+                          </>
                         )}
                       </div>
                     </td>
@@ -640,13 +694,13 @@ export function ProductsListing({
           body={
             <>
               <p>
-                Este produto não aparecerá mais nas listagens padrão, mas o histórico será
-                preservado. Você poderá restaurá-lo futuramente.
+                O produto deixa de aparecer no catálogo ativo. Pode restaurá-lo ou apagá-lo
+                definitivamente a partir da vista <strong>Arquivados</strong>.
               </p>
               <p className="mt-2 text-sm text-zinc-600">{modal.name}</p>
             </>
           }
-          confirmLabel="Arquivar produto"
+          confirmLabel="Arquivar"
           onCancel={() => setModal(null)}
           onConfirm={runArchiveOne}
           pending={pending}
@@ -677,13 +731,13 @@ export function ProductsListing({
           body={
             <>
               <p>
-                Os produtos selecionados serão removidos das listagens padrão, mas o histórico será
-                preservado.
+                Os produtos deixam de aparecer no catálogo ativo e passam para Arquivados, onde pode
+                restaurar ou apagar definitivamente.
               </p>
               <p className="mt-2 font-medium">Quantidade selecionada: {selected.size}</p>
             </>
           }
-          confirmLabel="Arquivar produtos"
+          confirmLabel="Arquivar"
           onCancel={() => setModal(null)}
           onConfirm={runArchiveBulk}
           pending={pending}
@@ -774,12 +828,13 @@ function PermanentDeleteModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="max-w-md rounded-xl border border-red-200 bg-white p-6 shadow-lg">
-        <h3 className="text-lg font-semibold text-red-900">Eliminar permanentemente?</h3>
+        <h3 className="text-lg font-semibold text-red-900">Apagar definitivamente?</h3>
         <div className="mt-3 space-y-3 text-sm text-zinc-700">
           <p>
-            Esta ação remove o produto da base de dados, movimentos e ordens de produção associados,
-            e apaga as imagens no armazenamento. Linhas de pedidos e documentos fiscais antigos
-            mantêm valores, mas deixam de referenciar este produto.
+            Não precisa arquivar antes: esta ação remove logo o produto. Remove o registo na base de
+            dados, movimentos e ordens de produção associados, e apaga as imagens no armazenamento.
+            Linhas de pedidos e documentos fiscais antigos mantêm valores, mas deixam de referenciar
+            este produto.
           </p>
           <p className="font-medium text-zinc-900">{productName}</p>
           <label className="block">
@@ -812,7 +867,7 @@ function PermanentDeleteModal({
             disabled={pending || !canSubmit}
             className="rounded-md bg-red-700 px-4 py-2 text-sm font-medium text-white hover:bg-red-800 disabled:opacity-50"
           >
-            Eliminar para sempre
+            Apagar definitivamente
           </button>
         </div>
       </div>

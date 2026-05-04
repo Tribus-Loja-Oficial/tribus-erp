@@ -68,8 +68,9 @@ function buildListConditions(params: ListProductsParams): SQL[] {
     params;
 
   const conditions: SQL[] = [];
+  const archivedOnly = status === "archived";
 
-  if (status === "archived") {
+  if (archivedOnly) {
     conditions.push(or(isNotNull(products.archivedAt), eq(products.status, "archived"))!);
   } else {
     conditions.push(isNull(products.archivedAt));
@@ -78,7 +79,9 @@ function buildListConditions(params: ListProductsParams): SQL[] {
     }
   }
 
-  if (composeCatalog) {
+  // Catálogo para composição / filtros de stock e canal são para listagem operacional;
+  // com `status=archived` ignoramos para não esconder arquivos por filtros herdados na URL.
+  if (!archivedOnly && composeCatalog) {
     conditions.push(
       inArray(products.productType, [
         "finished_product",
@@ -109,7 +112,7 @@ function buildListConditions(params: ListProductsParams): SQL[] {
     }
   }
 
-  if (stockFilter) {
+  if (!archivedOnly && stockFilter) {
     switch (stockFilter) {
       case "in_stock":
         conditions.push(eq(products.controlsStock, true));
@@ -130,7 +133,7 @@ function buildListConditions(params: ListProductsParams): SQL[] {
     }
   }
 
-  if (channel) {
+  if (!archivedOnly && channel) {
     switch (channel as ProductListChannelFilter) {
       case "sellable":
         conditions.push(eq(products.sellable, true));
