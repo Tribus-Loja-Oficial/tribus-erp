@@ -6,10 +6,14 @@ import { createDb } from "../db/client.js";
 import { createOrderService } from "../services/order.service.js";
 import { createFiscalService } from "../services/fiscal.service.js";
 import { R2StorageProvider } from "../storage/r2-storage-provider.js";
-import { toApiError } from "../errors/app-error.js";
+import { toApiError, ValidationError } from "../errors/app-error.js";
 import { verifyInternalToken } from "../auth/verify-internal-token.js";
 import { ingestOrderSchema } from "../schemas/order.schemas.js";
 import { importXmlSchema } from "../schemas/fiscal.schemas.js";
+import { ingestionPayloadSchema } from "../schemas/ingestion.schemas.js";
+import { createIngestionService, validateIngestionPayload } from "../services/ingestion.service.js";
+import { generateId } from "../utils/id.js";
+import { createAuditRepository } from "../repositories/audit.repository.js";
 
 const internal = new Hono<{ Bindings: Env }>();
 
@@ -29,6 +33,83 @@ internal.post("/orders/ingest", async (c) => {
 
     return c.json({ data: order, created }, created ? 201 : 200);
   } catch (err) {
+    const { message, code, status } = toApiError(err);
+    return c.json({ message, code }, status);
+  }
+});
+
+internal.post("/ingestion/validate", async (c) => {
+  try {
+    const config = getEnv(c.env);
+    verifyInternalToken(c.req.header("Authorization"), config.erpInternalSecret);
+
+    const body = await c.req.json().catch(() => null);
+    const parsed = ingestionPayloadSchema.safeParse(body);
+
+    if (!parsed.success) {
+      const errors = parsed.error.issues.map((issue) => ({
+        message: `${issue.path.length ? `[${issue.path.join(".")}] ` : ""}${issue.message}`,
+      }));
+      return c.json(
+        {
+          data: {
+            valid: false,
+            errors: errors.map((e) => ({ message: e.message })),
+            warnings: [],
+            summary: { total: 0, byType: {} },
+          },
+        },
+        200,
+      );
+    }
+
+    const result = validateIngestionPayload(parsed.data);
+    const db = createDb(config.db);
+    const auditRepo = createAuditRepository(db);
+    await auditRepo.insert({
+      id: generateId(),
+      actorId: null,
+      actorType: "api",
+      action: "ingestion.validated",
+      entityType: "ingestion",
+      entityId: "validate",
+      metadataJson: JSON.stringify({
+        valid: result.valid,
+        objectCount: parsed.data.objects.length,
+        errorCount: result.errors.length,
+      }),
+      createdAt: new Date().toISOString(),
+    });
+
+    return c.json({ data: result }, 200);
+  } catch (err) {
+    const { message, code, status } = toApiError(err);
+    return c.json({ message, code }, status);
+  }
+});
+
+internal.post("/ingestion/execute", async (c) => {
+  try {
+    const config = getEnv(c.env);
+    verifyInternalToken(c.req.header("Authorization"), config.erpInternalSecret);
+
+    const body = await c.req.json().catch(() => null);
+    const parsed = ingestionPayloadSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+    }
+
+    const db = createDb(config.db);
+    const storage = new R2StorageProvider(config.r2);
+    const ingestion = createIngestionService(db, storage);
+    const result = await ingestion.executeIngestion(parsed.data, { actorId: null });
+
+    const status = result.failed === 0 ? 200 : result.created === 0 ? 422 : 207;
+    return c.json({ data: result }, status);
+  } catch (err) {
+    if (err instanceof ValidationError) {
+      return c.json({ message: err.message, code: err.code, issues: err.issues }, err.statusCode);
+    }
     const { message, code, status } = toApiError(err);
     return c.json({ message, code }, status);
   }

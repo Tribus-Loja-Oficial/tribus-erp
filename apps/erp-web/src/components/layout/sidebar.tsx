@@ -22,6 +22,7 @@ import {
   Factory,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { IngestionModal } from "@/components/ingestion/ingestion-modal";
 
 const navGroups = [
   {
@@ -139,6 +140,12 @@ export function Sidebar() {
           </div>
         ))}
       </nav>
+      <div className="border-t border-zinc-200 px-3 py-3">
+        <p className="mb-1.5 px-3 text-xs font-semibold tracking-widest text-zinc-400 uppercase">
+          Ferramentas
+        </p>
+        <IngestionModal />
+      </div>
     </aside>
   );
 }

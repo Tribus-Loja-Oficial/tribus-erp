@@ -7,10 +7,12 @@ interface FetchOptions {
   path: string;
   body?: unknown;
   searchParams?: Record<string, string | number | undefined>;
+  /** Códigos HTTP adicionais tratados como sucesso (ex.: 207, 422 na ingestão). */
+  additionalOkStatuses?: number[];
 }
 
 export async function erpApiFetch<T>(options: FetchOptions): Promise<T> {
-  const { method = "GET", path, body, searchParams } = options;
+  const { method = "GET", path, body, searchParams, additionalOkStatuses = [] } = options;
 
   const url = new URL(`${env.erpApiUrl}${path}`);
   if (searchParams) {
@@ -33,7 +35,9 @@ export async function erpApiFetch<T>(options: FetchOptions): Promise<T> {
 
   const data = await response.json();
 
-  if (!response.ok) {
+  const ok = response.ok || additionalOkStatuses.includes(response.status);
+
+  if (!ok) {
     const d = data as {
       message?: string;
       code?: string;
