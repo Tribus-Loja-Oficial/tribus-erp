@@ -11,6 +11,14 @@ Contrato espelhado no **tribus-hub**: envelope `version` / `mode` / `objects`, `
 - Referências cruzadas no mesmo payload: sufixo **`Ref`** (ex.: `productRef`, `categoryRef`) e valor igual ao **`client_ref`** do alvo.
 - Se existir **`…Id`** real (UUID) e **`…Ref`**, a execução resolve **`…Ref` primeiro** via `refMap`, depois cai no `…Id` já presente em `data`.
 
+## Produtos simples vs variáveis (`productKind`)
+
+- Em cada objecto **`product`**, `productKind` pode ser **`simple`** (omissão) ou **`variable`**.
+- **`product_variant`** no mesmo payload: o **`productRef`** deve ser o `client_ref` de um `product` com **`productKind`: `"variable"`**. Caso contrário, a validação semântica falha com mensagem a pedir `productKind: "variable"` nesse produto.
+- **`inventory_movement`** com **`productRef`** a um produto **variable** definido **no mesmo lote**: é obrigatório **`variantId`** (UUID) **ou** **`variantRef`** (igual ao `client_ref` de um `product_variant` nesse payload). A execução resolve `variantRef` → `variantId` via `refMap` depois de criadas as variantes.
+- **`order`** — linhas com **`productRef`** a um produto **variable** no lote: mesma regra (**`variantId`** ou **`variantRef`**). `variantRef` aponta para tipo `product_variant`.
+- Referências só cruzam objectos **com `client_ref`** no mapa semântico; produtos sem `client_ref` não entram nas regras “in-batch” acima (use IDs reais ou inclua `client_ref` no pai e nas variantes).
+
 ## Envelope
 
 | Campo     | Tipo       | Descrição                       |
@@ -21,20 +29,20 @@ Contrato espelhado no **tribus-hub**: envelope `version` / `mode` / `objects`, `
 
 ## Tipos suportados (`type`)
 
-| `type`                | Descrição breve                                                      |
-| --------------------- | -------------------------------------------------------------------- |
-| `stock_location`      | Local de armazém (`POST /inventory/locations`).                      |
-| `category`            | Categoria de produto.                                                |
-| `collection`          | Coleção.                                                             |
-| `party`               | Party base (sem perfil cliente/fornecedor).                          |
-| `customer`            | Party + cliente.                                                     |
-| `supplier`            | Party + fornecedor.                                                  |
-| `product`             | Produto; `categoryRef` / `collectionRef`; URLs de imagem.            |
-| `product_variant`     | Variante; `productRef` → `product`.                                  |
-| `product_composition` | BOM/embalagem; `parentProductRef`; `childProductRef` ou `childSku`.  |
-| `inventory_movement`  | Movimento; `productRef`/`productId`, `locationRef`/`locationId`.     |
-| `order`               | Pedido; `customerRef`/`customerId`; itens com `productRef` opcional. |
-| `purchase_order`      | OC; `supplierRef`/`supplierId`; linhas com `productRef` opcional.    |
+| `type`                | Descrição breve                                                                                                            |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `stock_location`      | Local de armazém (`POST /inventory/locations`).                                                                            |
+| `category`            | Categoria de produto.                                                                                                      |
+| `collection`          | Coleção.                                                                                                                   |
+| `party`               | Party base (sem perfil cliente/fornecedor).                                                                                |
+| `customer`            | Party + cliente.                                                                                                           |
+| `supplier`            | Party + fornecedor.                                                                                                        |
+| `product`             | Produto; `productKind`; `categoryRef` / `collectionRef`; URLs de imagem.                                                   |
+| `product_variant`     | Variante; `productRef` → `product` variable; `client_ref` recomendado para `variantRef`.                                   |
+| `product_composition` | BOM/embalagem; `parentProductRef`; `childProductRef` ou `childSku`.                                                        |
+| `inventory_movement`  | Movimento; `productRef`/`productId`, `locationRef`/`locationId`; `variantRef`/`variantId` se pai variable no lote.         |
+| `order`               | Pedido; `customerRef`/`customerId`; itens com `productRef` opcional; `variantRef`/`variantId` se produto variable no lote. |
+| `purchase_order`      | OC; `supplierRef`/`supplierId`; linhas com `productRef` opcional.                                                          |
 
 ## Ordem de execução (`TYPE_ORDER`)
 

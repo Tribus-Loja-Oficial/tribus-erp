@@ -168,11 +168,18 @@ export const INGESTION_TYPE_REFERENCES: IngestionTypeReference[] = [
   },
   {
     type: "product",
-    summary: "Produto; categoryRef/collectionRef ligam a client_ref no mesmo payload.",
+    summary:
+      "Produto; categoryRef/collectionRef ligam a client_ref no mesmo payload. Variações exigem productKind variable neste product.",
     envelope: envCommon,
     dataFields: [
       { key: "sku", requirement: "required", valueType: "string" },
       { key: "name", requirement: "required", valueType: "string" },
+      {
+        key: "productKind",
+        requirement: "optional",
+        valueType: "enum",
+        enumValues: ["simple", "variable"],
+      },
       {
         key: "productType",
         requirement: "required",
@@ -196,13 +203,19 @@ export const INGESTION_TYPE_REFERENCES: IngestionTypeReference[] = [
   },
   {
     type: "product_variant",
-    summary: "Variante; productRef → client_ref de product.",
+    summary:
+      "Variante; productRef → client_ref de product com productKind variable. Recomendado client_ref na variante para variantRef em stock/pedidos.",
     envelope: envCommon,
     dataFields: [
       { key: "productRef", requirement: "required", valueType: "string" },
       { key: "sku", requirement: "required", valueType: "string" },
-      { key: "name", requirement: "required", valueType: "string" },
-      { key: "salePriceCents", requirement: "required", valueType: "number" },
+      {
+        key: "attributes",
+        requirement: "optional",
+        valueType: "record<string,string> (omissão = {})",
+      },
+      { key: "name", requirement: "optional", valueType: "string" },
+      { key: "salePriceCents", requirement: "optional", valueType: "number" },
     ],
   },
   {
@@ -234,7 +247,8 @@ export const INGESTION_TYPE_REFERENCES: IngestionTypeReference[] = [
   },
   {
     type: "inventory_movement",
-    summary: "Movimento; productRef/locationRef ou IDs reais.",
+    summary:
+      "Movimento; productRef/locationRef ou IDs. Se productRef for produto variable no mesmo payload: variantId ou variantRef (client_ref de product_variant).",
     envelope: envCommon,
     dataFields: [
       {
@@ -247,6 +261,18 @@ export const INGESTION_TYPE_REFERENCES: IngestionTypeReference[] = [
         key: "productId",
         requirement: "conditional",
         condition: "se não productRef",
+        valueType: "string",
+      },
+      {
+        key: "variantRef",
+        requirement: "conditional",
+        condition: "produto variable por productRef no lote (senão variantId)",
+        valueType: "string",
+      },
+      {
+        key: "variantId",
+        requirement: "conditional",
+        condition: "alternativa a variantRef",
         valueType: "string",
       },
       {
@@ -272,7 +298,8 @@ export const INGESTION_TYPE_REFERENCES: IngestionTypeReference[] = [
   },
   {
     type: "order",
-    summary: "Pedido; customerRef ou customerId; items[].productRef opcional.",
+    summary:
+      "Pedido; customerRef ou customerId. Linhas com productRef a produto variable no lote: variantId ou variantRef.",
     envelope: envCommon,
     dataFields: [
       {
@@ -284,7 +311,8 @@ export const INGESTION_TYPE_REFERENCES: IngestionTypeReference[] = [
       {
         key: "items",
         requirement: "required",
-        valueType: "array (sku, name, quantity, unitPriceCents, …)",
+        valueType:
+          "array (sku, name, quantity, unitPriceCents, productRef?, productId?, variantRef?, variantId?, …)",
       },
     ],
   },

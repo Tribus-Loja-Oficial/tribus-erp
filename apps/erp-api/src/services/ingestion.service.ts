@@ -235,6 +235,8 @@ export function validateIngestionPayload(payload: IngestionPayload): ValidationR
             message: "Indique locationId ou locationRef.",
           });
         }
+        if (d.variantRef)
+          expectRef(clientRefs, d.variantRef, "product_variant", ctx, "data.variantRef", errors);
         break;
       }
       case "order": {
@@ -256,6 +258,16 @@ export function validateIngestionPayload(payload: IngestionPayload): ValidationR
               "product",
               ctx,
               `data.items[${j}].productRef`,
+              errors,
+            );
+          }
+          if (it.variantRef) {
+            expectRef(
+              clientRefs,
+              it.variantRef,
+              "product_variant",
+              ctx,
+              `data.items[${j}].variantRef`,
               errors,
             );
           }
@@ -289,6 +301,59 @@ export function validateIngestionPayload(payload: IngestionPayload): ValidationR
       }
       default:
         break;
+    }
+  });
+
+  const productKindByRef = new Map<string, "simple" | "variable">();
+  for (const obj of objects) {
+    if (obj.type === "product" && obj.client_ref) {
+      productKindByRef.set(
+        obj.client_ref,
+        obj.data.productKind === "variable" ? "variable" : "simple",
+      );
+    }
+  }
+
+  objects.forEach((obj, i) => {
+    const ctx = { objectIndex: i, objectType: obj.type, clientRef: obj.client_ref };
+    if (obj.type === "product_variant") {
+      const pref = obj.data.productRef;
+      if (pref && productKindByRef.has(pref) && productKindByRef.get(pref) !== "variable") {
+        errors.push({
+          ...ctx,
+          field: "data.productRef",
+          message: `O produto "${pref}" está como simples neste payload. Variações exigem "productKind": "variable" no objecto product com esse client_ref.`,
+        });
+      }
+    }
+    if (obj.type === "inventory_movement") {
+      const d = obj.data;
+      const pref = d.productRef;
+      if (pref && productKindByRef.has(pref) && productKindByRef.get(pref) === "variable") {
+        const hasVariant = Boolean(d.variantId?.trim()) || Boolean(d.variantRef?.trim());
+        if (!hasVariant) {
+          errors.push({
+            ...ctx,
+            field: "data.variantId",
+            message: `Produto variável (${pref}): indique variantId ou variantRef (client_ref da variação no mesmo payload).`,
+          });
+        }
+      }
+    }
+    if (obj.type === "order") {
+      obj.data.items.forEach((it, j) => {
+        const pref = it.productRef;
+        if (pref && productKindByRef.has(pref) && productKindByRef.get(pref) === "variable") {
+          const hasVariant = Boolean(it.variantId?.trim()) || Boolean(it.variantRef?.trim());
+          if (!hasVariant) {
+            errors.push({
+              ...ctx,
+              field: `data.items[${j}].variantId`,
+              message: `Produto variável (${pref}) na linha ${j + 1}: indique variantId ou variantRef.`,
+            });
+          }
+        }
+      });
     }
   });
 
@@ -477,9 +542,15 @@ async function createIngestionObject(
       const locationId = obj.data.locationId ?? refMap[obj.data.locationRef!];
       if (!productId) throw new Error("productId/productRef em falta.");
       if (!locationId) throw new Error("locationId/locationRef em falta.");
+      const variantId =
+        obj.data.variantId?.trim() ||
+        (obj.data.variantRef ? refMap[obj.data.variantRef] : undefined);
+      if (obj.data.variantRef?.trim() && !variantId) {
+        throw new Error(`variantRef "${obj.data.variantRef}" não resolvido no refMap.`);
+      }
       const movement = await ctx.inventoryService.addMovement({
         productId,
-        variantId: obj.data.variantId,
+        variantId: variantId ?? undefined,
         locationId,
         type: obj.data.type,
         quantity: obj.data.quantity,
@@ -493,15 +564,22 @@ async function createIngestionObject(
     case "order": {
       const customerId = obj.data.customerId ?? refMap[obj.data.customerRef!];
       if (!customerId) throw new Error("customerId/customerRef em falta.");
-      const items = obj.data.items.map((it) => ({
-        productId: it.productId ?? (it.productRef ? refMap[it.productRef] : undefined),
-        variantId: it.variantId,
-        sku: it.sku,
-        name: it.name,
-        quantity: it.quantity,
-        unitPriceCents: it.unitPriceCents,
-        discountCents: it.discountCents,
-      }));
+      const items = obj.data.items.map((it, j) => {
+        const variantId =
+          it.variantId?.trim() || (it.variantRef ? refMap[it.variantRef] : undefined) || undefined;
+        if (it.variantRef?.trim() && !variantId) {
+          throw new Error(`variantRef "${it.variantRef}" não resolvido (items[${j}]).`);
+        }
+        return {
+          productId: it.productId ?? (it.productRef ? refMap[it.productRef] : undefined),
+          variantId,
+          sku: it.sku,
+          name: it.name,
+          quantity: it.quantity,
+          unitPriceCents: it.unitPriceCents,
+          discountCents: it.discountCents,
+        };
+      });
       const orderInput: CreateOrderInput = {
         channel: obj.data.channel,
         customerId,

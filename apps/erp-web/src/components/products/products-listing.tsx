@@ -89,7 +89,6 @@ const PRODUCT_KINDS: { value: string; label: string }[] = [
 ];
 
 const SORTABLE: { field: string; label: string }[] = [
-  { field: "sku", label: "SKU" },
   { field: "externalRef", label: "Ref" },
   { field: "name", label: "Nome" },
   { field: "type", label: "Tipo" },
@@ -97,6 +96,7 @@ const SORTABLE: { field: string; label: string }[] = [
   { field: "salePrice", label: "Preço" },
   { field: "stock", label: "Estoque" },
   { field: "updatedAt", label: "Atualizado em" },
+  { field: "sku", label: "SKU" },
 ];
 
 function typeLabel(v: string): string {
@@ -523,6 +523,7 @@ export function ProductsListing({
                   aria-label="Selecionar todos visíveis"
                 />
               </th>
+              <th className="w-10 px-2 py-3" aria-label="Edição rápida" />
               {SORTABLE.map((col) => (
                 <Fragment key={col.field}>
                   <th className="px-3 py-3">
@@ -555,7 +556,7 @@ export function ProductsListing({
           <tbody>
             {products.length === 0 ? (
               <tr>
-                <td colSpan={12} className="px-4 py-12 text-center text-zinc-600">
+                <td colSpan={13} className="px-4 py-12 text-center text-zinc-600">
                   <p className="font-medium text-zinc-800">Nenhum produto encontrado.</p>
                   <p className="mt-1 text-sm">Ajuste os filtros ou cadastre um novo produto.</p>
                   <div className="mt-4 flex justify-center gap-3">
@@ -591,42 +592,43 @@ export function ProductsListing({
                         aria-label={`Selecionar ${p.sku}`}
                       />
                     </td>
-                    <td className="px-3 py-3 font-mono text-xs">{p.sku}</td>
+                    <td className="px-2 py-3">
+                      <button
+                        type="button"
+                        className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-200/80 hover:text-zinc-900"
+                        title="Editar em popup"
+                        aria-label={`Editar ${p.name} em popup`}
+                        onClick={() => setQuickEdit({ id: p.id, name: p.name })}
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth={1.75}
+                          className="h-4 w-4"
+                          aria-hidden
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"
+                          />
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                          />
+                        </svg>
+                      </button>
+                    </td>
                     <td className="px-3 py-3 font-mono text-xs text-zinc-700 tabular-nums">
                       {p.externalRef ?? "—"}
                     </td>
                     <td className="px-3 py-3">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <button
-                          type="button"
-                          className="shrink-0 rounded-md p-1.5 text-zinc-500 hover:bg-zinc-200/80 hover:text-zinc-900"
-                          title="Editar em popup"
-                          aria-label={`Editar ${p.name} em popup`}
-                          onClick={() => setQuickEdit({ id: p.id, name: p.name })}
-                        >
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth={1.75}
-                            className="h-4 w-4"
-                            aria-hidden
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"
-                            />
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                            />
-                          </svg>
-                        </button>
-                        <span className="min-w-0 truncate font-medium text-zinc-900">{p.name}</span>
-                      </div>
+                      <span className="block min-w-0 truncate font-medium text-zinc-900">
+                        {p.name}
+                      </span>
                     </td>
                     <td className="max-w-[140px] truncate px-3 py-3 text-xs text-zinc-600">
                       {typeLabel(p.productType)}
@@ -662,6 +664,7 @@ export function ProductsListing({
                           })
                         : "—"}
                     </td>
+                    <td className="px-3 py-3 font-mono text-xs">{p.sku}</td>
                     <td className="relative px-3 py-3 text-right">
                       <div
                         id={`product-row-actions-${p.id}`}

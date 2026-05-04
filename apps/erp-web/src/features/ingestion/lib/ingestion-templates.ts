@@ -66,6 +66,7 @@ export const INGESTION_TEMPLATES: IngestionTemplate[] = [
             sku: "INGEST-SKU-PARENT-001",
             name: "Produto pai (ingestão)",
             productType: "finished_product",
+            productKind: "variable",
             salePriceCents: 1000,
             costPriceCents: 400,
             categoryRef: "cat_acessorios",
@@ -87,10 +88,12 @@ export const INGESTION_TEMPLATES: IngestionTemplate[] = [
         },
         {
           type: "product_variant",
+          client_ref: "var_prod_pai_p",
           data: {
             productRef: "prod_pai",
-            sku: "INGEST-SKU-PARENT-001-P",
+            sku: "INGEST-SKU-PARENT-001-VAR-P",
             name: "Tamanho P",
+            attributes: { Tamanho: "P" },
             salePriceCents: 1000,
             costPriceCents: 400,
           },
@@ -110,6 +113,7 @@ export const INGESTION_TEMPLATES: IngestionTemplate[] = [
           type: "inventory_movement",
           data: {
             productRef: "prod_pai",
+            variantRef: "var_prod_pai_p",
             locationRef: "loc_principal",
             type: "adjustment",
             quantity: 5,
@@ -122,11 +126,12 @@ export const INGESTION_TEMPLATES: IngestionTemplate[] = [
             customerRef: "cli_exemplo",
             items: [
               {
-                sku: "INGEST-SKU-PARENT-001",
-                name: "Produto pai (ingestão)",
+                sku: "INGEST-SKU-PARENT-001-VAR-P",
+                name: "Tamanho P",
                 quantity: 1,
                 unitPriceCents: 1000,
                 productRef: "prod_pai",
+                variantRef: "var_prod_pai_p",
               },
             ],
             payments: [],

@@ -82,6 +82,8 @@ const movementBase = z.object({
   productId: z.string().min(1).optional(),
   productRef: z.string().min(1).max(200).optional(),
   variantId: z.string().optional(),
+  /** `client_ref` de um `product_variant` no mesmo payload (resolvido na execução). */
+  variantRef: z.string().min(1).max(200).optional(),
   locationId: z.string().min(1).optional(),
   locationRef: z.string().min(1).max(200).optional(),
   type: z.enum([
@@ -112,6 +114,7 @@ const orderItemWithRef = z.object({
   productId: z.string().optional(),
   productRef: z.string().min(1).max(200).optional(),
   variantId: z.string().optional(),
+  variantRef: z.string().min(1).max(200).optional(),
   sku: z.string().min(1).max(100),
   name: z.string().min(1).max(300),
   quantity: z.number().int().min(1),
