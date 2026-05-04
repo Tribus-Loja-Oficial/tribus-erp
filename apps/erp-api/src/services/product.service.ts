@@ -499,7 +499,19 @@ export function createProductService(db: AppDb) {
         if (row) documentsToPurge.push(row);
       }
 
-      await productsRepo.permanentDeleteCascade(productId);
+      try {
+        await productsRepo.permanentDeleteCascade(productId);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (/FOREIGN KEY|SQLITE_CONSTRAINT|constraint failed/i.test(msg)) {
+          throw new BadRequestError(
+            "Não foi possível apagar o produto: ainda há referências dependentes na base de dados. " +
+              "Se usou BOM ou produção, verifique ordens e composições. Detalhe: " +
+              msg,
+          );
+        }
+        throw err;
+      }
 
       let deletedFiles = 0;
       for (const doc of documentsToPurge) {

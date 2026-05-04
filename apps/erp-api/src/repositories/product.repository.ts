@@ -491,11 +491,25 @@ export function createProductRepository(db: AppDb) {
           .where(eq(billOfMaterials.productId, productId));
         const bomIds = bomRows.map((r) => r.id);
         if (bomIds.length > 0) {
+          await tx
+            .update(productionOrders)
+            .set({ bomId: null })
+            .where(inArray(productionOrders.bomId, bomIds));
           await tx.delete(bomItems).where(inArray(bomItems.bomId, bomIds));
           await tx.delete(billOfMaterials).where(inArray(billOfMaterials.id, bomIds));
         }
         await tx.delete(bomItems).where(eq(bomItems.componentProductId, productId));
 
+        if (variantIds.length > 0) {
+          await tx
+            .delete(productCompositions)
+            .where(
+              or(
+                inArray(productCompositions.parentVariantId, variantIds),
+                inArray(productCompositions.childVariantId, variantIds),
+              )!,
+            );
+        }
         await tx
           .delete(productCompositions)
           .where(
