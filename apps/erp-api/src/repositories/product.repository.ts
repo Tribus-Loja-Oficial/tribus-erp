@@ -462,6 +462,14 @@ export function createProductRepository(db: AppDb) {
             : eq(stockMovements.productId, productId);
         await tx.delete(stockMovements).where(smCond);
 
+        /** Consumos/perdas onde este produto é matéria (OP de outro produto); sem isto a FK bloqueia o delete. */
+        await tx
+          .delete(productionOrderConsumptions)
+          .where(eq(productionOrderConsumptions.productId, productId));
+        await tx
+          .delete(productionOrderLosses)
+          .where(eq(productionOrderLosses.productId, productId));
+
         const poRows = await tx
           .select({ id: productionOrders.id })
           .from(productionOrders)

@@ -33,7 +33,19 @@ export async function erpApiFetch<T>(options: FetchOptions): Promise<T> {
     cache: "no-store",
   });
 
-  const data = await response.json();
+  const rawText = await response.text();
+  let data: unknown = null;
+  if (rawText.trim()) {
+    try {
+      data = JSON.parse(rawText) as unknown;
+    } catch {
+      throw new Error(
+        response.ok
+          ? `Resposta inválida da API (${response.status}): não é JSON.`
+          : rawText.slice(0, 280) || `HTTP ${response.status} (corpo não JSON)`,
+      );
+    }
+  }
 
   const ok = response.ok || additionalOkStatuses.includes(response.status);
 
