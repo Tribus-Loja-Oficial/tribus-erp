@@ -6,6 +6,7 @@ import {
   createVariantSchema,
   productCompositionDataWithoutChildSchema,
   refineProductComposition,
+  productTypeSchema,
 } from "./product.schemas.js";
 import { createPartySchema } from "./party.schemas.js";
 import { createCustomerWithPartySchema, createSupplierWithPartySchema } from "./people.schemas.js";
@@ -40,13 +41,46 @@ export const partyIngestionDataSchema = createPartySchema;
 export const customerIngestionDataSchema = createCustomerWithPartySchema;
 export const supplierIngestionDataSchema = createSupplierWithPartySchema;
 
-/** --- Product + imagens + refs no payload --- */
-export const productIngestionDataSchema = createProductSchema.extend({
-  main_image_url: httpsImageUrl.optional(),
-  gallery_image_urls: z.array(httpsImageUrl).max(50).optional(),
-  categoryRef: z.string().min(1).max(200).optional(),
-  collectionRef: z.string().min(1).max(200).optional(),
-});
+/** --- Product + imagens + refs no payload ---
+ * `productType` / `status` como string + superRefine: mensagens explícitas (ex.: finished_good, publish).
+ * `.strict()`: chaves desconhecidas em `data` falham (exceto object keys dentro de `metadata`).
+ */
+const productStatusesIngestion = ["draft", "active", "inactive", "archived"] as const;
+
+const productIngestionBodySchema = createProductSchema
+  .omit({ productType: true, status: true })
+  .extend({
+    productType: z.string(),
+    status: z.string().optional(),
+  });
+
+export const productIngestionDataSchema = productIngestionBodySchema
+  .extend({
+    main_image_url: httpsImageUrl.optional(),
+    gallery_image_urls: z.array(httpsImageUrl).max(50).optional(),
+    categoryRef: z.string().min(1).max(200).optional(),
+    collectionRef: z.string().min(1).max(200).optional(),
+  })
+  .strict()
+  .superRefine((data, ctx) => {
+    if (!productTypeSchema.safeParse(data.productType).success) {
+      const pt = data.productType;
+      let msg = `productType inválido. Valores aceites: ${productTypeSchema.options.join(", ")}.`;
+      if (pt === "finished_good") {
+        msg +=
+          ' Sugestão: para produto acabado vendável ao cliente use "finished_product" (não "finished_good").';
+      }
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["productType"], message: msg });
+    }
+    const statusVal = data.status ?? "draft";
+    if (!(productStatusesIngestion as readonly string[]).includes(statusVal)) {
+      let msg = `status inválido. Valores aceites: ${productStatusesIngestion.join(", ")}.`;
+      if (statusVal === "publish") {
+        msg += ' Sugestão: WooCommerce "publish" corresponde a status "active" no ERP.';
+      }
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["status"], message: msg });
+    }
+  });
 
 /** --- Variant: product via client_ref --- */
 export const productVariantIngestionDataSchema = createVariantSchema
@@ -78,6 +112,20 @@ export const productCompositionIngestionDataSchema = productCompositionDataWitho
   });
 
 /** --- Movimento de stock: refs opcionais em alternativa a IDs --- */
+export const inventoryMovementTypeValues = [
+  "purchase",
+  "sale",
+  "return",
+  "adjustment",
+  "production_in",
+  "production_out",
+  "transfer_in",
+  "transfer_out",
+  "damaged",
+  "reservation",
+  "release_reservation",
+] as const;
+
 const movementBase = z.object({
   productId: z.string().min(1).optional(),
   productRef: z.string().min(1).max(200).optional(),
@@ -86,29 +134,37 @@ const movementBase = z.object({
   variantRef: z.string().min(1).max(200).optional(),
   locationId: z.string().min(1).optional(),
   locationRef: z.string().min(1).max(200).optional(),
-  type: z.enum([
-    "purchase",
-    "sale",
-    "return",
-    "adjustment",
-    "production_in",
-    "production_out",
-    "transfer_in",
-    "transfer_out",
-    "damaged",
-    "reservation",
-    "release_reservation",
-  ]),
+  /** Validado em superRefine (mensagens para valores típicos de importação, ex. initial_stock). */
+  type: z.string(),
   quantity: z.number().int().min(1),
   unitCostCents: z.number().int().min(0).optional(),
   referenceType: z.string().optional(),
   referenceId: z.string().optional(),
   notes: z.string().optional(),
 });
-export const inventoryMovementIngestionDataSchema = movementBase.refine(
-  (d) => (d.productId || d.productRef) && (d.locationId || d.locationRef),
-  { message: "É necessário productId ou productRef, e locationId ou locationRef." },
-);
+export const inventoryMovementIngestionDataSchema = movementBase
+  .strict()
+  .refine((d) => (d.productId || d.productRef) && (d.locationId || d.locationRef), {
+    message: "É necessário productId ou productRef, e locationId ou locationRef.",
+  })
+  .superRefine((data, ctx) => {
+    const t = data.type;
+    if ((inventoryMovementTypeValues as readonly string[]).includes(t)) return;
+    if (t === "initial_stock") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["type"],
+        message:
+          'Tipo inválido "initial_stock". Para carga inicial de stock ou legado use type "adjustment".',
+      });
+      return;
+    }
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["type"],
+      message: `Tipo de movimento inválido. Valores aceites: ${inventoryMovementTypeValues.join(", ")}. Recebido: ${t}`,
+    });
+  });
 
 const orderItemWithRef = z.object({
   productId: z.string().optional(),

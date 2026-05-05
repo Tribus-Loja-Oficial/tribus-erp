@@ -1,0 +1,25 @@
+{
+  "version": "1.0",
+  "mode": "create",
+  "objects": [
+    {
+      "type": "category",
+      "client_ref": "cat-exemplo",
+      "data": { "name": "Exemplo", "slug": "exemplo" }
+    },
+    {
+      "type": "product",
+      "client_ref": "prd-produto-simples",
+      "data": {
+        "sku": "PF-00001",
+        "name": "Produto acabado exemplo",
+        "productType": "finished_product",
+        "productKind": "simple",
+        "status": "active",
+        "salePriceCents": 7990,
+        "costPriceCents": 3000,
+        "categoryRef": "cat-exemplo"
+      }
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "version": "1.0",
+  "mode": "create",
+  "objects": [
+    {
+      "type": "stock_location",
+      "client_ref": "loc-principal",
+      "data": { "name": "Principal", "type": "main" }
+    },
+    {
+      "type": "category",
+      "client_ref": "cat-brincos",
+      "data": { "name": "Brincos", "slug": "brincos" }
+    },
+    {
+      "type": "product",
+      "client_ref": "prd-brinco-var",
+      "data": {
+        "sku": "BV-00002",
+        "name": "Brinco Vitória Runner Heart",
+        "productKind": "variable",
+        "productType": "finished_product",
+        "status": "active",
+        "salePriceCents": 3990,
+        "costPriceCents": 1500,
+        "categoryRef": "cat-brincos",
+        "metadata": { "woocommerceAttributes": { "cor": ["Cinza", "Colorido"] } }
+      }
+    },
+    {
+      "type": "product_variant",
+      "client_ref": "var-brinco-cinza",
+      "data": {
+        "productRef": "prd-brinco-var",
+        "sku": "BV-00002-cinza",
+        "name": "Cinza",
+        "attributes": { "cor": "Cinza" },
+        "salePriceCents": 3990,
+        "status": "active"
+      }
+    },
+    {
+      "type": "inventory_movement",
+      "data": {
+        "productRef": "prd-brinco-var",
+        "variantRef": "var-brinco-cinza",
+        "locationRef": "loc-principal",
+        "type": "adjustment",
+        "quantity": 10,
+        "notes": "Carga inicial"
+      }
+    }
+  ]
+}

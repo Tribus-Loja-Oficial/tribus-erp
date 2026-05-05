@@ -1,0 +1,43 @@
+{
+  "version": "1.0",
+  "mode": "create",
+  "objects": [
+    {
+      "type": "supplier",
+      "client_ref": "sup-acme",
+      "data": {
+        "type": "company",
+        "legalName": "ACME Matérias Lda",
+        "documentType": "cnpj",
+        "documentNumber": "00000000000191"
+      }
+    },
+    {
+      "type": "product",
+      "client_ref": "prd-compra",
+      "data": {
+        "sku": "MAT-CMP-1",
+        "name": "Matéria para OC",
+        "productType": "raw_material",
+        "status": "active",
+        "salePriceCents": 0,
+        "costPriceCents": 100
+      }
+    },
+    {
+      "type": "purchase_order",
+      "data": {
+        "supplierRef": "sup-acme",
+        "issueDate": "2026-05-01",
+        "items": [
+          {
+            "description": "Matéria-prima",
+            "quantity": 100,
+            "unitPriceCents": 120,
+            "productRef": "prd-compra"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "version": "1.0",
+  "mode": "create",
+  "objects": [
+    {
+      "type": "category",
+      "client_ref": "cat-pulseiras",
+      "data": {
+        "name": "Pulseiras",
+        "slug": "pulseiras"
+      }
+    }
+  ]
+}

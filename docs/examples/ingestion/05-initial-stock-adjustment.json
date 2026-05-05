@@ -1,0 +1,33 @@
+{
+  "version": "1.0",
+  "mode": "create",
+  "objects": [
+    {
+      "type": "stock_location",
+      "client_ref": "loc-main",
+      "data": { "name": "Armazém", "type": "main" }
+    },
+    {
+      "type": "product",
+      "client_ref": "prd-stock",
+      "data": {
+        "sku": "STK-LEG-1",
+        "name": "Produto legado",
+        "productType": "finished_product",
+        "status": "active",
+        "salePriceCents": 1000,
+        "costPriceCents": 400
+      }
+    },
+    {
+      "type": "inventory_movement",
+      "data": {
+        "productRef": "prd-stock",
+        "locationRef": "loc-main",
+        "type": "adjustment",
+        "quantity": 42,
+        "notes": "Carga inicial importada (ex.: WooCommerce stock_quantity)"
+      }
+    }
+  ]
+}

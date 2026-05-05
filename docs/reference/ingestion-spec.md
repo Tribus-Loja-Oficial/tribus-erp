@@ -8,6 +8,7 @@ Contrato espelhado no **tribus-hub**: envelope `version` / `mode` / `objects`, `
 ## Convenção JSON
 
 - Campos em **`data` usam camelCase** (alinhados aos schemas REST da erp-api), não snake_case do Hub.
+- **Excepção (produto):** na ingestão, URLs de imagem usam **`main_image_url`** e **`gallery_image_urls`** (snake_case); ver [ingestion-field-guide.md](./ingestion-field-guide.md).
 - Referências cruzadas no mesmo payload: sufixo **`Ref`** (ex.: `productRef`, `categoryRef`) e valor igual ao **`client_ref`** do alvo.
 - Se existir **`…Id`** real (UUID) e **`…Ref`**, a execução resolve **`…Ref` primeiro** via `refMap`, depois cai no `…Id` já presente em `data`.
 
@@ -78,10 +79,25 @@ Os objectos são ordenados antes de executar (independentemente da ordem no JSON
 - `200` / `207` / `422` conforme `created` / `failed`.
 - Corpo: `{ data: { total, created, failed, items, refMap } }`.
 
+## Schema JSON e exemplos (contrato para IA)
+
+- **JSON Schema (gerado do Zod):** `apps/erp-web/public/ingestion-payload.schema.json` — exposto no web em `/ingestion-payload.schema.json`. Regeneração: `npm run generate:ingestion-schema` em `apps/erp-api`.
+- **Guia de campos / enums / WooCommerce:** [ingestion-field-guide.md](./ingestion-field-guide.md).
+- **Exemplos JSON válidos:** `docs/examples/ingestion/*.json` (cada ficheiro é testado contra `ingestionPayloadSchema` na CI).
+
+## Mapeamento rápido (WooCommerce / erros comuns)
+
+| Origem / erro comum                    | Correção no ERP                                   |
+| -------------------------------------- | ------------------------------------------------- |
+| `productType` = `finished_good`        | `finished_product`                                |
+| `status` = `publish`                   | `active`                                          |
+| Stock inicial com tipo `initial_stock` | `inventory_movement` com `type`: **`adjustment`** |
+| Preço “79.9” em reais                  | `salePriceCents`: **7990** (centavos inteiros)    |
+
 ## Ficheiros de referência
 
 - **IA / checklist:** [ingestion-ai-master-template.md](./ingestion-ai-master-template.md)
-- **JSON Schema (IDE):** `erp-web/public/ingestion-payload.schema.json` (URL `/ingestion-payload.schema.json` no web).
+- **JSON Schema (IDE):** [ingestion-field-guide.md](./ingestion-field-guide.md) + ficheiro gerado em `erp-web/public/`.
 
 ## Extensão
 

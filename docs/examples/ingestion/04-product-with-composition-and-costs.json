@@ -1,0 +1,50 @@
+{
+  "version": "1.0",
+  "mode": "create",
+  "objects": [
+    {
+      "type": "product",
+      "client_ref": "mat-fio",
+      "data": {
+        "sku": "MP-FIO-001",
+        "name": "Fio malha",
+        "productType": "raw_material",
+        "status": "active",
+        "salePriceCents": 0,
+        "costPriceCents": 35,
+        "unitOfMeasure": "meter",
+        "metadata": { "unitLabel": "m" }
+      }
+    },
+    {
+      "type": "product",
+      "client_ref": "prd-pulseira",
+      "data": {
+        "sku": "PF-ACAB-001",
+        "name": "Pulseira Faísca",
+        "productType": "finished_product",
+        "productKind": "simple",
+        "status": "active",
+        "salePriceCents": 8900,
+        "costPriceCents": 3500,
+        "laborCostPerHourCents": 4500,
+        "metadata": {
+          "costBreakdownCents": { "materials": 848, "packaging": 268, "labor": 610 }
+        }
+      }
+    },
+    {
+      "type": "product_composition",
+      "data": {
+        "parentProductRef": "prd-pulseira",
+        "childProductRef": "mat-fio",
+        "quantity": 1,
+        "quantityUnit": "m",
+        "compositionType": "bom",
+        "required": true,
+        "isDefault": true,
+        "notes": "1 metro por unidade"
+      }
+    }
+  ]
+}

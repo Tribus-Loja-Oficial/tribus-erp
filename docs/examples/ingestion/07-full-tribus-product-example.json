@@ -1,0 +1,62 @@
+{
+  "version": "1.0",
+  "mode": "create",
+  "objects": [
+    {
+      "type": "category",
+      "client_ref": "cat-acessorios",
+      "data": { "name": "Acessórios", "slug": "acessorios" }
+    },
+    {
+      "type": "collection",
+      "client_ref": "col-verao",
+      "data": {
+        "name": "Verão 2026",
+        "slug": "verao-2026",
+        "status": "active"
+      }
+    },
+    {
+      "type": "stock_location",
+      "client_ref": "loc-central",
+      "data": { "name": "Central", "type": "main" }
+    },
+    {
+      "type": "product",
+      "client_ref": "prd-pulseira-tribus",
+      "data": {
+        "sku": "TRIB-PUL-001",
+        "name": "Pulseira Tribus exemplo",
+        "slug": "pulseira-tribus-exemplo",
+        "productKind": "simple",
+        "productType": "finished_product",
+        "status": "active",
+        "salePriceCents": 12990,
+        "costPriceCents": 4500,
+        "compareAtPriceCents": 14990,
+        "categoryRef": "cat-acessorios",
+        "collectionRef": "col-verao",
+        "unitOfMeasure": "unit",
+        "availableForEcommerce": true,
+        "availableForPos": true,
+        "metadata": {
+          "sourceSystem": "woocommerce",
+          "externalNumericId": 1609,
+          "permalink": "https://loja.example/produto/pulseira"
+        },
+        "main_image_url": "https://cdn.example.com/img/main.jpg",
+        "gallery_image_urls": ["https://cdn.example.com/img/g1.jpg"]
+      }
+    },
+    {
+      "type": "inventory_movement",
+      "data": {
+        "productRef": "prd-pulseira-tribus",
+        "locationRef": "loc-central",
+        "type": "adjustment",
+        "quantity": 25,
+        "notes": "Stock inicial — mesmo padrão WooCommerce stock_quantity"
+      }
+    }
+  ]
+}
