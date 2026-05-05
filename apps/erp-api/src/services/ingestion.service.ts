@@ -18,6 +18,7 @@ import type { CreateVariantInput } from "../schemas/product.schemas.js";
 import type { CreateProductCompositionInput } from "../schemas/product.schemas.js";
 import type { CreateOrderInput } from "../schemas/order.schemas.js";
 import type { CreatePurchaseOrderInput } from "../schemas/purchase.schemas.js";
+import type { StockMovementType } from "@tribus-erp/core";
 import type {
   IngestionPayload,
   IngestionObject,
@@ -552,7 +553,7 @@ async function createIngestionObject(
         productId,
         variantId: variantId ?? undefined,
         locationId,
-        type: obj.data.type,
+        type: obj.data.type as StockMovementType,
         quantity: obj.data.quantity,
         unitCostCents: obj.data.unitCostCents,
         referenceType: obj.data.referenceType,
