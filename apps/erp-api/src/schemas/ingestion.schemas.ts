@@ -395,6 +395,11 @@ export const ingestionPayloadSchema = z.object({
   version: z.literal("1.0"),
   mode: z.literal("create"),
   objects: ingestionObjectsSchema,
+  /**
+   * Se true, não descarrega nem grava imagens a partir de `main_image_url` / `gallery_image_urls`.
+   * Útil para lotes grandes no Worker (evita timeouts por muitos fetch+R2 sequenciais).
+   */
+  skipProductImageUrls: z.boolean().optional(),
 });
 
 /** Simulação sem gravar no banco; `payload` segue o mesmo schema que a ingestão normal. */

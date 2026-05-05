@@ -14,13 +14,12 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
-  dryRunIngestionAction,
-  executeIngestionAction,
   validateIngestionAction,
   type IngestionDryRunResponse,
   type IngestionExecuteResponse,
   type IngestionValidationResponse,
 } from "@/server/ingestion-actions";
+import { postAdminIngestionJson } from "@/lib/ingestion-admin-fetch";
 import { INGESTION_TEMPLATES } from "@/features/ingestion/lib/ingestion-templates";
 import { IngestionFieldReferencePanel } from "@/features/ingestion/components/ingestion-field-reference-panel";
 import { INGESTION_TYPE_LABELS_UI } from "@/features/ingestion/lib/ingestion-field-reference";
@@ -352,7 +351,11 @@ export function IngestionModal({ open, onOpenChange }: IngestionModalProps) {
     setExecutePending(true);
     try {
       const payload = JSON.parse(jsonText) as unknown;
-      const res = await executeIngestionAction(payload);
+      const res = await postAdminIngestionJson<IngestionExecuteResponse>(
+        "/api/admin/ingestion/execute",
+        payload,
+        [207, 422],
+      );
       setExecuteResult(res.data);
       setStep("result");
     } catch (e) {
@@ -367,7 +370,10 @@ export function IngestionModal({ open, onOpenChange }: IngestionModalProps) {
     setDryRunPending(true);
     try {
       const payload = JSON.parse(jsonText) as Record<string, unknown>;
-      const res = await dryRunIngestionAction({ dryRun: true as const, payload });
+      const res = await postAdminIngestionJson<IngestionDryRunResponse>(
+        "/api/admin/ingestion/dry-run",
+        { dryRun: true as const, payload },
+      );
       setDryRunResult(res.data);
     } catch (e) {
       setParseError(e instanceof Error ? e.message : "Erro na simulação");
@@ -401,7 +407,8 @@ export function IngestionModal({ open, onOpenChange }: IngestionModalProps) {
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-zinc-900">Nova ingestão</p>
               <p className="truncate text-xs text-zinc-500">
-                JSON validado na API (Worker); campos em camelCase; refs com sufixo Ref
+                JSON validado na API (Worker); ingestão corre via rota com timeout alargado — podes
+                esperar na mesma janela até o resultado.
               </p>
             </div>
             <div className="relative shrink-0">

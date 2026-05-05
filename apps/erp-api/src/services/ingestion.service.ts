@@ -14,6 +14,7 @@ import { createProductVariantRepository } from "../repositories/product-variant.
 import { createAuditRepository } from "../repositories/audit.repository.js";
 import type { StorageProvider } from "../storage/storage-provider.js";
 import { ValidationError } from "../errors/app-error.js";
+import { logger } from "../observability/logger.js";
 import { createProductSchema, type CreateProductInput } from "../schemas/product.schemas.js";
 import type { CreateVariantInput } from "../schemas/product.schemas.js";
 import type { CreateProductCompositionInput } from "../schemas/product.schemas.js";
@@ -697,6 +698,9 @@ async function predictDryRunObject(
   }
 }
 
+/** Paralelismo por produto para reduzir wall-clock em lotes com muitas URLs de galeria. */
+const GALLERY_IMAGE_FETCH_CONCURRENCY = 5;
+
 async function applyProductImagesFromUrls(
   media: ReturnType<typeof createProductMediaService>,
   productService: ReturnType<typeof createProductService>,
@@ -725,18 +729,28 @@ async function applyProductImagesFromUrls(
     }
   }
 
-  for (let i = 0; i < (data.gallery_image_urls?.length ?? 0); i++) {
-    const url = data.gallery_image_urls![i]!;
-    try {
-      const doc = await media.uploadProductImageFromUrl({ url, productId });
-      galleryIds.push(doc.id);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Erro desconhecido";
-      warnings.push(`Galeria URL #${i + 1}: ${msg}`);
+  const galleryUrls = data.gallery_image_urls ?? [];
+  for (let start = 0; start < galleryUrls.length; start += GALLERY_IMAGE_FETCH_CONCURRENCY) {
+    const slice = galleryUrls.slice(start, start + GALLERY_IMAGE_FETCH_CONCURRENCY);
+    const sliceResults = await Promise.all(
+      slice.map(async (url, j) => {
+        const displayIndex = start + j + 1;
+        try {
+          const doc = await media.uploadProductImageFromUrl({ url, productId });
+          return { ok: true as const, id: doc.id };
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : "Erro desconhecido";
+          return { ok: false as const, displayIndex, msg };
+        }
+      }),
+    );
+    for (const r of sliceResults) {
+      if (r.ok) galleryIds.push(r.id);
+      else warnings.push(`Galeria URL #${r.displayIndex}: ${r.msg}`);
     }
   }
 
-  if (data.gallery_image_urls?.length) {
+  if (galleryUrls.length) {
     await productService.update(productId, { imagesJson: galleryIds });
   }
 
@@ -762,10 +776,15 @@ async function resolveChildProductIdWithBatch(
   throw new Error("childProductRef ou childSku é obrigatório.");
 }
 
+type IngestionObjectExecOpts = {
+  skipProductImageUrls?: boolean;
+};
+
 async function createIngestionObject(
   obj: IngestionObject,
   ctx: IngestionCtx,
   refMap: Record<string, string>,
+  execOpts: IngestionObjectExecOpts,
 ): Promise<{ id: string; outcome: "created" | "updated" | "skipped"; warnings: string[] }> {
   const warnings: string[] = [];
 
@@ -892,7 +911,11 @@ async function createIngestionObject(
         const updated = await ctx.productsRepo.upsertProductBySlugOrSku(identifier, patch);
         if (updated) {
           const hasUrls = Boolean(obj.data.main_image_url || obj.data.gallery_image_urls?.length);
-          if (hasUrls && ctx.media) {
+          if (hasUrls && execOpts.skipProductImageUrls) {
+            warnings.push(
+              "Imagens por URL omitidas (envelope skipProductImageUrls). Produto actualizado sem alterar imagens.",
+            );
+          } else if (hasUrls && ctx.media) {
             const w = await applyProductImagesFromUrls(
               ctx.media,
               ctx.productService,
@@ -916,14 +939,17 @@ async function createIngestionObject(
       );
       const product = await ctx.productService.create(input);
       const hasUrls = Boolean(obj.data.main_image_url || obj.data.gallery_image_urls?.length);
-      if (hasUrls && !ctx.media) {
+      if (hasUrls && execOpts.skipProductImageUrls) {
+        warnings.push(
+          "Imagens por URL omitidas (envelope skipProductImageUrls). Produto criado sem imagens.",
+        );
+      } else if (hasUrls && !ctx.media) {
         if (obj.data.main_image_url) warnings.push("Imagem principal (URL): R2 indisponível.");
         (obj.data.gallery_image_urls ?? []).forEach((_, i) =>
           warnings.push(`Galeria URL #${i + 1}: R2 indisponível.`),
         );
         return { id: product.id, outcome: "created", warnings };
-      }
-      if (hasUrls && ctx.media) {
+      } else if (hasUrls && ctx.media) {
         const w = await applyProductImagesFromUrls(
           ctx.media,
           ctx.productService,
@@ -1168,6 +1194,9 @@ export function createIngestionService(db: AppDb, storage: StorageProvider | und
       let updated = 0;
       let skipped = 0;
       let failed = 0;
+      const execOpts: IngestionObjectExecOpts = {
+        skipProductImageUrls: payload.skipProductImageUrls === true,
+      };
 
       const originalIndexMap = new Map<IngestionObject, number>(
         payload.objects.map((obj, i) => [obj, i]),
@@ -1182,7 +1211,7 @@ export function createIngestionService(db: AppDb, storage: StorageProvider | und
         };
 
         try {
-          const { id, outcome, warnings } = await createIngestionObject(obj, ctx, refMap);
+          const { id, outcome, warnings } = await createIngestionObject(obj, ctx, refMap, execOpts);
           if (obj.client_ref) refMap[obj.client_ref] = id;
           items.push({
             ...itemBase,
@@ -1206,23 +1235,33 @@ export function createIngestionService(db: AppDb, storage: StorageProvider | und
 
       items.sort((a, b) => a.index - b.index);
 
-      await auditRepo.insert({
-        id: generateId(),
-        actorId: options?.actorId ?? null,
-        actorType: "api",
-        action: "ingestion.executed",
-        entityType: "ingestion",
-        entityId: "execute",
-        metadataJson: JSON.stringify({
+      try {
+        await auditRepo.insert({
+          id: generateId(),
+          actorId: options?.actorId ?? null,
+          actorType: "api",
+          action: "ingestion.executed",
+          entityType: "ingestion",
+          entityId: "execute",
+          metadataJson: JSON.stringify({
+            total: payload.objects.length,
+            created,
+            updated,
+            skipped,
+            failed,
+            byType: validation.summary.byType,
+            skipProductImageUrls: execOpts.skipProductImageUrls === true,
+          }),
+          createdAt: now(),
+        });
+      } catch (e) {
+        logger.error("ingestion audit log failed after execute", {
+          error: String(e),
           total: payload.objects.length,
           created,
-          updated,
-          skipped,
           failed,
-          byType: validation.summary.byType,
-        }),
-        createdAt: now(),
-      });
+        });
+      }
 
       return { total: payload.objects.length, created, updated, skipped, failed, items, refMap };
     },

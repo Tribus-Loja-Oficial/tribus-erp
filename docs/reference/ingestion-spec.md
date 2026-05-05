@@ -3,7 +3,7 @@
 Contrato espelhado no **tribus-hub**: envelope `version` / `mode` / `objects`, `client_ref` único, `refMap` no resultado, validação semântica de campos `*Ref`, execução ordenada por dependência.
 
 - **API:** `POST /internal/ingestion/validate` e `POST /internal/ingestion/execute` (Bearer interno, igual a `/internal/orders/ingest`).
-- **Web:** apenas **administradores** vêem o botão **Ingestão** no header; **server actions** chamam a API (segredo nunca no browser).
+- **Web:** apenas **administradores** vêem o botão **Ingestão** no header. A **execução** e o **dry-run** usam rotas `POST /api/admin/ingestion/execute` e `POST /api/admin/ingestion/dry-run` com **`maxDuration` alargado** (até 300s na execução no Vercel Pro), para o browser poder **esperar na mesma página** até ao JSON completo — sem fila assíncrona. A **validação** continua por server action (rápida). O segredo da API ERP não sai para o browser.
 
 ## Convenção JSON
 
@@ -22,11 +22,12 @@ Contrato espelhado no **tribus-hub**: envelope `version` / `mode` / `objects`, `
 
 ## Envelope
 
-| Campo     | Tipo       | Descrição                                                         |
-| --------- | ---------- | ----------------------------------------------------------------- |
-| `version` | `"1.0"`    | Literal fixo.                                                     |
-| `mode`    | `"create"` | Identificador do tipo de payload; reservado para extensão futura. |
-| `objects` | array      | Entre **1** e **50 000** objectos (`INGESTION_MAX_OBJECTS`).      |
+| Campo                  | Tipo               | Descrição                                                                                                                                                                                                        |
+| ---------------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `version`              | `"1.0"`            | Literal fixo.                                                                                                                                                                                                    |
+| `mode`                 | `"create"`         | Identificador do tipo de payload; reservado para extensão futura.                                                                                                                                                |
+| `objects`              | array              | Entre **1** e **50 000** objectos (`INGESTION_MAX_OBJECTS`).                                                                                                                                                     |
+| `skipProductImageUrls` | boolean (opcional) | Se **`true`**, ignora `main_image_url` e `gallery_image_urls` em produtos (cria/atualiza sem descarregar URLs). Útil em lotes grandes no **Cloudflare Worker** para evitar pedidos longos (muitos `fetch` + R2). |
 
 ### Campos do envelope de cada objecto
 
@@ -74,6 +75,18 @@ Os objectos são ordenados antes de executar (independentemente da ordem no JSON
 ## Imagens (produto)
 
 `main_image_url` e `gallery_image_urls`: apenas **HTTPS**; JPEG/PNG/WebP; até 5 MB; timeouts e anti-SSRF básico no Worker. Falha de imagem → **aviso** em `items[].warnings`, produto criado (política A).
+
+### Timeouts, HTTP 500 e ingestão parcial
+
+Cada URL de imagem pode demorar até **15 s** (`FETCH_TIMEOUT_MS`) por tentativa; com muitos produtos e galerias o pedido HTTP ao Worker fica **muito longo** (I/O). O cliente (ex. **Vercel** serverless) ou a infraestrutura pode cortar a ligação antes da resposta → corpo **500** ou erro de rede **mesmo tendo já criado parte dos registos** (a ingestão não é uma única transação).
+
+**Mitigação:**
+
+1. Enviar **`"skipProductImageUrls": true`** no envelope e tratar imagens noutro fluxo (ou segunda ingestão só com URLs em lotes pequenos).
+2. Dividir o JSON em várias execuções menores (menos objectos com imagens por pedido).
+3. As galerias são processadas com **paralelismo limitado** (5 URLs em simultâneo por produto) para reduzir wall-clock face ao modo estritamente sequencial.
+
+O registo de **auditoria** após a execução falha de forma **isolada**: um erro só no audit não deve impedir a resposta com `items` / `refMap` (evita 500 logo no fim de um lote longo).
 
 ## Respostas HTTP
 

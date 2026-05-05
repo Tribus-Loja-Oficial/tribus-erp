@@ -2220,6 +2220,9 @@
           },
           "minItems": 1,
           "maxItems": 50000
+        },
+        "skipProductImageUrls": {
+          "type": "boolean"
         }
       },
       "required": ["version", "mode", "objects"],
