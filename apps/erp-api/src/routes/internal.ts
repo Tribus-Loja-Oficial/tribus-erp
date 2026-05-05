@@ -10,7 +10,10 @@ import { toApiError, ValidationError } from "../errors/app-error.js";
 import { verifyInternalToken } from "../auth/verify-internal-token.js";
 import { ingestOrderSchema } from "../schemas/order.schemas.js";
 import { importXmlSchema } from "../schemas/fiscal.schemas.js";
-import { ingestionPayloadSchema } from "../schemas/ingestion.schemas.js";
+import {
+  ingestionDryRunRequestSchema,
+  ingestionPayloadSchema,
+} from "../schemas/ingestion.schemas.js";
 import { createIngestionService, validateIngestionPayload } from "../services/ingestion.service.js";
 import { generateId } from "../utils/id.js";
 import { createAuditRepository } from "../repositories/audit.repository.js";
@@ -151,6 +154,49 @@ internal.post("/ingestion/execute", async (c) => {
     if (err instanceof ValidationError) {
       return c.json({ message: err.message, code: err.code, issues: err.issues }, err.statusCode);
     }
+    const { message, code, status } = toApiError(err);
+    return c.json({ message, code }, status);
+  }
+});
+
+/** Simulação sem gravar no banco (validação + plano previsto por objeto). */
+internal.post("/ingestion/dry-run", async (c) => {
+  try {
+    const config = getEnv(c.env);
+    verifyInternalToken(c.req.header("Authorization"), config.erpInternalSecret);
+
+    const body = await c.req.json().catch(() => null);
+    const parsed = ingestionDryRunRequestSchema.safeParse(body);
+
+    if (!parsed.success) {
+      const errors = parsed.error.issues.map((issue) => ({
+        message: `${issue.path.length ? `[${issue.path.join(".")}] ` : ""}${issue.message}`,
+      }));
+      return c.json(
+        {
+          data: {
+            dryRun: true as const,
+            valid: false,
+            errors: errors.map((e) => ({
+              message: e.message,
+            })),
+            warnings: [],
+            summary: { total: 0, byType: {} },
+            planned: { created: 0, updated: 0, skipped: 0, failed: 0 },
+            items: [],
+            refMap: {},
+          },
+        },
+        200,
+      );
+    }
+
+    const db = createDb(config.db);
+    const storage = new R2StorageProvider(config.r2);
+    const ingestion = createIngestionService(db, storage);
+    const result = await ingestion.dryRunIngestion(parsed.data.payload);
+    return c.json({ data: result }, 200);
+  } catch (err) {
     const { message, code, status } = toApiError(err);
     return c.json({ message, code }, status);
   }

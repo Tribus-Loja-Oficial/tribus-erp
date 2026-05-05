@@ -43,6 +43,32 @@ export type IngestionExecuteResponse = {
   };
 };
 
+export type IngestionDryRunItem = {
+  index: number;
+  type: string;
+  clientRef?: string;
+  plannedStatus: "created" | "updated" | "skipped" | "failed";
+  detail?: string;
+};
+
+export type IngestionDryRunResponse = {
+  data: {
+    dryRun: true;
+    valid: boolean;
+    errors: Array<{ message: string }>;
+    warnings: IngestionValidationIssue[];
+    summary: { total: number; byType: Record<string, number> };
+    planned: {
+      created: number;
+      updated: number;
+      skipped: number;
+      failed: number;
+    };
+    items: IngestionDryRunItem[];
+    refMap: Record<string, string>;
+  };
+};
+
 async function assertAdminIngestion() {
   const session = await auth();
   if (!session?.user) {
@@ -80,4 +106,14 @@ export async function executeIngestionAction(payload: unknown): Promise<Ingestio
   revalidatePath("/orders");
   revalidatePath("/purchases");
   return res;
+}
+
+/** Simula gravação (sem alterar a base): `{ dryRun: true, payload }`. */
+export async function dryRunIngestionAction(payload: unknown): Promise<IngestionDryRunResponse> {
+  await assertAdminIngestion();
+  return erpApiFetch<IngestionDryRunResponse>({
+    method: "POST",
+    path: "/internal/ingestion/dry-run",
+    body: payload,
+  });
 }

@@ -26,7 +26,7 @@ Contrato espelhado no **tribus-hub**: envelope `version` / `mode` / `objects`, `
 | --------- | ---------- | ----------------------------------------------------------------- |
 | `version` | `"1.0"`    | Literal fixo.                                                     |
 | `mode`    | `"create"` | Identificador do tipo de payload; reservado para extensão futura. |
-| `objects` | array      | Entre **1** e **200** objectos.                                   |
+| `objects` | array      | Entre **1** e **50 000** objectos (`INGESTION_MAX_OBJECTS`).      |
 
 ### Campos do envelope de cada objecto
 
@@ -81,6 +81,31 @@ Os objectos são ordenados antes de executar (independentemente da ordem no JSON
 
 - `200` + `{ data: { valid, errors, warnings, summary } }`.
 - Erros Zod no envelope → `valid: false` e lista de mensagens (como no Hub).
+
+### `POST /internal/ingestion/dry-run`
+
+Simula a ingestão **sem gravar** na base (apenas leituras para prever ignorados / actualizações em categorias, coleções e produtos com `upsert` ou `skip`).
+
+Corpo:
+
+```json
+{
+  "dryRun": true,
+  "payload": {
+    "version": "1.0",
+    "mode": "create",
+    "objects": []
+  }
+}
+```
+
+Resposta `200` + `{ data: { dryRun: true, valid, errors, warnings, summary, planned, items, refMap } }`:
+
+- `planned`: contagens previstas de `created`, `updated`, `skipped`, `failed` por objecto.
+- `items[].plannedStatus`: o mesmo significado que na execução real; `detail` explica falhas previstas.
+- `refMap`: mapa previsto de `client_ref` → ID; valores `dry-run:ref:…` / `dry-run:sku:…` são marcadores para registos que **seriam** criados (objectos já existentes usam o ID real).
+
+Se o envelope `dryRun` + `payload` for inválido (Zod), `valid: false` e mensagens em `errors` (sem plano).
 
 ### `POST /internal/ingestion/execute`
 

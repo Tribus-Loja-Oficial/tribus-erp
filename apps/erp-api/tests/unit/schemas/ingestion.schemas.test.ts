@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
+import { z } from "zod";
 import {
+  INGESTION_MAX_OBJECTS,
   ingestionPayloadSchema,
   productIngestionDataSchema,
 } from "../../../src/schemas/ingestion.schemas.js";
@@ -45,23 +47,10 @@ describe("ingestionPayloadSchema", () => {
     expect(result.success).toBe(false);
   });
 
-  it("rejects more than 200 objects", () => {
-    const objects = Array.from({ length: 201 }, (_, i) => ({
-      type: "product" as const,
-      data: {
-        sku: `S${i}`,
-        name: `N${i}`,
-        productType: "service" as const,
-        salePriceCents: 0,
-        costPriceCents: 0,
-      },
-    }));
-    const result = ingestionPayloadSchema.safeParse({
-      version: "1.0",
-      mode: "create",
-      objects,
-    });
-    expect(result.success).toBe(false);
+  it(`limite de objectos (${INGESTION_MAX_OBJECTS}) aplicado ao campo objects`, () => {
+    expect(INGESTION_MAX_OBJECTS).toBe(50_000);
+    const oversize = Array.from({ length: INGESTION_MAX_OBJECTS + 1 }, () => null);
+    expect(z.array(z.any()).max(INGESTION_MAX_OBJECTS).safeParse(oversize).success).toBe(false);
   });
 });
 

@@ -380,13 +380,31 @@ export const ingestionObjectSchema = z.union([
   }),
 ]);
 
+/** Limite por payload (ordenação interna + refMap global); ficheiros grandes não precisam ser divididos manualmente. */
+export const INGESTION_MAX_OBJECTS = 50_000;
+
+export const ingestionObjectsSchema = z
+  .array(ingestionObjectSchema)
+  .min(1)
+  .max(
+    INGESTION_MAX_OBJECTS,
+    `O payload não pode conter mais de ${INGESTION_MAX_OBJECTS.toLocaleString("en-US")} objetos`,
+  );
+
 export const ingestionPayloadSchema = z.object({
   version: z.literal("1.0"),
   mode: z.literal("create"),
-  objects: z.array(ingestionObjectSchema).min(1).max(200),
+  objects: ingestionObjectsSchema,
+});
+
+/** Simulação sem gravar no banco; `payload` segue o mesmo schema que a ingestão normal. */
+export const ingestionDryRunRequestSchema = z.object({
+  dryRun: z.literal(true),
+  payload: ingestionPayloadSchema,
 });
 
 export type IngestionPayload = z.infer<typeof ingestionPayloadSchema>;
+export type IngestionDryRunRequest = z.infer<typeof ingestionDryRunRequestSchema>;
 export type IngestionObject = z.infer<typeof ingestionObjectSchema>;
 export type IngestionObjectType = IngestionObject["type"];
 

@@ -393,6 +393,15 @@ export function createProductRepository(db: AppDb) {
       return result[0] ?? null;
     },
 
+    async findCategoryBySlug(slug: string) {
+      const result = await db
+        .select()
+        .from(productCategories)
+        .where(eq(productCategories.slug, slug))
+        .limit(1);
+      return result[0] ?? null;
+    },
+
     async findCategories() {
       return db
         .select()
@@ -429,6 +438,15 @@ export function createProductRepository(db: AppDb) {
         .from(productCollections)
         .where(isNull(productCollections.archivedAt))
         .orderBy(productCollections.name);
+    },
+
+    async findCollectionBySlug(slug: string) {
+      const result = await db
+        .select()
+        .from(productCollections)
+        .where(eq(productCollections.slug, slug))
+        .limit(1);
+      return result[0] ?? null;
     },
 
     async insertCollection(data: NewProductCollection) {

@@ -10,6 +10,7 @@ import { createProductCompositionService } from "./product-composition.service.j
 import { createOrderService } from "./order.service.js";
 import { createPurchaseService } from "./purchase.service.js";
 import { createProductRepository } from "../repositories/product.repository.js";
+import { createProductVariantRepository } from "../repositories/product-variant.repository.js";
 import { createAuditRepository } from "../repositories/audit.repository.js";
 import type { StorageProvider } from "../storage/storage-provider.js";
 import { ValidationError } from "../errors/app-error.js";
@@ -63,6 +64,30 @@ export type IngestionResult = {
   skipped: number;
   failed: number;
   items: IngestionItemResult[];
+  refMap: Record<string, string>;
+};
+
+export type DryRunItemResult = {
+  index: number;
+  type: IngestionObjectType;
+  clientRef?: string;
+  plannedStatus: "created" | "updated" | "skipped" | "failed";
+  detail?: string;
+};
+
+export type DryRunIngestionResult = {
+  dryRun: true;
+  valid: boolean;
+  errors: ValidationIssue[];
+  warnings: ValidationIssue[];
+  summary: ValidationResult["summary"];
+  planned: {
+    created: number;
+    updated: number;
+    skipped: number;
+    failed: number;
+  };
+  items: DryRunItemResult[];
   refMap: Record<string, string>;
 };
 
@@ -382,8 +407,295 @@ type IngestionCtx = {
   orderService: ReturnType<typeof createOrderService>;
   purchaseService: ReturnType<typeof createPurchaseService>;
   productsRepo: ReturnType<typeof createProductRepository>;
+  variantsRepo: ReturnType<typeof createProductVariantRepository>;
   media: ReturnType<typeof createProductMediaService> | null;
 };
+
+function slugifyForDryRun(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+type DryRunPredict = { status: DryRunItemResult["plannedStatus"]; id?: string; detail?: string };
+
+function dryRunSyntheticId(clientRef?: string, sku?: string, index?: number): string {
+  if (clientRef) return `dry-run:ref:${clientRef}`;
+  if (sku) return `dry-run:sku:${sku}`;
+  return `dry-run:idx:${index ?? 0}`;
+}
+
+async function resolveChildProductIdDryRun(
+  ctx: IngestionCtx,
+  refMap: Record<string, string>,
+  skuToId: Map<string, string>,
+  childProductRef?: string,
+  childSku?: string,
+): Promise<{ id: string } | { error: string }> {
+  if (childProductRef) {
+    const id = refMap[childProductRef];
+    if (!id) return { error: `childProductRef "${childProductRef}" não resolvido no simulador.` };
+    return { id };
+  }
+  if (childSku) {
+    const fromBatch = skuToId.get(childSku);
+    if (fromBatch) return { id: fromBatch };
+    const row = await ctx.productsRepo.findBySku(childSku);
+    if (row) return { id: row.id };
+    return {
+      error: `childSku "${childSku}" não encontrado na base nem criado antes neste payload.`,
+    };
+  }
+  return { error: "childProductRef ou childSku é obrigatório." };
+}
+
+async function predictDryRunObject(
+  obj: IngestionObject,
+  ctx: IngestionCtx,
+  refMap: Record<string, string>,
+  skuToId: Map<string, string>,
+  objectIndex: number,
+): Promise<DryRunPredict> {
+  switch (obj.type) {
+    case "stock_location": {
+      const id = obj.client_ref
+        ? dryRunSyntheticId(obj.client_ref)
+        : dryRunSyntheticId(undefined, undefined, objectIndex);
+      return { status: "created", id: obj.client_ref ? id : undefined };
+    }
+    case "category": {
+      const slug = obj.data.slug;
+      const existing = await ctx.productsRepo.findCategoryBySlug(slug);
+      if (obj.action === "upsert") {
+        if (existing) return { status: "updated", id: existing.id };
+        if (!obj.data.name) {
+          return {
+            status: "failed",
+            detail: `Categoria "${slug}" não existe e falta "name" para criar.`,
+          };
+        }
+        return {
+          status: "created",
+          id: dryRunSyntheticId(obj.client_ref, undefined, objectIndex),
+        };
+      }
+      if (existing) return { status: "skipped", id: existing.id };
+      return { status: "created", id: dryRunSyntheticId(obj.client_ref, undefined, objectIndex) };
+    }
+    case "collection": {
+      const slug = obj.data.slug;
+      const existing = await ctx.productsRepo.findCollectionBySlug(slug);
+      if (obj.action === "upsert") {
+        if (existing) return { status: "updated", id: existing.id };
+        if (!obj.data.name) {
+          return {
+            status: "failed",
+            detail: `Coleção "${slug}" não existe e falta "name" para criar.`,
+          };
+        }
+        return {
+          status: "created",
+          id: dryRunSyntheticId(obj.client_ref, undefined, objectIndex),
+        };
+      }
+      if (existing) return { status: "skipped", id: existing.id };
+      return { status: "created", id: dryRunSyntheticId(obj.client_ref, undefined, objectIndex) };
+    }
+    case "party":
+    case "customer":
+    case "supplier":
+      return {
+        status: "created",
+        id: dryRunSyntheticId(obj.client_ref, undefined, objectIndex),
+      };
+    case "product": {
+      try {
+        if (obj.action === "upsert") {
+          const identifier = obj.data.slug ?? obj.data.sku;
+          if (!identifier) {
+            return { status: "failed", detail: "Em upsert de produto indique slug ou sku." };
+          }
+          const existing = await ctx.productsRepo.findBySlugOrSku(identifier);
+          if (existing) return { status: "updated", id: existing.id };
+          if (!obj.data.name || !obj.data.productType) {
+            return {
+              status: "failed",
+              detail: `Produto "${identifier}" não existe; são necessários name e productType para criar.`,
+            };
+          }
+          const input = toCreateProductInput(
+            obj.data as Parameters<typeof toCreateProductInput>[0],
+            refMap,
+          );
+          const skuHit = await ctx.productsRepo.findBySku(input.sku);
+          if (skuHit) {
+            return {
+              status: "failed",
+              detail: `SKU '${input.sku}' já existe na base.`,
+            };
+          }
+          const varSkuHit = await ctx.variantsRepo.findBySku(input.sku);
+          if (varSkuHit) {
+            return {
+              status: "failed",
+              detail: `SKU '${input.sku}' já existe numa variação.`,
+            };
+          }
+          const effSlug = input.slug ? slugifyForDryRun(input.slug) : slugifyForDryRun(input.name);
+          const slugHit = await ctx.productsRepo.findBySlugOrSku(effSlug);
+          if (slugHit) {
+            return {
+              status: "failed",
+              detail: `Slug '${effSlug}' já está em uso.`,
+            };
+          }
+          return {
+            status: "created",
+            id: dryRunSyntheticId(obj.client_ref, input.sku, objectIndex),
+          };
+        }
+
+        const data = obj.data as Parameters<typeof toCreateProductInput>[0];
+        const input = toCreateProductInput(data, refMap);
+        const skuHit = await ctx.productsRepo.findBySku(input.sku);
+        if (skuHit) {
+          return { status: "failed", detail: `SKU '${input.sku}' already exists` };
+        }
+        const varSkuHit = await ctx.variantsRepo.findBySku(input.sku);
+        if (varSkuHit) {
+          return {
+            status: "failed",
+            detail: `SKU '${input.sku}' já existe numa variação.`,
+          };
+        }
+        const effSlug = input.slug ? slugifyForDryRun(input.slug) : slugifyForDryRun(input.name);
+        const slugHit = await ctx.productsRepo.findBySlugOrSku(effSlug);
+        if (slugHit) {
+          return { status: "failed", detail: `Slug '${effSlug}' já está em uso.` };
+        }
+        return {
+          status: "created",
+          id: dryRunSyntheticId(obj.client_ref, input.sku, objectIndex),
+        };
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Erro ao simular produto.";
+        return { status: "failed", detail: msg };
+      }
+    }
+    case "product_variant": {
+      const productId = refMap[obj.data.productRef];
+      if (!productId) {
+        return {
+          status: "failed",
+          detail: `productRef "${obj.data.productRef}" não resolvido.`,
+        };
+      }
+      const skuHit = await ctx.productsRepo.findBySku(obj.data.sku);
+      if (skuHit) {
+        return { status: "failed", detail: `SKU '${obj.data.sku}' already exists` };
+      }
+      const varSkuHit = await ctx.variantsRepo.findBySku(obj.data.sku);
+      if (varSkuHit) {
+        return {
+          status: "failed",
+          detail: `SKU '${obj.data.sku}' já existe numa variação.`,
+        };
+      }
+      return {
+        status: "created",
+        id: dryRunSyntheticId(obj.client_ref, obj.data.sku, objectIndex),
+      };
+    }
+    case "product_composition": {
+      const parentId = refMap[obj.data.parentProductRef];
+      if (!parentId) {
+        return {
+          status: "failed",
+          detail: `parentProductRef "${obj.data.parentProductRef}" não resolvido.`,
+        };
+      }
+      const child = await resolveChildProductIdDryRun(
+        ctx,
+        refMap,
+        skuToId,
+        obj.data.childProductRef,
+        obj.data.childSku,
+      );
+      if ("error" in child) return { status: "failed", detail: child.error };
+      void parentId;
+      void child.id;
+      return {
+        status: "created",
+        id: dryRunSyntheticId(obj.client_ref, undefined, objectIndex),
+      };
+    }
+    case "inventory_movement": {
+      const productId = obj.data.productId ?? refMap[obj.data.productRef!];
+      const locationId = obj.data.locationId ?? refMap[obj.data.locationRef!];
+      if (!productId) {
+        return { status: "failed", detail: "productId/productRef em falta ou não resolvido." };
+      }
+      if (!locationId) {
+        return { status: "failed", detail: "locationId/locationRef em falta ou não resolvido." };
+      }
+      const variantId =
+        obj.data.variantId?.trim() ||
+        (obj.data.variantRef ? refMap[obj.data.variantRef] : undefined);
+      if (obj.data.variantRef?.trim() && !variantId) {
+        return {
+          status: "failed",
+          detail: `variantRef "${obj.data.variantRef}" não resolvido.`,
+        };
+      }
+      void productId;
+      void locationId;
+      void variantId;
+      return {
+        status: "created",
+        id: dryRunSyntheticId(obj.client_ref, undefined, objectIndex),
+      };
+    }
+    case "order": {
+      const customerId = obj.data.customerId ?? refMap[obj.data.customerRef!];
+      if (!customerId) {
+        return { status: "failed", detail: "customerId/customerRef em falta ou não resolvido." };
+      }
+      try {
+        obj.data.items.forEach((it, j) => {
+          const variantId =
+            it.variantId?.trim() || (it.variantRef ? refMap[it.variantRef] : undefined);
+          if (it.variantRef?.trim() && !variantId) {
+            throw new Error(`variantRef "${it.variantRef}" não resolvido (items[${j}]).`);
+          }
+          const productId = it.productId ?? (it.productRef ? refMap[it.productRef] : undefined);
+          void productId;
+          void variantId;
+        });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Erro nas linhas do pedido.";
+        return { status: "failed", detail: msg };
+      }
+      return {
+        status: "created",
+        id: dryRunSyntheticId(obj.client_ref, undefined, objectIndex),
+      };
+    }
+    case "purchase_order": {
+      const supplierId = obj.data.supplierId ?? refMap[obj.data.supplierRef!];
+      if (!supplierId) {
+        return { status: "failed", detail: "supplierId/supplierRef em falta ou não resolvido." };
+      }
+      void supplierId;
+      return {
+        status: "created",
+        id: dryRunSyntheticId(obj.client_ref, undefined, objectIndex),
+      };
+    }
+  }
+}
 
 async function applyProductImagesFromUrls(
   media: ReturnType<typeof createProductMediaService>,
@@ -740,6 +1052,7 @@ export function createIngestionService(db: AppDb, storage: StorageProvider | und
   const orderService = createOrderService(db);
   const purchaseService = createPurchaseService(db);
   const productsRepo = createProductRepository(db);
+  const variantsRepo = createProductVariantRepository(db);
   const media = storage ? createProductMediaService(db, storage) : null;
   const auditRepo = createAuditRepository(db);
   const now = () => new Date().toISOString();
@@ -752,11 +1065,89 @@ export function createIngestionService(db: AppDb, storage: StorageProvider | und
     orderService,
     purchaseService,
     productsRepo,
+    variantsRepo,
     media,
   };
 
   return {
     validateIngestionPayload,
+
+    async dryRunIngestion(payload: IngestionPayload): Promise<DryRunIngestionResult> {
+      const validation = validateIngestionPayload(payload);
+      if (!validation.valid) {
+        return {
+          dryRun: true,
+          valid: false,
+          errors: validation.errors,
+          warnings: validation.warnings,
+          summary: validation.summary,
+          planned: { created: 0, updated: 0, skipped: 0, failed: 0 },
+          items: [],
+          refMap: {},
+        };
+      }
+
+      const sortedObjects = sortByDependency(payload.objects);
+      const refMap: Record<string, string> = {};
+      const skuToId = new Map<string, string>();
+      const items: DryRunItemResult[] = [];
+      let created = 0;
+      let updated = 0;
+      let skipped = 0;
+      let failed = 0;
+
+      const originalIndexMap = new Map<IngestionObject, number>(
+        payload.objects.map((obj, i) => [obj, i]),
+      );
+
+      for (const obj of sortedObjects) {
+        const originalIndex = originalIndexMap.get(obj) ?? -1;
+        const pred = await predictDryRunObject(obj, ctx, refMap, skuToId, originalIndex);
+        items.push({
+          index: originalIndex,
+          type: obj.type,
+          clientRef: obj.client_ref,
+          plannedStatus: pred.status,
+          detail: pred.detail,
+        });
+        if (pred.status === "failed") {
+          failed++;
+          continue;
+        }
+        if (pred.status === "created") created++;
+        else if (pred.status === "updated") updated++;
+        else skipped++;
+
+        if (obj.client_ref && pred.id) {
+          refMap[obj.client_ref] = pred.id;
+        }
+
+        if (obj.type === "product" && pred.id) {
+          let sku = obj.data.sku;
+          if (!sku && !pred.id.startsWith("dry-run:")) {
+            const row = await ctx.productsRepo.findById(pred.id);
+            sku = row?.sku;
+          }
+          if (sku) skuToId.set(sku, pred.id);
+        }
+        if (obj.type === "product_variant" && pred.id && obj.data.sku) {
+          skuToId.set(obj.data.sku, pred.id);
+        }
+      }
+
+      items.sort((a, b) => a.index - b.index);
+
+      return {
+        dryRun: true,
+        valid: true,
+        errors: [],
+        warnings: validation.warnings,
+        summary: validation.summary,
+        planned: { created, updated, skipped, failed },
+        items,
+        refMap,
+      };
+    },
 
     async executeIngestion(
       payload: IngestionPayload,
