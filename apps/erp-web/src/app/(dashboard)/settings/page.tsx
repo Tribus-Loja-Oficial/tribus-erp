@@ -1,10 +1,11 @@
 import { Header } from "@/components/layout/header";
+import { DangerZone } from "@/components/settings/danger-zone";
 
 export default function SettingsPage() {
   return (
     <div className="flex flex-col overflow-auto">
       <Header title="Configurações" />
-      <div className="p-6">
+      <div className="space-y-6 p-6">
         <div className="max-w-xl space-y-3 rounded-xl border border-zinc-200 bg-white p-6 text-sm text-zinc-600 shadow-sm">
           <p>
             Variáveis principais: <code className="rounded bg-zinc-100 px-1">ERP_API_URL</code>,{" "}
@@ -14,6 +15,7 @@ export default function SettingsPage() {
           </p>
           <p>Autenticação CDS/JWT na API pode ser expandida nas próximas iterações.</p>
         </div>
+        <DangerZone />
       </div>
     </div>
   );

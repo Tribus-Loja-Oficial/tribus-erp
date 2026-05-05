@@ -14,6 +14,46 @@ import { ingestionPayloadSchema } from "../schemas/ingestion.schemas.js";
 import { createIngestionService, validateIngestionPayload } from "../services/ingestion.service.js";
 import { generateId } from "../utils/id.js";
 import { createAuditRepository } from "../repositories/audit.repository.js";
+import {
+  productionOrderConsumptions,
+  productionOrderLosses,
+  productionOrders,
+  bomItems,
+  billOfMaterials,
+  fiscalDocumentItems,
+  documentFiles,
+  fiscalDocuments,
+  cashMovements,
+  cashSessions,
+  financialEntries,
+  accountsPayable,
+  accountsReceivable,
+  orderPayments,
+  orderItems,
+  orders,
+  purchaseOrderItems,
+  purchaseOrders,
+  stockMovements,
+  productTagAssignments,
+  productCompositions,
+  productProductionProfiles,
+  productVariants,
+  products,
+  productCategories,
+  productCollections,
+  productTags,
+  stockLocations,
+  cashRegisters,
+  financialAccounts,
+  chartOfAccounts,
+  costCenters,
+  partyAddresses,
+  customers,
+  suppliers,
+  parties,
+  auditLogs,
+  integrationEvents,
+} from "../db/schema/index.js";
 
 const internal = new Hono<{ Bindings: Env }>();
 
@@ -202,6 +242,61 @@ internal.post("/auth/verify", async (c) => {
       { user: { id: user.id, email: user.email, name: user.name, role: user.role } },
       200,
     );
+  } catch (err) {
+    const { message, code, status } = toApiError(err);
+    return c.json({ message, code }, status);
+  }
+});
+
+internal.post("/data/reset", async (c) => {
+  try {
+    const config = getEnv(c.env);
+    verifyInternalToken(c.req.header("Authorization"), config.erpInternalSecret);
+    const db = createDb(config.db);
+
+    // Delete in FK-safe order: most-dependent tables first.
+    await db.batch([
+      db.delete(productionOrderConsumptions),
+      db.delete(productionOrderLosses),
+      db.delete(productionOrders),
+      db.delete(bomItems),
+      db.delete(billOfMaterials),
+      db.delete(fiscalDocumentItems),
+      db.delete(documentFiles),
+      db.delete(fiscalDocuments),
+      db.delete(cashMovements),
+      db.delete(cashSessions),
+      db.delete(financialEntries),
+      db.delete(accountsPayable),
+      db.delete(accountsReceivable),
+      db.delete(orderPayments),
+      db.delete(orderItems),
+      db.delete(orders),
+      db.delete(purchaseOrderItems),
+      db.delete(purchaseOrders),
+      db.delete(stockMovements),
+      db.delete(productTagAssignments),
+      db.delete(productCompositions),
+      db.delete(productProductionProfiles),
+      db.delete(productVariants),
+      db.delete(products),
+      db.delete(productCategories),
+      db.delete(productCollections),
+      db.delete(productTags),
+      db.delete(stockLocations),
+      db.delete(cashRegisters),
+      db.delete(financialAccounts),
+      db.delete(chartOfAccounts),
+      db.delete(costCenters),
+      db.delete(partyAddresses),
+      db.delete(customers),
+      db.delete(suppliers),
+      db.delete(parties),
+      db.delete(auditLogs),
+      db.delete(integrationEvents),
+    ]);
+
+    return c.json({ data: { ok: true } }, 200);
   } catch (err) {
     const { message, code, status } = toApiError(err);
     return c.json({ message, code }, status);
