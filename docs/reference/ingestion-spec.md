@@ -22,11 +22,20 @@ Contrato espelhado no **tribus-hub**: envelope `version` / `mode` / `objects`, `
 
 ## Envelope
 
-| Campo     | Tipo       | Descrição                       |
-| --------- | ---------- | ------------------------------- |
-| `version` | `"1.0"`    | Literal fixo.                   |
-| `mode`    | `"create"` | Apenas criação em lote.         |
-| `objects` | array      | Entre **1** e **200** objectos. |
+| Campo     | Tipo       | Descrição                                                         |
+| --------- | ---------- | ----------------------------------------------------------------- |
+| `version` | `"1.0"`    | Literal fixo.                                                     |
+| `mode`    | `"create"` | Identificador do tipo de payload; reservado para extensão futura. |
+| `objects` | array      | Entre **1** e **200** objectos.                                   |
+
+### Campos do envelope de cada objecto
+
+| Campo        | Tipo                   | Descrição                                                                                                                 |
+| ------------ | ---------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `type`       | string (literal)       | Tipo do objecto (ex.: `product`). Obrigatório.                                                                            |
+| `action`     | `"skip"` \| `"upsert"` | Comportamento quando o registo já existe. Omitir = `skip`. Ver secção **action** em `ingestion-field-guide.md`.           |
+| `client_ref` | string (max 200)       | Identificador local único no payload. Opcional; necessário se outros objectos referenciam este via `*Ref`.                |
+| `data`       | object                 | Dados do objecto em camelCase. Schema completo para `skip`; schema de patch (só chave natural obrigatória) para `upsert`. |
 
 ## Tipos suportados (`type`)
 
@@ -76,8 +85,9 @@ Os objectos são ordenados antes de executar (independentemente da ordem no JSON
 ### `POST /internal/ingestion/execute`
 
 - `400` + `VALIDATION_ERROR` + `issues` se o payload for inválido após `safeParse` ou validação semântica.
-- `200` / `207` / `422` conforme `created` / `failed`.
-- Corpo: `{ data: { total, created, failed, items, refMap } }`.
+- `200` se nenhuma falha; `207` se criados/actualizados/ignorados + falhas; `422` se tudo falhou.
+- Corpo: `{ data: { total, created, updated, skipped, failed, items, refMap } }`.
+  - `items[].status`: `"created"` | `"updated"` | `"skipped"` | `"failed"`.
 
 ## Schema JSON e exemplos (contrato para IA)
 

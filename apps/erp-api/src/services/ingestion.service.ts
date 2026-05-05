@@ -49,7 +49,8 @@ export type IngestionItemResult = {
   index: number;
   type: IngestionObjectType;
   clientRef?: string;
-  status: "created" | "failed";
+  /** created: novo registo inserido. updated: registo existente actualizado (upsert). skipped: já existia, ignorado. failed: erro. */
+  status: "created" | "updated" | "skipped" | "failed";
   id?: string;
   error?: string;
   warnings?: string[];
@@ -58,6 +59,8 @@ export type IngestionItemResult = {
 export type IngestionResult = {
   total: number;
   created: number;
+  updated: number;
+  skipped: number;
   failed: number;
   items: IngestionItemResult[];
   refMap: Record<string, string>;
@@ -451,13 +454,13 @@ async function createIngestionObject(
   obj: IngestionObject,
   ctx: IngestionCtx,
   refMap: Record<string, string>,
-): Promise<{ id: string; warnings: string[] }> {
+): Promise<{ id: string; outcome: "created" | "updated" | "skipped"; warnings: string[] }> {
   const warnings: string[] = [];
 
   switch (obj.type) {
     case "stock_location": {
       const row = await ctx.inventoryService.createLocation(obj.data);
-      return { id: row.id, warnings };
+      return { id: row.id, outcome: "created", warnings };
     }
     case "category": {
       const parentId = obj.data.parentCategoryRef
@@ -466,32 +469,139 @@ async function createIngestionObject(
       if (obj.data.parentCategoryRef && !parentId) {
         throw new Error(`parentCategoryRef "${obj.data.parentCategoryRef}" não resolvido.`);
       }
-      const row = await ctx.productService.createCategory({
-        name: obj.data.name,
+      const ts = new Date().toISOString();
+
+      if (obj.action === "upsert") {
+        const updated = await ctx.productsRepo.upsertCategoryBySlug(obj.data.slug, {
+          name: obj.data.name,
+          description: obj.data.description ?? null,
+          parentId: parentId ?? null,
+        });
+        if (updated) return { id: updated.id, outcome: "updated", warnings };
+        // Não existe → criar (requer name; valida Zod já garantiu slug)
+        if (!obj.data.name)
+          throw new Error(`Categoria "${obj.data.slug}" não encontrada e name ausente para criar.`);
+      }
+
+      const { row, skipped } = await ctx.productsRepo.insertCategoryIdempotent({
+        id: generateId(),
+        name: obj.data.name!,
         slug: obj.data.slug,
-        parentId,
-        description: obj.data.description,
+        parentId: parentId ?? null,
+        description: obj.data.description ?? null,
+        createdAt: ts,
+        updatedAt: ts,
+        archivedAt: null,
       });
-      return { id: row.id, warnings };
+      return { id: row.id, outcome: skipped ? "skipped" : "created", warnings };
     }
     case "collection": {
-      const row = await ctx.productService.createCollection(obj.data);
-      return { id: row.id, warnings };
+      const ts = new Date().toISOString();
+
+      if (obj.action === "upsert") {
+        const updated = await ctx.productsRepo.upsertCollectionBySlug(obj.data.slug, {
+          name: obj.data.name,
+          description: obj.data.description ?? null,
+          niche: obj.data.niche ?? null,
+          season: obj.data.season ?? null,
+          status: obj.data.status,
+        });
+        if (updated) return { id: updated.id, outcome: "updated", warnings };
+        if (!obj.data.name)
+          throw new Error(`Coleção "${obj.data.slug}" não encontrada e name ausente para criar.`);
+      }
+
+      const { row, skipped } = await ctx.productsRepo.insertCollectionIdempotent({
+        id: generateId(),
+        name: obj.data.name!,
+        slug: obj.data.slug,
+        description: obj.data.description ?? null,
+        niche: obj.data.niche ?? null,
+        season: obj.data.season ?? null,
+        status: obj.data.status ?? "active",
+        createdAt: ts,
+        updatedAt: ts,
+        archivedAt: null,
+      });
+      return { id: row.id, outcome: skipped ? "skipped" : "created", warnings };
     }
     case "party": {
       const row = await ctx.partyService.create(obj.data);
-      return { id: row.id, warnings };
+      return { id: row.id, outcome: "created", warnings };
     }
     case "customer": {
       const { customer } = await ctx.partyService.createCustomerWithParty(obj.data);
-      return { id: customer.id, warnings };
+      return { id: customer.id, outcome: "created", warnings };
     }
     case "supplier": {
       const { supplier } = await ctx.partyService.createSupplierWithParty(obj.data);
-      return { id: supplier.id, warnings };
+      return { id: supplier.id, outcome: "created", warnings };
     }
     case "product": {
-      const input = toCreateProductInput(obj.data, refMap);
+      if (obj.action === "upsert") {
+        const identifier = obj.data.slug ?? obj.data.sku;
+        if (!identifier)
+          throw new Error("Em upsert de produto forneça slug ou sku para identificar o registo.");
+        const categoryId =
+          (obj.data.categoryRef ? refMap[obj.data.categoryRef] : undefined) ?? obj.data.categoryId;
+        const collectionId =
+          (obj.data.collectionRef ? refMap[obj.data.collectionRef] : undefined) ??
+          obj.data.collectionId;
+        const {
+          categoryRef: _cr,
+          collectionRef: _colr,
+          main_image_url: _mi,
+          gallery_image_urls: _gi,
+          status: _st,
+          productType: _pt,
+          imagesJson: _ij,
+          ...patchRest
+        } = obj.data;
+        const patch: Parameters<typeof ctx.productsRepo.upsertProductBySlugOrSku>[1] = {
+          ...patchRest,
+          ...(categoryId !== undefined ? { categoryId } : {}),
+          ...(collectionId !== undefined ? { collectionId } : {}),
+          ...(_st !== undefined
+            ? { status: _st as "draft" | "active" | "inactive" | "archived" }
+            : {}),
+          ...(_pt !== undefined
+            ? {
+                productType: _pt as
+                  | "finished_product"
+                  | "raw_material"
+                  | "packaging"
+                  | "kit"
+                  | "bundle"
+                  | "service"
+                  | "consumable",
+              }
+            : {}),
+        };
+        const updated = await ctx.productsRepo.upsertProductBySlugOrSku(identifier, patch);
+        if (updated) {
+          const hasUrls = Boolean(obj.data.main_image_url || obj.data.gallery_image_urls?.length);
+          if (hasUrls && ctx.media) {
+            const w = await applyProductImagesFromUrls(
+              ctx.media,
+              ctx.productService,
+              updated.id,
+              obj.data as Parameters<typeof applyProductImagesFromUrls>[3],
+            );
+            warnings.push(...w);
+          }
+          return { id: updated.id, outcome: "updated", warnings };
+        }
+        // Não existe → criar (requer campos obrigatórios)
+        if (!obj.data.name || !obj.data.productType)
+          throw new Error(
+            `Produto "${identifier}" não encontrado e name/productType ausentes para criar.`,
+          );
+      }
+
+      const input = toCreateProductInput(
+        obj.data as Parameters<typeof toCreateProductInput>[0],
+        refMap,
+      );
       const product = await ctx.productService.create(input);
       const hasUrls = Boolean(obj.data.main_image_url || obj.data.gallery_image_urls?.length);
       if (hasUrls && !ctx.media) {
@@ -499,18 +609,18 @@ async function createIngestionObject(
         (obj.data.gallery_image_urls ?? []).forEach((_, i) =>
           warnings.push(`Galeria URL #${i + 1}: R2 indisponível.`),
         );
-        return { id: product.id, warnings };
+        return { id: product.id, outcome: "created", warnings };
       }
       if (hasUrls && ctx.media) {
         const w = await applyProductImagesFromUrls(
           ctx.media,
           ctx.productService,
           product.id,
-          obj.data,
+          obj.data as Parameters<typeof applyProductImagesFromUrls>[3],
         );
         warnings.push(...w);
       }
-      return { id: product.id, warnings };
+      return { id: product.id, outcome: "created", warnings };
     }
     case "product_variant": {
       const productId = refMap[obj.data.productRef];
@@ -518,7 +628,7 @@ async function createIngestionObject(
       const { productRef: _pr, ...rest } = obj.data;
       const variantInput = { ...rest, productId } as CreateVariantInput;
       const v = await ctx.productService.createVariant(variantInput);
-      return { id: v.id, warnings };
+      return { id: v.id, outcome: "created", warnings };
     }
     case "product_composition": {
       const parentId = refMap[obj.data.parentProductRef];
@@ -536,7 +646,7 @@ async function createIngestionObject(
         childProductId,
       };
       const row = await ctx.compositionService.add(parentId, payload);
-      return { id: row.id, warnings };
+      return { id: row.id, outcome: "created", warnings };
     }
     case "inventory_movement": {
       const productId = obj.data.productId ?? refMap[obj.data.productRef!];
@@ -560,7 +670,7 @@ async function createIngestionObject(
         referenceId: obj.data.referenceId,
         notes: obj.data.notes,
       });
-      return { id: movement.id, warnings };
+      return { id: movement.id, outcome: "created", warnings };
     }
     case "order": {
       const customerId = obj.data.customerId ?? refMap[obj.data.customerRef!];
@@ -591,7 +701,7 @@ async function createIngestionObject(
         notes: obj.data.notes,
       };
       const order = await ctx.orderService.create(orderInput);
-      return { id: order.id, warnings };
+      return { id: order.id, outcome: "created", warnings };
     }
     case "purchase_order": {
       const supplierId = obj.data.supplierId ?? refMap[obj.data.supplierRef!];
@@ -613,7 +723,7 @@ async function createIngestionObject(
         items,
       };
       const po = await ctx.purchaseService.create(purchaseInput);
-      return { id: po.id, warnings };
+      return { id: po.id, outcome: "created" as const, warnings };
     }
     default: {
       const u: never = obj;
@@ -664,6 +774,8 @@ export function createIngestionService(db: AppDb, storage: StorageProvider | und
       const refMap: Record<string, string> = {};
       const items: IngestionItemResult[] = [];
       let created = 0;
+      let updated = 0;
+      let skipped = 0;
       let failed = 0;
 
       const originalIndexMap = new Map<IngestionObject, number>(
@@ -679,17 +791,23 @@ export function createIngestionService(db: AppDb, storage: StorageProvider | und
         };
 
         try {
-          const { id, warnings } = await createIngestionObject(obj, ctx, refMap);
+          const { id, outcome, warnings } = await createIngestionObject(obj, ctx, refMap);
           if (obj.client_ref) refMap[obj.client_ref] = id;
           items.push({
             ...itemBase,
-            status: "created",
+            status: outcome,
             id,
             warnings: warnings.length ? warnings : undefined,
           });
-          created++;
+          if (outcome === "created") created++;
+          else if (outcome === "updated") updated++;
+          else skipped++;
         } catch (err) {
-          const message = err instanceof Error ? err.message : "Erro desconhecido";
+          let message = err instanceof Error ? err.message : "Erro desconhecido";
+          const cause = err instanceof Error ? err.cause : undefined;
+          if (cause instanceof Error && cause.message) {
+            message += ` | ${cause.message}`;
+          }
           items.push({ ...itemBase, status: "failed", error: message });
           failed++;
         }
@@ -707,13 +825,15 @@ export function createIngestionService(db: AppDb, storage: StorageProvider | und
         metadataJson: JSON.stringify({
           total: payload.objects.length,
           created,
+          updated,
+          skipped,
           failed,
           byType: validation.summary.byType,
         }),
         createdAt: now(),
       });
 
-      return { total: payload.objects.length, created, failed, items, refMap };
+      return { total: payload.objects.length, created, updated, skipped, failed, items, refMap };
     },
   };
 }

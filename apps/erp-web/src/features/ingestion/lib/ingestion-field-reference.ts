@@ -41,6 +41,15 @@ export const INGESTION_ENVELOPE_META = {
 
 const envCommon: IngestionTypeReference["envelope"] = [
   { key: "type", requirement: "required", hint: "literal do tipo (ex.: product)" },
+  {
+    key: "action",
+    requirement: "optional",
+    hint:
+      '"skip" (default): insere se não existe, ignora se existe. ' +
+      '"upsert": actualiza campos enviados se existe (merge-patch), cria se não existe. ' +
+      "Suporte a upsert: category (chave: slug), collection (chave: slug), product (chave: slug ou sku). " +
+      "Outros tipos: campo aceite mas ignorado.",
+  },
   { key: "client_ref", requirement: "optional", hint: "único no payload; use *Ref nos filhos" },
   { key: "data", requirement: "required", hint: "campos em camelCase (API ERP)" },
 ];

@@ -119,7 +119,8 @@ function ValidationPanel({ result }: { result: IngestionValidationResponse["data
 
 function ResultPanel({ result }: { result: IngestionExecuteResponse["data"] }) {
   const ok = result.failed === 0;
-  const totalFail = result.created === 0;
+  const totalFail =
+    result.created === 0 && (result.updated ?? 0) === 0 && (result.skipped ?? 0) === 0;
   return (
     <div className="flex h-full flex-col gap-3">
       <div
@@ -137,10 +138,17 @@ function ResultPanel({ result }: { result: IngestionExecuteResponse["data"] }) {
         )}
         <div>
           <p className="text-sm font-medium text-zinc-900">
-            {ok ? "Ingestão concluída" : totalFail ? "Nenhum objeto criado" : "Ingestão parcial"}
+            {ok
+              ? "Ingestão concluída"
+              : totalFail
+                ? "Nenhum objeto processado"
+                : "Ingestão parcial"}
           </p>
           <p className="text-xs text-zinc-600">
-            {result.created} criado(s), {result.failed} falha(s)
+            {result.created} criado(s)
+            {(result.updated ?? 0) > 0 && `, ${result.updated} actualizado(s)`}
+            {(result.skipped ?? 0) > 0 && `, ${result.skipped} ignorado(s)`}
+            {result.failed > 0 && `, ${result.failed} falha(s)`}
           </p>
         </div>
       </div>
@@ -150,9 +158,10 @@ function ResultPanel({ result }: { result: IngestionExecuteResponse["data"] }) {
             key={item.index}
             className={cn(
               "rounded-md border px-2 py-1.5",
-              item.status === "created"
-                ? "border-emerald-200 bg-emerald-50/50"
-                : "border-red-200 bg-red-50/50",
+              item.status === "created" && "border-emerald-200 bg-emerald-50/50",
+              item.status === "updated" && "border-blue-200 bg-blue-50/50",
+              item.status === "skipped" && "border-zinc-200 bg-zinc-50/50",
+              item.status === "failed" && "border-red-200 bg-red-50/50",
             )}
           >
             <span className="font-mono text-zinc-500">[{item.index}]</span>{" "}
@@ -161,11 +170,16 @@ function ResultPanel({ result }: { result: IngestionExecuteResponse["data"] }) {
             {item.clientRef ? (
               <span className="font-mono text-[10px] text-zinc-500"> ref:{item.clientRef}</span>
             ) : null}
-            {item.status === "created" ? (
+            {item.status === "created" && (
               <span className="block font-mono text-emerald-800">ID: {item.id}</span>
-            ) : (
-              <span className="block text-red-800">{item.error}</span>
             )}
+            {item.status === "updated" && (
+              <span className="block font-mono text-blue-800">Actualizado ID: {item.id}</span>
+            )}
+            {item.status === "skipped" && (
+              <span className="block text-zinc-500">Já existe (ID: {item.id})</span>
+            )}
+            {item.status === "failed" && <span className="block text-red-800">{item.error}</span>}
             {item.warnings?.map((w, j) => (
               <div key={j} className="text-amber-800">
                 {w}
@@ -411,7 +425,10 @@ export function IngestionModal({ open, onOpenChange }: IngestionModalProps) {
               )}
               {step === "result" && executeResult && (
                 <>
-                  {executeResult.created} criado(s) · {executeResult.failed} falha(s)
+                  {executeResult.created} criado(s)
+                  {(executeResult.updated ?? 0) > 0 && ` · ${executeResult.updated} actualizado(s)`}
+                  {(executeResult.skipped ?? 0) > 0 && ` · ${executeResult.skipped} ignorado(s)`}
+                  {executeResult.failed > 0 && ` · ${executeResult.failed} falha(s)`}
                 </>
               )}
             </p>

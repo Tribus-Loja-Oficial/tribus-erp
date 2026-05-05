@@ -1,0 +1,72 @@
+{
+  "_comment": "Exemplo: action upsert — actualizar registos já existentes via merge-patch.",
+  "_notes": [
+    "action:'upsert' → se o registo existir, actualiza APENAS os campos enviados (outros ficam intocados).",
+    "action:'upsert' → se o registo NÃO existir, cria-o (campos obrigatórios do tipo devem estar presentes).",
+    "action omitido / 'skip' (default) → ignora se já existe, cria se não existe.",
+    "Chave natural: category e collection usam 'slug'; product usa 'slug' OU 'sku'.",
+    "Campos omitidos em upsert não são apagados nem sobrescritos no banco.",
+    "client_ref continua a ser resolvido para refMap mesmo em upsert (útil para refs descendentes)."
+  ],
+  "version": "1.0",
+  "mode": "create",
+  "objects": [
+    {
+      "_comment": "Actualizar só a descrição de uma categoria existente (name não enviado = não alterado).",
+      "type": "category",
+      "action": "upsert",
+      "client_ref": "CAT-PULSEIRAS",
+      "data": {
+        "slug": "pulseiras",
+        "description": "Produtos de pulso da Tribus — pulseiras Faísca (artesanal) e Impulso (inox)."
+      }
+    },
+    {
+      "_comment": "Actualizar status e niche de uma coleção existente.",
+      "type": "collection",
+      "action": "upsert",
+      "client_ref": "COL-FAISCA",
+      "data": {
+        "slug": "pulseira-faisca",
+        "status": "active",
+        "niche": "corrida"
+      }
+    },
+    {
+      "_comment": "Actualizar preço de venda e descrição de um produto (por slug).",
+      "type": "product",
+      "action": "upsert",
+      "client_ref": "PRD-IMPULSO-G",
+      "data": {
+        "slug": "pulseira-impulso-g",
+        "salePriceCents": 8990,
+        "description": "Pulseira Impulso tamanho G — aço inox com gravação motivacional."
+      }
+    },
+    {
+      "_comment": "Actualizar produto por sku (alternativa ao slug como chave natural).",
+      "type": "product",
+      "action": "upsert",
+      "data": {
+        "sku": "TRB-PUL-IMP-P",
+        "salePriceCents": 8490,
+        "status": "active"
+      }
+    },
+    {
+      "_comment": "Criar produto que ainda não existe (action upsert + campos obrigatórios presentes = cria).",
+      "type": "product",
+      "action": "upsert",
+      "client_ref": "PRD-NOVO",
+      "data": {
+        "slug": "pulseira-nova-2026",
+        "sku": "TRB-PUL-NOVA-2026",
+        "name": "Pulseira Nova 2026",
+        "productType": "finished_product",
+        "productKind": "simple",
+        "salePriceCents": 9990,
+        "status": "draft"
+      }
+    }
+  ]
+}

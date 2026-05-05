@@ -14,7 +14,12 @@
     "Only ingestion image fields use snake_case: main_image_url, gallery_image_urls; all other data fields are camelCase.",
     "compositionType (bom, packaging, …) is not the same as productType (finished_product, raw_material, …).",
     "Put importer-specific or non-modelled data under metadata (object); do not invent top-level keys — product.data is strict.",
-    "externalRef (PRD-/PRV-) is assigned by the server on create; do not send unless the API explicitly supports it."
+    "externalRef (PRD-/PRV-) is assigned by the server on create; do not send unless the API explicitly supports it.",
+    "action field (envelope, per-object, optional): 'skip' (default) = insert if not exists, ignore if exists; 'upsert' = merge-patch if exists (only sent fields updated, omitted fields untouched), create if not exists.",
+    "action 'upsert' natural keys: category → slug, collection → slug, product → slug OR sku (at least one required in data).",
+    "action 'upsert' data schema is partial (only natural key required); action 'skip'/'omitted' data schema is full (all required fields must be present).",
+    "Types without upsert support (stock_location, party, customer, supplier, product_variant, product_composition, inventory_movement, order, purchase_order): action field is accepted but ignored at runtime.",
+    "Response items[].status values: 'created' (new insert), 'updated' (upsert patch applied), 'skipped' (existed, skip action), 'failed' (error)."
   ],
   "x-official-examples": {
     "01-minimal-category": {
@@ -327,9 +332,81 @@
           }
         }
       ]
+    },
+    "08-upsert-update-existing": {
+      "_comment": "Exemplo: action upsert — actualizar registos já existentes via merge-patch.",
+      "_notes": [
+        "action:'upsert' → se o registo existir, actualiza APENAS os campos enviados (outros ficam intocados).",
+        "action:'upsert' → se o registo NÃO existir, cria-o (campos obrigatórios do tipo devem estar presentes).",
+        "action omitido / 'skip' (default) → ignora se já existe, cria se não existe.",
+        "Chave natural: category e collection usam 'slug'; product usa 'slug' OU 'sku'.",
+        "Campos omitidos em upsert não são apagados nem sobrescritos no banco.",
+        "client_ref continua a ser resolvido para refMap mesmo em upsert (útil para refs descendentes)."
+      ],
+      "version": "1.0",
+      "mode": "create",
+      "objects": [
+        {
+          "_comment": "Actualizar só a descrição de uma categoria existente (name não enviado = não alterado).",
+          "type": "category",
+          "action": "upsert",
+          "client_ref": "CAT-PULSEIRAS",
+          "data": {
+            "slug": "pulseiras",
+            "description": "Produtos de pulso da Tribus — pulseiras Faísca (artesanal) e Impulso (inox)."
+          }
+        },
+        {
+          "_comment": "Actualizar status e niche de uma coleção existente.",
+          "type": "collection",
+          "action": "upsert",
+          "client_ref": "COL-FAISCA",
+          "data": {
+            "slug": "pulseira-faisca",
+            "status": "active",
+            "niche": "corrida"
+          }
+        },
+        {
+          "_comment": "Actualizar preço de venda e descrição de um produto (por slug).",
+          "type": "product",
+          "action": "upsert",
+          "client_ref": "PRD-IMPULSO-G",
+          "data": {
+            "slug": "pulseira-impulso-g",
+            "salePriceCents": 8990,
+            "description": "Pulseira Impulso tamanho G — aço inox com gravação motivacional."
+          }
+        },
+        {
+          "_comment": "Actualizar produto por sku (alternativa ao slug como chave natural).",
+          "type": "product",
+          "action": "upsert",
+          "data": {
+            "sku": "TRB-PUL-IMP-P",
+            "salePriceCents": 8490,
+            "status": "active"
+          }
+        },
+        {
+          "_comment": "Criar produto que ainda não existe (action upsert + campos obrigatórios presentes = cria).",
+          "type": "product",
+          "action": "upsert",
+          "client_ref": "PRD-NOVO",
+          "data": {
+            "slug": "pulseira-nova-2026",
+            "sku": "TRB-PUL-NOVA-2026",
+            "name": "Pulseira Nova 2026",
+            "productType": "finished_product",
+            "productKind": "simple",
+            "salePriceCents": 9990,
+            "status": "draft"
+          }
+        }
+      ]
     }
   },
-  "x-documentation-markdown": "# Guia de campos — Ingestão Tribus ERP\n\nContrato formal: **`apps/erp-api/src/schemas/ingestion.schemas.ts`** (Zod) + validação semântica em `validateIngestionPayload`.\n\n## Fonte de verdade e JSON Schema\n\n- O ficheiro **`apps/erp-web/public/ingestion-payload.schema.json`** é **gerado** a partir de `ingestionPayloadSchema` com `zod-to-json-schema` (sem divergência de enums/required face ao backend).\n- Regenerar após alterações ao Zod:\n\n```bash\ncd apps/erp-api && npm run generate:ingestion-schema\n```\n\n## CamelCase e excepções\n\n- Quase todos os campos em `data` seguem **camelCase** como na REST API (`salePriceCents`, `categoryRef`, …).\n- **Únicas excepções na ingestão de produto** (campos extra da camada de ingestão): **`main_image_url`**, **`gallery_image_urls`** — continuam em **snake_case** por alinhamento histórico com o pipeline de URLs; não existem `mainImageUrl` / `galleryImageUrls` no validador.\n\n## Dinheiro\n\nTodos os valores monetários são **inteiros em centavos** (evitar floats):\n\n| Campo típico           | Exemplo   | Significado |\n| ---------------------- | --------- | ------------- |\n| `salePriceCents`       | `7990`    | R$ 79,90      |\n| `costPriceCents`       | `3500`    | R$ 35,00      |\n| `compareAtPriceCents`  | opcional  | “De por”      |\n| `unitPriceCents` (item)| obrigatório em linhas de pedido | |\n\nNão enviar `regularPrice` em decimal: use **`compareAtPriceCents`** (ou campos oficiais listados no JSON Schema).\n\n## `productType` (produto)\n\nValores exatos (não infira sinónimos):\n\n| Valor              | Uso de negócio (resumo)        |\n| ------------------ | ------------------------------ |\n| `finished_product` | Produto acabado para venda   |\n| `raw_material`     | Insumo / matéria-prima         |\n| `packaging`        | Embalagem, tag, saquinho      |\n| `kit`              | Kit comercial                 |\n| `bundle`           | Bundle / agrupamento          |\n| `service`          | Serviço (mão de obra como produto serviço) |\n| `consumable`       | Consumível operacional        |\n\nErro comum: `finished_good` (Woo) → **não é aceite**; use **`finished_product`**.\n\n## `status` (produto e variante)\n\nValores: `draft` | `active` | `inactive` | `archived`.\n\nMapeamento WooCommerce → ERP:\n\n| WooCommerce | ERP        |\n| ----------- | ---------- |\n| `publish`   | `active`   |\n| `draft`     | `draft`    |\n| `private`   | `inactive` (por defeito) |\n| `trash`     | `archived` |\n\nNão envie **`publish`** no ERP.\n\n## `inventory_movement.data.type`\n\nValores: `purchase` | `sale` | `return` | `adjustment` | `production_in` | `production_out` | `transfer_in` | `transfer_out` | `damaged` | `reservation` | `release_reservation`.\n\n- **Carga inicial / import de stock legado:** use sempre **`adjustment`**, nunca `initial_stock` (não suportado).\n- `notes` pode descrever a origem (ex.: “Import WooCommerce”).\n\n## `product_composition` — `compositionType` vs `productType`\n\n- **`compositionType`** (linha de composição): `packaging` | `bom` | `kit` | `bundle` | `accessory` | `included`.\n- Não confundir com **`productType`** do produto filho (`raw_material`, `packaging`, …).\n- Tipo **embalagem** no sentido de negócio: use **`compositionType`: `packaging`** e preencha **`packagingChannel`**: `online` ou `presential` (regra do `refineProductComposition`).\n\n## `unitOfMeasure` (produto)\n\nEnum no backend: `unit` | `pair` | `meter` | `gram` | `kg` | `liter` | `package`.\n\nSistemas externos com `\"m\"`, `\"g\"`: mapear para **`meter`** / **`gram`**, ou documentar a unidade em **`metadata`** e usar `quantityUnit` em composição (string livre até 80 chars) para a unidade da **quantidade** da linha.\n\n## `productKind` simple vs variable\n\n- **simple:** movimentos e pedidos podem usar só `productRef` / `productId` no produto.\n- **variable:** no mesmo lote, defina `product_variant`(s) com `client_ref`; movimentos e linhas de pedido com `productRef` ao pai exigem **`variantRef` ou `variantId`**.\n\nDefinição de eixos de variação no **pai** não tem campo `attributes` de catálogo no `createProduct` — use **`metadata`** para eixos de importação; as variações reais são linhas `product_variant` com `attributes` (mapa string→string).\n\n## `metadata`\n\n- Tipo: objeto com chaves string e valores JSON arbitrários.\n- Use para: `sourceSystem`, ids externos, tags, detalhes de custo não modelados, etc.\n- Não substitui campos oficiais (`productType`, `status`, preços em centavos, …).\n\n## `client_ref` e referências\n\n- **`client_ref`:** identificador local **no payload** (string única no lote).\n- **`*Ref`:** aponta para o `client_ref` de outro objecto do **mesmo** payload.\n- **`*Id`:** UUID já persistido no D1/ERP.\n- **`externalRef` (PRD-…, PRV-…):** gerado pelo servidor na criação; **não** enviar em modo `create` salvo suporte explícito futuro.\n\n## Exemplos oficiais\n\nFicheiros em **`docs/examples/ingestion/`** (cada um validado em teste contra `ingestionPayloadSchema`):\n\n1. `01-minimal-category.json`\n2. `02-minimal-product-simple.json`\n3. `03-product-variable-with-variants.json`\n4. `04-product-with-composition-and-costs.json`\n5. `05-initial-stock-adjustment.json`\n6. `06-supplier-and-purchase-order.json`\n7. `07-full-tribus-product-example.json`\n\n## Mensagens de erro com “hint”\n\nO schema Zod de ingestão inclui validações que sugerem correções frequentes (ex.: `finished_good`, `publish`, `initial_stock`). Em caso de falha, ler `issues[].path` e `issues[].message` na resposta `VALIDATION_ERROR`.\n",
+  "x-documentation-markdown": "# Guia de campos — Ingestão Tribus ERP\n\nContrato formal: **`apps/erp-api/src/schemas/ingestion.schemas.ts`** (Zod) + validação semântica em `validateIngestionPayload`.\n\n## Fonte de verdade e JSON Schema\n\n- O ficheiro **`apps/erp-web/public/ingestion-payload.schema.json`** é **gerado** a partir de `ingestionPayloadSchema` com `zod-to-json-schema` (sem divergência de enums/required face ao backend).\n- Regenerar após alterações ao Zod:\n\n```bash\ncd apps/erp-api && npm run generate:ingestion-schema\n```\n\n## Campo `action` (envelope, por objecto)\n\nCampo opcional no envelope de cada objecto (ao lado de `type` e `client_ref`). Controla o comportamento quando o registo já existe na base de dados.\n\n| Valor    | Comportamento                                                                                  |\n| -------- | ---------------------------------------------------------------------------------------------- |\n| `skip`   | **(default)** Insere se não existe; ignora (resolve refs) se já existe. Seguro para re-ingestão. |\n| `upsert` | Se o registo existir: actualiza **apenas os campos enviados** (merge-patch — campos omitidos ficam intocados). Se não existir: cria (campos obrigatórios do tipo devem estar presentes). |\n\n**Chave natural por tipo (identifica o registo a actualizar):**\n\n| Tipo         | Chave natural obrigatória em `data`         |\n| ------------ | ------------------------------------------- |\n| `category`   | `slug`                                      |\n| `collection` | `slug`                                      |\n| `product`    | `slug` **ou** `sku` (pelo menos um)         |\n\n**Tipos sem suporte a upsert** (`stock_location`, `party`, `customer`, `supplier`, `product_variant`, `product_composition`, `inventory_movement`, `order`, `purchase_order`): o campo `action` é aceite pela validação mas ignorado em execução (comporta-se como `skip`).\n\n**Resultado no campo `status` de cada item:**\n\n| Status      | Significado                                                  |\n| ----------- | ------------------------------------------------------------ |\n| `created`   | Novo registo inserido.                                       |\n| `updated`   | Registo existente actualizado via upsert.                    |\n| `skipped`   | Registo já existia; ignorado (action skip ou omitido).       |\n| `failed`    | Erro — ver campo `error`.                                    |\n\n**Exemplo mínimo — actualizar só a descrição de uma categoria:**\n\n```json\n{\n  \"version\": \"1.0\",\n  \"mode\": \"create\",\n  \"objects\": [\n    {\n      \"type\": \"category\",\n      \"action\": \"upsert\",\n      \"client_ref\": \"CAT-PULSEIRAS\",\n      \"data\": {\n        \"slug\": \"pulseiras\",\n        \"description\": \"Nova descrição da categoria Pulseiras.\"\n      }\n    }\n  ]\n}\n```\n\n**Exemplo — actualizar preço de venda de um produto:**\n\n```json\n{\n  \"type\": \"product\",\n  \"action\": \"upsert\",\n  \"data\": {\n    \"slug\": \"pulseira-impulso-g\",\n    \"salePriceCents\": 8990\n  }\n}\n```\n\n## CamelCase e excepções\n\n- Quase todos os campos em `data` seguem **camelCase** como na REST API (`salePriceCents`, `categoryRef`, …).\n- **Únicas excepções na ingestão de produto** (campos extra da camada de ingestão): **`main_image_url`**, **`gallery_image_urls`** — continuam em **snake_case** por alinhamento histórico com o pipeline de URLs; não existem `mainImageUrl` / `galleryImageUrls` no validador.\n\n## Dinheiro\n\nTodos os valores monetários são **inteiros em centavos** (evitar floats):\n\n| Campo típico            | Exemplo                         | Significado |\n| ----------------------- | ------------------------------- | ----------- |\n| `salePriceCents`        | `7990`                          | R$ 79,90    |\n| `costPriceCents`        | `3500`                          | R$ 35,00    |\n| `compareAtPriceCents`   | opcional                        | “De por”    |\n| `unitPriceCents` (item) | obrigatório em linhas de pedido |             |\n\nNão enviar `regularPrice` em decimal: use **`compareAtPriceCents`** (ou campos oficiais listados no JSON Schema).\n\n## `productType` (produto)\n\nValores exatos (não infira sinónimos):\n\n| Valor              | Uso de negócio (resumo)                    |\n| ------------------ | ------------------------------------------ |\n| `finished_product` | Produto acabado para venda                 |\n| `raw_material`     | Insumo / matéria-prima                     |\n| `packaging`        | Embalagem, tag, saquinho                   |\n| `kit`              | Kit comercial                              |\n| `bundle`           | Bundle / agrupamento                       |\n| `service`          | Serviço (mão de obra como produto serviço) |\n| `consumable`       | Consumível operacional                     |\n\nErro comum: `finished_good` (Woo) → **não é aceite**; use **`finished_product`**.\n\n## `status` (produto e variante)\n\nValores: `draft` | `active` | `inactive` | `archived`.\n\nMapeamento WooCommerce → ERP:\n\n| WooCommerce | ERP                      |\n| ----------- | ------------------------ |\n| `publish`   | `active`                 |\n| `draft`     | `draft`                  |\n| `private`   | `inactive` (por defeito) |\n| `trash`     | `archived`               |\n\nNão envie **`publish`** no ERP.\n\n## `inventory_movement.data.type`\n\nValores: `purchase` | `sale` | `return` | `adjustment` | `production_in` | `production_out` | `transfer_in` | `transfer_out` | `damaged` | `reservation` | `release_reservation`.\n\n- **Carga inicial / import de stock legado:** use sempre **`adjustment`**, nunca `initial_stock` (não suportado).\n- `notes` pode descrever a origem (ex.: “Import WooCommerce”).\n\n## `product_composition` — `compositionType` vs `productType`\n\n- **`compositionType`** (linha de composição): `packaging` | `bom` | `kit` | `bundle` | `accessory` | `included`.\n- Não confundir com **`productType`** do produto filho (`raw_material`, `packaging`, …).\n- Tipo **embalagem** no sentido de negócio: use **`compositionType`: `packaging`** e preencha **`packagingChannel`**: `online` ou `presential` (regra do `refineProductComposition`).\n\n## `unitOfMeasure` (produto)\n\nEnum no backend: `unit` | `pair` | `meter` | `gram` | `kg` | `liter` | `package`.\n\nSistemas externos com `\"m\"`, `\"g\"`: mapear para **`meter`** / **`gram`**, ou documentar a unidade em **`metadata`** e usar `quantityUnit` em composição (string livre até 80 chars) para a unidade da **quantidade** da linha.\n\n## `productKind` simple vs variable\n\n- **simple:** movimentos e pedidos podem usar só `productRef` / `productId` no produto.\n- **variable:** no mesmo lote, defina `product_variant`(s) com `client_ref`; movimentos e linhas de pedido com `productRef` ao pai exigem **`variantRef` ou `variantId`**.\n\nDefinição de eixos de variação no **pai** não tem campo `attributes` de catálogo no `createProduct` — use **`metadata`** para eixos de importação; as variações reais são linhas `product_variant` com `attributes` (mapa string→string).\n\n## `metadata`\n\n- Tipo: objeto com chaves string e valores JSON arbitrários.\n- Use para: `sourceSystem`, ids externos, tags, detalhes de custo não modelados, etc.\n- Não substitui campos oficiais (`productType`, `status`, preços em centavos, …).\n\n## `client_ref` e referências\n\n- **`client_ref`:** identificador local **no payload** (string única no lote).\n- **`*Ref`:** aponta para o `client_ref` de outro objecto do **mesmo** payload.\n- **`*Id`:** UUID já persistido no D1/ERP.\n- **`externalRef` (PRD-…, PRV-…):** gerado pelo servidor na criação; **não** enviar em modo `create` salvo suporte explícito futuro.\n\n## Exemplos oficiais\n\nFicheiros em **`docs/examples/ingestion/`** (cada um validado em teste contra `ingestionPayloadSchema`):\n\n1. `01-minimal-category.json`\n2. `02-minimal-product-simple.json`\n3. `03-product-variable-with-variants.json`\n4. `04-product-with-composition-and-costs.json`\n5. `05-initial-stock-adjustment.json`\n6. `06-supplier-and-purchase-order.json`\n7. `07-full-tribus-product-example.json`\n\n## Mensagens de erro com “hint”\n\nO schema Zod de ingestão inclui validações que sugerem correções frequentes (ex.: `finished_good`, `publish`, `initial_stock`). Em caso de falha, ler `issues[].path` e `issues[].message` na resposta `VALIDATION_ERROR`.\n",
   "$ref": "#/definitions/IngestionPayload",
   "definitions": {
     "IngestionPayload": {
@@ -352,49 +429,11 @@
                 "properties": {
                   "type": {
                     "type": "string",
-                    "const": "stock_location"
-                  },
-                  "client_ref": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 200
-                  },
-                  "data": {
-                    "type": "object",
-                    "properties": {
-                      "name": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 100
-                      },
-                      "type": {
-                        "type": "string",
-                        "enum": [
-                          "main",
-                          "event",
-                          "production",
-                          "damaged",
-                          "reserved",
-                          "third_party"
-                        ]
-                      },
-                      "address": {
-                        "type": "string"
-                      }
-                    },
-                    "required": ["name", "type"],
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["type", "data"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
                     "const": "category"
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": ["skip"]
                   },
                   "client_ref": {
                     "type": "string",
@@ -439,7 +478,60 @@
                 "properties": {
                   "type": {
                     "type": "string",
+                    "const": "category"
+                  },
+                  "action": {
+                    "type": "string",
+                    "const": "upsert"
+                  },
+                  "client_ref": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "data": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      },
+                      "slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      },
+                      "parentId": {
+                        "type": "string"
+                      },
+                      "description": {
+                        "type": "string",
+                        "maxLength": 500
+                      },
+                      "parentCategoryRef": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      }
+                    },
+                    "required": ["slug"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["type", "action", "data"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
                     "const": "collection"
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": ["skip"]
                   },
                   "client_ref": {
                     "type": "string",
@@ -489,7 +581,11 @@
                 "properties": {
                   "type": {
                     "type": "string",
-                    "const": "party"
+                    "const": "collection"
+                  },
+                  "action": {
+                    "type": "string",
+                    "const": "upsert"
                   },
                   "client_ref": {
                     "type": "string",
@@ -499,187 +595,39 @@
                   "data": {
                     "type": "object",
                     "properties": {
-                      "type": {
-                        "type": "string",
-                        "enum": ["individual", "company"]
-                      },
-                      "legalName": {
+                      "name": {
                         "type": "string",
                         "minLength": 1,
-                        "maxLength": 200
-                      },
-                      "tradeName": {
-                        "type": "string",
-                        "maxLength": 200
-                      },
-                      "documentType": {
-                        "type": "string",
-                        "enum": ["cpf", "cnpj", "foreign", "unknown"],
-                        "default": "unknown"
-                      },
-                      "documentNumber": {
-                        "type": "string",
-                        "maxLength": 20
-                      },
-                      "email": {
-                        "type": "string",
-                        "format": "email",
-                        "maxLength": 254
-                      },
-                      "phone": {
-                        "type": "string",
-                        "maxLength": 20
-                      },
-                      "notes": {
-                        "type": "string",
-                        "maxLength": 2000
-                      },
-                      "cdsConsumerId": {
-                        "type": "string",
                         "maxLength": 100
-                      }
-                    },
-                    "required": ["type", "legalName"],
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["type", "data"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "const": "customer"
-                  },
-                  "client_ref": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 200
-                  },
-                  "data": {
-                    "type": "object",
-                    "properties": {
-                      "type": {
-                        "type": "string",
-                        "enum": ["individual", "company"]
                       },
-                      "legalName": {
+                      "slug": {
                         "type": "string",
                         "minLength": 1,
-                        "maxLength": 200
+                        "maxLength": 100
                       },
-                      "tradeName": {
+                      "description": {
                         "type": "string",
-                        "maxLength": 200
+                        "maxLength": 500
                       },
-                      "documentType": {
-                        "type": "string",
-                        "enum": ["cpf", "cnpj", "foreign", "unknown"],
-                        "default": "unknown"
-                      },
-                      "documentNumber": {
-                        "type": "string",
-                        "maxLength": 20
-                      },
-                      "email": {
-                        "type": "string",
-                        "format": "email",
-                        "maxLength": 254
-                      },
-                      "phone": {
-                        "type": "string",
-                        "maxLength": 20
-                      },
-                      "notes": {
-                        "type": "string",
-                        "maxLength": 2000
-                      },
-                      "cdsConsumerId": {
+                      "niche": {
                         "type": "string",
                         "maxLength": 100
                       },
-                      "origin": {
+                      "season": {
                         "type": "string",
-                        "enum": ["ecommerce", "event", "manual", "imported"]
+                        "maxLength": 50
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": ["draft", "active", "archived"],
+                        "default": "active"
                       }
                     },
-                    "required": ["type", "legalName"],
+                    "required": ["slug"],
                     "additionalProperties": false
                   }
                 },
-                "required": ["type", "data"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "const": "supplier"
-                  },
-                  "client_ref": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 200
-                  },
-                  "data": {
-                    "type": "object",
-                    "properties": {
-                      "type": {
-                        "type": "string",
-                        "enum": ["individual", "company"]
-                      },
-                      "legalName": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 200
-                      },
-                      "tradeName": {
-                        "type": "string",
-                        "maxLength": 200
-                      },
-                      "documentType": {
-                        "type": "string",
-                        "enum": ["cpf", "cnpj", "foreign", "unknown"],
-                        "default": "unknown"
-                      },
-                      "documentNumber": {
-                        "type": "string",
-                        "maxLength": 20
-                      },
-                      "email": {
-                        "type": "string",
-                        "format": "email",
-                        "maxLength": 254
-                      },
-                      "phone": {
-                        "type": "string",
-                        "maxLength": 20
-                      },
-                      "notes": {
-                        "type": "string",
-                        "maxLength": 2000
-                      },
-                      "cdsConsumerId": {
-                        "type": "string",
-                        "maxLength": 100
-                      },
-                      "stateRegistration": {
-                        "type": "string",
-                        "maxLength": 30
-                      },
-                      "contactName": {
-                        "type": "string",
-                        "maxLength": 200
-                      }
-                    },
-                    "required": ["type", "legalName"],
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["type", "data"],
+                "required": ["type", "action", "data"],
                 "additionalProperties": false
               },
               {
@@ -688,6 +636,10 @@
                   "type": {
                     "type": "string",
                     "const": "product"
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": ["skip"]
                   },
                   "client_ref": {
                     "type": "string",
@@ -989,7 +941,572 @@
                 "properties": {
                   "type": {
                     "type": "string",
+                    "const": "product"
+                  },
+                  "action": {
+                    "type": "string",
+                    "const": "upsert"
+                  },
+                  "client_ref": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "data": {
+                    "type": "object",
+                    "properties": {
+                      "sku": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      },
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 300
+                      },
+                      "slug": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "description": {
+                        "type": "string",
+                        "maxLength": 5000
+                      },
+                      "shortDescription": {
+                        "type": "string",
+                        "maxLength": 500
+                      },
+                      "internalName": {
+                        "type": "string",
+                        "maxLength": 300
+                      },
+                      "internalDescription": {
+                        "type": "string",
+                        "maxLength": 5000
+                      },
+                      "productKind": {
+                        "type": "string",
+                        "enum": ["simple", "variable"],
+                        "default": "simple"
+                      },
+                      "categoryId": {
+                        "type": "string"
+                      },
+                      "collectionId": {
+                        "type": "string"
+                      },
+                      "niche": {
+                        "type": "string",
+                        "maxLength": 100
+                      },
+                      "brand": {
+                        "type": "string",
+                        "maxLength": 120
+                      },
+                      "unitOfMeasure": {
+                        "type": "string",
+                        "enum": ["unit", "pair", "meter", "gram", "kg", "liter", "package"],
+                        "default": "unit"
+                      },
+                      "barcode": {
+                        "type": "string",
+                        "maxLength": 80
+                      },
+                      "ncm": {
+                        "type": "string",
+                        "maxLength": 10
+                      },
+                      "cest": {
+                        "type": "string",
+                        "maxLength": 10
+                      },
+                      "cfopDefault": {
+                        "type": "string",
+                        "maxLength": 10
+                      },
+                      "origin": {
+                        "type": "string",
+                        "maxLength": 8,
+                        "default": "0"
+                      },
+                      "costPriceCents": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "default": 0
+                      },
+                      "salePriceCents": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "default": 0
+                      },
+                      "compareAtPriceCents": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "promotionalPriceCents": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "eventPriceCents": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "wholesalePriceCents": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "controlsStock": {
+                        "type": "boolean"
+                      },
+                      "minStock": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "default": 0
+                      },
+                      "maxStock": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "idealStock": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "defaultStockLocationId": {
+                        "type": "string"
+                      },
+                      "weightGrams": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "lengthCm": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "widthCm": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "heightCm": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "producedInternally": {
+                        "type": "boolean"
+                      },
+                      "averageProductionTimeMinutes": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "laborCostPerHourCents": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "productionProfileNotes": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "maxLength": 2000
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "purchaseUnit": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "maxLength": 80
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "purchaseQuantity": {
+                        "anyOf": [
+                          {
+                            "type": "number",
+                            "exclusiveMinimum": true,
+                            "minimum": 0
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "consumptionUnit": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "maxLength": 80
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "acquisitionCostCents": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "costPerConsumptionUnitCents": {
+                        "anyOf": [
+                          {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "sellable": {
+                        "type": "boolean"
+                      },
+                      "availableForEcommerce": {
+                        "type": "boolean"
+                      },
+                      "availableForPos": {
+                        "type": "boolean"
+                      },
+                      "availableForEvents": {
+                        "type": "boolean"
+                      },
+                      "mainImageFileId": {
+                        "type": "string"
+                      },
+                      "imagesJson": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 200
+                        },
+                        "maxItems": 100
+                      },
+                      "metadata": {
+                        "type": "object",
+                        "additionalProperties": {}
+                      },
+                      "productType": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "type": "string"
+                      },
+                      "categoryRef": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "collectionRef": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "main_image_url": {
+                        "type": "string",
+                        "format": "uri",
+                        "maxLength": 2048
+                      },
+                      "gallery_image_urls": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "format": "uri",
+                          "maxLength": 2048
+                        },
+                        "maxItems": 50
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["type", "action", "data"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "stock_location"
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": ["skip", "upsert"]
+                  },
+                  "client_ref": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "data": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      },
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "main",
+                          "event",
+                          "production",
+                          "damaged",
+                          "reserved",
+                          "third_party"
+                        ]
+                      },
+                      "address": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["name", "type"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["type", "data"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "party"
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": ["skip", "upsert"]
+                  },
+                  "client_ref": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "data": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": ["individual", "company"]
+                      },
+                      "legalName": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "tradeName": {
+                        "type": "string",
+                        "maxLength": 200
+                      },
+                      "documentType": {
+                        "type": "string",
+                        "enum": ["cpf", "cnpj", "foreign", "unknown"],
+                        "default": "unknown"
+                      },
+                      "documentNumber": {
+                        "type": "string",
+                        "maxLength": 20
+                      },
+                      "email": {
+                        "type": "string",
+                        "format": "email",
+                        "maxLength": 254
+                      },
+                      "phone": {
+                        "type": "string",
+                        "maxLength": 20
+                      },
+                      "notes": {
+                        "type": "string",
+                        "maxLength": 2000
+                      },
+                      "cdsConsumerId": {
+                        "type": "string",
+                        "maxLength": 100
+                      }
+                    },
+                    "required": ["type", "legalName"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["type", "data"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "customer"
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": ["skip", "upsert"]
+                  },
+                  "client_ref": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "data": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": ["individual", "company"]
+                      },
+                      "legalName": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "tradeName": {
+                        "type": "string",
+                        "maxLength": 200
+                      },
+                      "documentType": {
+                        "type": "string",
+                        "enum": ["cpf", "cnpj", "foreign", "unknown"],
+                        "default": "unknown"
+                      },
+                      "documentNumber": {
+                        "type": "string",
+                        "maxLength": 20
+                      },
+                      "email": {
+                        "type": "string",
+                        "format": "email",
+                        "maxLength": 254
+                      },
+                      "phone": {
+                        "type": "string",
+                        "maxLength": 20
+                      },
+                      "notes": {
+                        "type": "string",
+                        "maxLength": 2000
+                      },
+                      "cdsConsumerId": {
+                        "type": "string",
+                        "maxLength": 100
+                      },
+                      "origin": {
+                        "type": "string",
+                        "enum": ["ecommerce", "event", "manual", "imported"]
+                      }
+                    },
+                    "required": ["type", "legalName"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["type", "data"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "supplier"
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": ["skip", "upsert"]
+                  },
+                  "client_ref": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "data": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": ["individual", "company"]
+                      },
+                      "legalName": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "tradeName": {
+                        "type": "string",
+                        "maxLength": 200
+                      },
+                      "documentType": {
+                        "type": "string",
+                        "enum": ["cpf", "cnpj", "foreign", "unknown"],
+                        "default": "unknown"
+                      },
+                      "documentNumber": {
+                        "type": "string",
+                        "maxLength": 20
+                      },
+                      "email": {
+                        "type": "string",
+                        "format": "email",
+                        "maxLength": 254
+                      },
+                      "phone": {
+                        "type": "string",
+                        "maxLength": 20
+                      },
+                      "notes": {
+                        "type": "string",
+                        "maxLength": 2000
+                      },
+                      "cdsConsumerId": {
+                        "type": "string",
+                        "maxLength": 100
+                      },
+                      "stateRegistration": {
+                        "type": "string",
+                        "maxLength": 30
+                      },
+                      "contactName": {
+                        "type": "string",
+                        "maxLength": 200
+                      }
+                    },
+                    "required": ["type", "legalName"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["type", "data"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
                     "const": "product_variant"
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": ["skip", "upsert"]
                   },
                   "client_ref": {
                     "type": "string",
@@ -1307,6 +1824,10 @@
                     "type": "string",
                     "const": "product_composition"
                   },
+                  "action": {
+                    "type": "string",
+                    "enum": ["skip", "upsert"]
+                  },
                   "client_ref": {
                     "type": "string",
                     "minLength": 1,
@@ -1402,6 +1923,10 @@
                     "type": "string",
                     "const": "inventory_movement"
                   },
+                  "action": {
+                    "type": "string",
+                    "enum": ["skip", "upsert"]
+                  },
                   "client_ref": {
                     "type": "string",
                     "minLength": 1,
@@ -1470,6 +1995,10 @@
                   "type": {
                     "type": "string",
                     "const": "order"
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": ["skip", "upsert"]
                   },
                   "client_ref": {
                     "type": "string",
@@ -1600,6 +2129,10 @@
                   "type": {
                     "type": "string",
                     "const": "purchase_order"
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": ["skip", "upsert"]
                   },
                   "client_ref": {
                     "type": "string",

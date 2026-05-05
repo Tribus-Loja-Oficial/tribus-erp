@@ -11,6 +11,67 @@ Contrato formal: **`apps/erp-api/src/schemas/ingestion.schemas.ts`** (Zod) + val
 cd apps/erp-api && npm run generate:ingestion-schema
 ```
 
+## Campo `action` (envelope, por objecto)
+
+Campo opcional no envelope de cada objecto (ao lado de `type` e `client_ref`). Controla o comportamento quando o registo já existe na base de dados.
+
+| Valor    | Comportamento                                                                                                                                                                            |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `skip`   | **(default)** Insere se não existe; ignora (resolve refs) se já existe. Seguro para re-ingestão.                                                                                         |
+| `upsert` | Se o registo existir: actualiza **apenas os campos enviados** (merge-patch — campos omitidos ficam intocados). Se não existir: cria (campos obrigatórios do tipo devem estar presentes). |
+
+**Chave natural por tipo (identifica o registo a actualizar):**
+
+| Tipo         | Chave natural obrigatória em `data` |
+| ------------ | ----------------------------------- |
+| `category`   | `slug`                              |
+| `collection` | `slug`                              |
+| `product`    | `slug` **ou** `sku` (pelo menos um) |
+
+**Tipos sem suporte a upsert** (`stock_location`, `party`, `customer`, `supplier`, `product_variant`, `product_composition`, `inventory_movement`, `order`, `purchase_order`): o campo `action` é aceite pela validação mas ignorado em execução (comporta-se como `skip`).
+
+**Resultado no campo `status` de cada item:**
+
+| Status    | Significado                                            |
+| --------- | ------------------------------------------------------ |
+| `created` | Novo registo inserido.                                 |
+| `updated` | Registo existente actualizado via upsert.              |
+| `skipped` | Registo já existia; ignorado (action skip ou omitido). |
+| `failed`  | Erro — ver campo `error`.                              |
+
+**Exemplo mínimo — actualizar só a descrição de uma categoria:**
+
+```json
+{
+  "version": "1.0",
+  "mode": "create",
+  "objects": [
+    {
+      "type": "category",
+      "action": "upsert",
+      "client_ref": "CAT-PULSEIRAS",
+      "data": {
+        "slug": "pulseiras",
+        "description": "Nova descrição da categoria Pulseiras."
+      }
+    }
+  ]
+}
+```
+
+**Exemplo — actualizar preço de venda de um produto:**
+
+```json
+{
+  "type": "product",
+  "action": "upsert",
+  "data": {
+    "slug": "pulseira-impulso-g",
+    "salePriceCents": 8990
+  }
+}
+```
+
 ## CamelCase e excepções
 
 - Quase todos os campos em `data` seguem **camelCase** como na REST API (`salePriceCents`, `categoryRef`, …).

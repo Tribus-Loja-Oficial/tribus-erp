@@ -21,6 +21,36 @@ const httpsImageUrl = z
   .max(2048)
   .refine((u) => u.startsWith("https:"), { message: "URL da imagem deve usar HTTPS." });
 
+/**
+ * Campo `action` — comportamento quando o objecto já existe na base de dados.
+ *
+ * ┌──────────┬────────────────────────────────────────────────────────────────────┐
+ * │ Valor    │ Comportamento                                                      │
+ * ├──────────┼────────────────────────────────────────────────────────────────────┤
+ * │ "skip"   │ Insere se não existe; ignora (resolve refs) se já existe.          │
+ * │ (default)│ Seguro para re-execuções sem risco de sobrescrever dados manuais.  │
+ * ├──────────┼────────────────────────────────────────────────────────────────────┤
+ * │ "upsert" │ Se o registo existir: atualiza APENAS os campos enviados           │
+ * │          │ (merge-patch — campos omitidos não são alterados no banco).        │
+ * │          │ Se não existir: cria (fields obrigatórios do tipo devem estar      │
+ * │          │ presentes em `data`).                                              │
+ * │          │ Requer a chave natural em `data`:                                  │
+ * │          │   • category → slug                                                │
+ * │          │   • collection → slug                                              │
+ * │          │   • product → slug ou sku                                          │
+ * └──────────┴────────────────────────────────────────────────────────────────────┘
+ *
+ * Tipos sem suporte a upsert (stock_location, party, customer, supplier,
+ * product_variant, product_composition, inventory_movement, order,
+ * purchase_order): o campo é aceite mas ignorado (comporta-se como skip).
+ *
+ * Para a variante skip/default, todos os campos obrigatórios do tipo devem
+ * estar presentes em `data` (schema completo de criação).
+ * Para a variante upsert, apenas a chave natural é obrigatória em `data`;
+ * todos os outros campos são opcionais (schema de patch parcial).
+ */
+const ingestionActionField = z.enum(["skip", "upsert"]).optional();
+
 /** --- Stock location (igual a POST /inventory/locations) --- */
 export const stockLocationIngestionDataSchema = z.object({
   name: z.string().min(1).max(100),
@@ -33,8 +63,28 @@ export const categoryIngestionDataSchema = createCategorySchema.extend({
   parentCategoryRef: z.string().min(1).max(200).optional(),
 });
 
+/**
+ * Schema de patch para category (action: "upsert").
+ * Chave natural: `slug` (obrigatório). Todos os outros campos opcionais.
+ * Apenas os campos presentes no payload são actualizados; os ausentes ficam intocados.
+ */
+export const categoryPatchIngestionDataSchema = createCategorySchema
+  .partial()
+  .required({ slug: true })
+  .extend({
+    parentCategoryRef: z.string().min(1).max(200).optional(),
+  });
+
 /** --- Collection --- */
 export const collectionIngestionDataSchema = createCollectionSchema;
+
+/**
+ * Schema de patch para collection (action: "upsert").
+ * Chave natural: `slug` (obrigatório). Todos os outros campos opcionais.
+ */
+export const collectionPatchIngestionDataSchema = createCollectionSchema
+  .partial()
+  .required({ slug: true });
 
 /** --- Party / customer / supplier --- */
 export const partyIngestionDataSchema = createPartySchema;
@@ -80,6 +130,27 @@ export const productIngestionDataSchema = productIngestionBodySchema
       }
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["status"], message: msg });
     }
+  });
+
+/**
+ * Schema de patch para product (action: "upsert").
+ * Chave natural: `slug` OU `sku` — pelo menos um obrigatório.
+ * Todos os outros campos opcionais; apenas os presentes são actualizados.
+ * NÃO usa .strict(): campos extra são ignorados (ao contrário do schema de criação).
+ * Valores monetários em centavos inteiros (ex.: salePriceCents: 7990 = R$ 79,90).
+ */
+export const productPatchIngestionDataSchema = productIngestionBodySchema
+  .extend({
+    categoryRef: z.string().min(1).max(200).optional(),
+    collectionRef: z.string().min(1).max(200).optional(),
+    main_image_url: httpsImageUrl.optional(),
+    gallery_image_urls: z.array(httpsImageUrl).max(50).optional(),
+  })
+  .partial()
+  .refine((d) => d.slug || d.sku, {
+    message:
+      'Em upsert de produto forneça "slug" ou "sku" para identificar o registo a actualizar/criar.',
+    path: ["slug"],
   });
 
 /** --- Variant: product via client_ref --- */
@@ -208,64 +279,102 @@ export const purchaseOrderIngestionDataSchema = createPurchaseOrderSchema
     path: ["supplierRef"],
   });
 
-export const ingestionObjectSchema = z.discriminatedUnion("type", [
-  z.object({
-    type: z.literal("stock_location"),
-    client_ref: clientRefField,
-    data: stockLocationIngestionDataSchema,
-  }),
+// Tipos que suportam action:"upsert" têm DUAS variantes no union:
+//   - variante skip  (action omitido ou "skip") → schema completo de criação
+//   - variante upsert (action:"upsert")          → schema de patch parcial
+// Tipos sem suporte a upsert têm uma única variante; action é aceite mas ignorado.
+export const ingestionObjectSchema = z.union([
+  // ── category ─────────────────────────────────────────────────────────────
   z.object({
     type: z.literal("category"),
+    action: z.enum(["skip"]).optional(),
     client_ref: clientRefField,
     data: categoryIngestionDataSchema,
   }),
   z.object({
+    type: z.literal("category"),
+    action: z.literal("upsert"),
+    client_ref: clientRefField,
+    data: categoryPatchIngestionDataSchema,
+  }),
+  // ── collection ───────────────────────────────────────────────────────────
+  z.object({
     type: z.literal("collection"),
+    action: z.enum(["skip"]).optional(),
     client_ref: clientRefField,
     data: collectionIngestionDataSchema,
   }),
   z.object({
+    type: z.literal("collection"),
+    action: z.literal("upsert"),
+    client_ref: clientRefField,
+    data: collectionPatchIngestionDataSchema,
+  }),
+  // ── product ──────────────────────────────────────────────────────────────
+  z.object({
+    type: z.literal("product"),
+    action: z.enum(["skip"]).optional(),
+    client_ref: clientRefField,
+    data: productIngestionDataSchema,
+  }),
+  z.object({
+    type: z.literal("product"),
+    action: z.literal("upsert"),
+    client_ref: clientRefField,
+    data: productPatchIngestionDataSchema,
+  }),
+  // ── tipos sem suporte a upsert (action aceite mas ignorado) ───────────────
+  z.object({
+    type: z.literal("stock_location"),
+    action: ingestionActionField,
+    client_ref: clientRefField,
+    data: stockLocationIngestionDataSchema,
+  }),
+  z.object({
     type: z.literal("party"),
+    action: ingestionActionField,
     client_ref: clientRefField,
     data: partyIngestionDataSchema,
   }),
   z.object({
     type: z.literal("customer"),
+    action: ingestionActionField,
     client_ref: clientRefField,
     data: customerIngestionDataSchema,
   }),
   z.object({
     type: z.literal("supplier"),
+    action: ingestionActionField,
     client_ref: clientRefField,
     data: supplierIngestionDataSchema,
   }),
   z.object({
-    type: z.literal("product"),
-    client_ref: clientRefField,
-    data: productIngestionDataSchema,
-  }),
-  z.object({
     type: z.literal("product_variant"),
+    action: ingestionActionField,
     client_ref: clientRefField,
     data: productVariantIngestionDataSchema,
   }),
   z.object({
     type: z.literal("product_composition"),
+    action: ingestionActionField,
     client_ref: clientRefField,
     data: productCompositionIngestionDataSchema,
   }),
   z.object({
     type: z.literal("inventory_movement"),
+    action: ingestionActionField,
     client_ref: clientRefField,
     data: inventoryMovementIngestionDataSchema,
   }),
   z.object({
     type: z.literal("order"),
+    action: ingestionActionField,
     client_ref: clientRefField,
     data: orderIngestionDataSchema,
   }),
   z.object({
     type: z.literal("purchase_order"),
+    action: ingestionActionField,
     client_ref: clientRefField,
     data: purchaseOrderIngestionDataSchema,
   }),

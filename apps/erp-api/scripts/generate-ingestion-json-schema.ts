@@ -67,6 +67,11 @@ const envelope: Record<string, unknown> = {
     "compositionType (bom, packaging, …) is not the same as productType (finished_product, raw_material, …).",
     "Put importer-specific or non-modelled data under metadata (object); do not invent top-level keys — product.data is strict.",
     "externalRef (PRD-/PRV-) is assigned by the server on create; do not send unless the API explicitly supports it.",
+    "action field (envelope, per-object, optional): 'skip' (default) = insert if not exists, ignore if exists; 'upsert' = merge-patch if exists (only sent fields updated, omitted fields untouched), create if not exists.",
+    "action 'upsert' natural keys: category → slug, collection → slug, product → slug OR sku (at least one required in data).",
+    "action 'upsert' data schema is partial (only natural key required); action 'skip'/'omitted' data schema is full (all required fields must be present).",
+    "Types without upsert support (stock_location, party, customer, supplier, product_variant, product_composition, inventory_movement, order, purchase_order): action field is accepted but ignored at runtime.",
+    "Response items[].status values: 'created' (new insert), 'updated' (upsert patch applied), 'skipped' (existed, skip action), 'failed' (error).",
   ],
 };
 

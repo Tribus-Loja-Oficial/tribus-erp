@@ -407,6 +407,22 @@ export function createProductRepository(db: AppDb) {
       return result[0];
     },
 
+    async insertCategoryIdempotent(data: NewProductCategory) {
+      const inserted = await db
+        .insert(productCategories)
+        .values(data)
+        .onConflictDoNothing()
+        .returning();
+      if (inserted[0]) return { row: inserted[0], skipped: false };
+      const existing = await db
+        .select()
+        .from(productCategories)
+        .where(eq(productCategories.slug, data.slug))
+        .limit(1);
+      if (!existing[0]) throw new Error(`Falha ao inserir ou localizar categoria: ${data.slug}`);
+      return { row: existing[0], skipped: true };
+    },
+
     async findCollections() {
       return db
         .select()
@@ -418,6 +434,98 @@ export function createProductRepository(db: AppDb) {
     async insertCollection(data: NewProductCollection) {
       const result = await db.insert(productCollections).values(data).returning();
       if (!result[0]) throw new Error("Failed to insert collection");
+      return result[0];
+    },
+
+    async insertCollectionIdempotent(data: NewProductCollection) {
+      const inserted = await db
+        .insert(productCollections)
+        .values(data)
+        .onConflictDoNothing()
+        .returning();
+      if (inserted[0]) return { row: inserted[0], skipped: false };
+      const existing = await db
+        .select()
+        .from(productCollections)
+        .where(eq(productCollections.slug, data.slug))
+        .limit(1);
+      if (!existing[0]) throw new Error(`Falha ao inserir ou localizar coleção: ${data.slug}`);
+      return { row: existing[0], skipped: true };
+    },
+
+    // ── Métodos de upsert (merge-patch — só actualiza campos não-undefined) ──
+
+    async upsertCategoryBySlug(
+      slug: string,
+      patch: Partial<Omit<NewProductCategory, "id" | "slug" | "createdAt" | "archivedAt">>,
+    ) {
+      const existing = await db
+        .select()
+        .from(productCategories)
+        .where(eq(productCategories.slug, slug))
+        .limit(1);
+      if (!existing[0]) return null;
+      const set: Record<string, unknown> = { updatedAt: new Date().toISOString() };
+      if (patch.name !== undefined) set.name = patch.name;
+      if (patch.description !== undefined) set.description = patch.description;
+      if (patch.parentId !== undefined) set.parentId = patch.parentId;
+      const result = await db
+        .update(productCategories)
+        .set(set as Partial<NewProductCategory>)
+        .where(eq(productCategories.slug, slug))
+        .returning();
+      if (!result[0]) throw new Error(`Falha ao actualizar categoria: ${slug}`);
+      return result[0];
+    },
+
+    async upsertCollectionBySlug(
+      slug: string,
+      patch: Partial<Omit<NewProductCollection, "id" | "slug" | "createdAt" | "archivedAt">>,
+    ) {
+      const existing = await db
+        .select()
+        .from(productCollections)
+        .where(eq(productCollections.slug, slug))
+        .limit(1);
+      if (!existing[0]) return null;
+      const set: Record<string, unknown> = { updatedAt: new Date().toISOString() };
+      if (patch.name !== undefined) set.name = patch.name;
+      if (patch.description !== undefined) set.description = patch.description;
+      if (patch.niche !== undefined) set.niche = patch.niche;
+      if (patch.season !== undefined) set.season = patch.season;
+      if (patch.status !== undefined) set.status = patch.status;
+      const result = await db
+        .update(productCollections)
+        .set(set as Partial<NewProductCollection>)
+        .where(eq(productCollections.slug, slug))
+        .returning();
+      if (!result[0]) throw new Error(`Falha ao actualizar coleção: ${slug}`);
+      return result[0];
+    },
+
+    async findBySlugOrSku(slugOrSku: string) {
+      const bySlug = await db.select().from(products).where(eq(products.slug, slugOrSku)).limit(1);
+      if (bySlug[0]) return bySlug[0];
+      const bySku = await db.select().from(products).where(eq(products.sku, slugOrSku)).limit(1);
+      return bySku[0] ?? null;
+    },
+
+    async upsertProductBySlugOrSku(identifier: string, patch: Partial<NewProduct>) {
+      const existing =
+        (await db.select().from(products).where(eq(products.slug, identifier)).limit(1))[0] ??
+        (await db.select().from(products).where(eq(products.sku, identifier)).limit(1))[0] ??
+        null;
+      if (!existing) return null;
+      const set: Partial<NewProduct> = { updatedAt: new Date().toISOString() };
+      for (const [key, value] of Object.entries(patch)) {
+        if (value !== undefined) (set as Record<string, unknown>)[key] = value;
+      }
+      const result = await db
+        .update(products)
+        .set(set)
+        .where(eq(products.id, existing.id))
+        .returning();
+      if (!result[0]) throw new Error(`Falha ao actualizar produto: ${identifier}`);
       return result[0];
     },
 

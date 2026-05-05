@@ -25,7 +25,7 @@ export type IngestionItemResult = {
   index: number;
   type: string;
   clientRef?: string;
-  status: "created" | "failed";
+  status: "created" | "updated" | "skipped" | "failed";
   id?: string;
   error?: string;
   warnings?: string[];
@@ -35,6 +35,8 @@ export type IngestionExecuteResponse = {
   data: {
     total: number;
     created: number;
+    updated: number;
+    skipped: number;
     failed: number;
     items: IngestionItemResult[];
     refMap: Record<string, string>;

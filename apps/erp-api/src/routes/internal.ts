@@ -104,7 +104,8 @@ internal.post("/ingestion/execute", async (c) => {
     const ingestion = createIngestionService(db, storage);
     const result = await ingestion.executeIngestion(parsed.data, { actorId: null });
 
-    const status = result.failed === 0 ? 200 : result.created === 0 ? 422 : 207;
+    const nothingDone = result.created === 0 && result.updated === 0 && result.skipped === 0;
+    const status = result.failed === 0 ? 200 : nothingDone ? 422 : 207;
     return c.json({ data: result }, status);
   } catch (err) {
     if (err instanceof ValidationError) {
