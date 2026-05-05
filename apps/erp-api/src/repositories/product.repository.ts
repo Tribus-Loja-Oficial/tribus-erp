@@ -428,109 +428,107 @@ export function createProductRepository(db: AppDb) {
 
     /**
      * Apaga o produto e dados “próprios” (cascata). Preserva pedidos/faturas/compras anulando `product_id` onde permitido.
+     *
+     * Nota: **Cloudflare D1** não suporta `db.transaction()` do Drizzle (falha em runtime no Worker).
+     * A sequência corre na ordem certa de FK; em falha a meio, o pedido rebenta e o estado pode ficar parcial
+     * (pouco provável com D1 single-writer).
      */
     async permanentDeleteCascade(productId: string): Promise<void> {
-      await db.transaction(async (tx) => {
-        const variantRows = await tx
-          .select({ id: productVariants.id })
-          .from(productVariants)
-          .where(eq(productVariants.productId, productId));
-        const variantIds = variantRows.map((r) => r.id);
+      const variantRows = await db
+        .select({ id: productVariants.id })
+        .from(productVariants)
+        .where(eq(productVariants.productId, productId));
+      const variantIds = variantRows.map((r) => r.id);
 
-        const orderItemCond =
-          variantIds.length > 0
-            ? or(eq(orderItems.productId, productId), inArray(orderItems.variantId, variantIds))!
-            : eq(orderItems.productId, productId);
-        await tx.update(orderItems).set({ productId: null, variantId: null }).where(orderItemCond);
+      const orderItemCond =
+        variantIds.length > 0
+          ? or(eq(orderItems.productId, productId), inArray(orderItems.variantId, variantIds))!
+          : eq(orderItems.productId, productId);
+      await db.update(orderItems).set({ productId: null, variantId: null }).where(orderItemCond);
 
-        await tx
-          .update(fiscalDocumentItems)
-          .set({ productId: null })
-          .where(eq(fiscalDocumentItems.productId, productId));
+      await db
+        .update(fiscalDocumentItems)
+        .set({ productId: null })
+        .where(eq(fiscalDocumentItems.productId, productId));
 
-        await tx
-          .update(purchaseOrderItems)
-          .set({ productId: null })
-          .where(eq(purchaseOrderItems.productId, productId));
+      await db
+        .update(purchaseOrderItems)
+        .set({ productId: null })
+        .where(eq(purchaseOrderItems.productId, productId));
 
-        const smCond =
-          variantIds.length > 0
-            ? or(
-                eq(stockMovements.productId, productId),
-                inArray(stockMovements.variantId, variantIds),
-              )!
-            : eq(stockMovements.productId, productId);
-        await tx.delete(stockMovements).where(smCond);
+      const smCond =
+        variantIds.length > 0
+          ? or(
+              eq(stockMovements.productId, productId),
+              inArray(stockMovements.variantId, variantIds),
+            )!
+          : eq(stockMovements.productId, productId);
+      await db.delete(stockMovements).where(smCond);
 
-        /** Consumos/perdas onde este produto é matéria (OP de outro produto); sem isto a FK bloqueia o delete. */
-        await tx
+      /** Consumos/perdas onde este produto é matéria (OP de outro produto); sem isto a FK bloqueia o delete. */
+      await db
+        .delete(productionOrderConsumptions)
+        .where(eq(productionOrderConsumptions.productId, productId));
+      await db.delete(productionOrderLosses).where(eq(productionOrderLosses.productId, productId));
+
+      const poRows = await db
+        .select({ id: productionOrders.id })
+        .from(productionOrders)
+        .where(eq(productionOrders.productId, productId));
+      const productionOrderIds = poRows.map((r) => r.id);
+      if (productionOrderIds.length > 0) {
+        await db
           .delete(productionOrderConsumptions)
-          .where(eq(productionOrderConsumptions.productId, productId));
-        await tx
+          .where(inArray(productionOrderConsumptions.productionOrderId, productionOrderIds));
+        await db
           .delete(productionOrderLosses)
-          .where(eq(productionOrderLosses.productId, productId));
+          .where(inArray(productionOrderLosses.productionOrderId, productionOrderIds));
+      }
+      await db.delete(productionOrders).where(eq(productionOrders.productId, productId));
 
-        const poRows = await tx
-          .select({ id: productionOrders.id })
-          .from(productionOrders)
-          .where(eq(productionOrders.productId, productId));
-        const productionOrderIds = poRows.map((r) => r.id);
-        if (productionOrderIds.length > 0) {
-          await tx
-            .delete(productionOrderConsumptions)
-            .where(inArray(productionOrderConsumptions.productionOrderId, productionOrderIds));
-          await tx
-            .delete(productionOrderLosses)
-            .where(inArray(productionOrderLosses.productionOrderId, productionOrderIds));
-        }
-        await tx.delete(productionOrders).where(eq(productionOrders.productId, productId));
+      const bomRows = await db
+        .select({ id: billOfMaterials.id })
+        .from(billOfMaterials)
+        .where(eq(billOfMaterials.productId, productId));
+      const bomIds = bomRows.map((r) => r.id);
+      if (bomIds.length > 0) {
+        await db
+          .update(productionOrders)
+          .set({ bomId: null })
+          .where(inArray(productionOrders.bomId, bomIds));
+        await db.delete(bomItems).where(inArray(bomItems.bomId, bomIds));
+        await db.delete(billOfMaterials).where(inArray(billOfMaterials.id, bomIds));
+      }
+      await db.delete(bomItems).where(eq(bomItems.componentProductId, productId));
 
-        const bomRows = await tx
-          .select({ id: billOfMaterials.id })
-          .from(billOfMaterials)
-          .where(eq(billOfMaterials.productId, productId));
-        const bomIds = bomRows.map((r) => r.id);
-        if (bomIds.length > 0) {
-          await tx
-            .update(productionOrders)
-            .set({ bomId: null })
-            .where(inArray(productionOrders.bomId, bomIds));
-          await tx.delete(bomItems).where(inArray(bomItems.bomId, bomIds));
-          await tx.delete(billOfMaterials).where(inArray(billOfMaterials.id, bomIds));
-        }
-        await tx.delete(bomItems).where(eq(bomItems.componentProductId, productId));
-
-        if (variantIds.length > 0) {
-          await tx
-            .delete(productCompositions)
-            .where(
-              or(
-                inArray(productCompositions.parentVariantId, variantIds),
-                inArray(productCompositions.childVariantId, variantIds),
-              )!,
-            );
-        }
-        await tx
+      if (variantIds.length > 0) {
+        await db
           .delete(productCompositions)
           .where(
             or(
-              eq(productCompositions.parentProductId, productId),
-              eq(productCompositions.childProductId, productId),
+              inArray(productCompositions.parentVariantId, variantIds),
+              inArray(productCompositions.childVariantId, variantIds),
             )!,
           );
+      }
+      await db
+        .delete(productCompositions)
+        .where(
+          or(
+            eq(productCompositions.parentProductId, productId),
+            eq(productCompositions.childProductId, productId),
+          )!,
+        );
 
-        await tx
-          .delete(productProductionProfiles)
-          .where(eq(productProductionProfiles.productId, productId));
+      await db
+        .delete(productProductionProfiles)
+        .where(eq(productProductionProfiles.productId, productId));
 
-        await tx
-          .delete(productTagAssignments)
-          .where(eq(productTagAssignments.productId, productId));
+      await db.delete(productTagAssignments).where(eq(productTagAssignments.productId, productId));
 
-        await tx.delete(productVariants).where(eq(productVariants.productId, productId));
+      await db.delete(productVariants).where(eq(productVariants.productId, productId));
 
-        await tx.delete(products).where(eq(products.id, productId));
-      });
+      await db.delete(products).where(eq(products.id, productId));
     },
   };
 }
