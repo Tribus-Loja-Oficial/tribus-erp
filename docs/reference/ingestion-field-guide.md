@@ -160,6 +160,19 @@ Definição de eixos de variação no **pai** não tem campo `attributes` de cat
 - **`*Id`:** UUID já persistido no D1/ERP.
 - **`externalRef` (PRD-…, PRV-…):** gerado pelo servidor na criação; **não** enviar em modo `create` salvo suporte explícito futuro.
 
+## `product_cost_snapshot` e `componentCosts`
+
+- **`productId` ou `productRef`** (no mesmo payload): obrigatório um dos dois.
+- **`totalCostCents`** deve ser exactamente **`materialCostCents` + `packagingCostCents` + `laborCostCents`**.
+- **`componentCosts`** (opcional): array de linhas gravadas em `component_costs_json`, no mesmo formato que os snapshots gerados pela BOM (custos de **composição** apenas).
+  - Se presente e não vazio: a **soma** de **`lineTotalCents`** de todas as linhas deve ser **`materialCostCents` + `packagingCostCents`** (mão de obra entra só nos totais agregados, não nas linhas).
+  - Cada linha é um objecto **estrito** (sem chaves extra): ver enum de **`unitCostBasis`** (`average` \| `consumption_unit` \| `legacy_cost_price`) e **`packagingChannel`** (`online` \| `presential`) quando `compositionType` for embalagem.
+- Exemplo completo para copy-paste: ficheiro **`docs/examples/ingestion/09-product-cost-snapshot-with-component-lines.json`** e o artefacto único **`ingestion-payload.schema.json`** (`x-official-examples` + schema + este guia em `x-documentation-markdown`).
+
+## `purchase_receipt` — datas
+
+- **`issueDate`** ou **`purchaseDate`** (YYYY-MM-DD): obrigatório um dos dois; na execução usam-se de forma equivalente para a data fiscal da entrada.
+
 ## Exemplos oficiais
 
 Ficheiros em **`docs/examples/ingestion/`** (cada um validado em teste contra `ingestionPayloadSchema`):
@@ -171,6 +184,8 @@ Ficheiros em **`docs/examples/ingestion/`** (cada um validado em teste contra `i
 5. `05-initial-stock-adjustment.json`
 6. `06-supplier-and-purchase-order.json`
 7. `07-full-tribus-product-example.json`
+8. `08-upsert-update-existing.json`
+9. `09-product-cost-snapshot-with-component-lines.json`
 
 ## Mensagens de erro com “hint”
 

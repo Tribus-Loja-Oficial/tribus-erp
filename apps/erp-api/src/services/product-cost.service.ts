@@ -4,9 +4,11 @@ import { createProductRepository } from "../repositories/product.repository.js";
 import { createProductProductionProfileRepository } from "../repositories/product-production-profile.repository.js";
 import {
   buildProductCostBreakdownCents,
+  buildSnapshotComponentLines,
   calculateLaborCostCents,
   type CompositionRowForCost,
   type ProductCostBreakdownCents,
+  type ProductCostSnapshotComponentLine,
 } from "../domain/product-cost.js";
 
 export function createProductCostService(db: AppDb) {
@@ -15,9 +17,10 @@ export function createProductCostService(db: AppDb) {
   const profileRepo = createProductProductionProfileRepository(db);
 
   return {
-    async getBreakdownForParentProduct(
-      parentProductId: string,
-    ): Promise<ProductCostBreakdownCents> {
+    async getBreakdownAndSnapshotLines(parentProductId: string): Promise<{
+      breakdown: ProductCostBreakdownCents;
+      componentLines: ProductCostSnapshotComponentLine[];
+    }> {
       const compositions = await compositionsRepo.findActiveByParentId(parentProductId);
       const childIds = [...new Set(compositions.map((c) => c.childProductId))];
       const children = await productsRepo.findByIds(childIds);
@@ -25,6 +28,16 @@ export function createProductCostService(db: AppDb) {
       const profile = await profileRepo.findByProductId(parentProductId);
 
       const rows: CompositionRowForCost[] = [];
+      const snapshotRows: Array<{
+        id: string;
+        compositionType: string;
+        quantity: number;
+        quantityUnit: string | null;
+        packagingChannel: string | null;
+        childProductId: string;
+        child: (typeof children)[number];
+      }> = [];
+
       for (const c of compositions) {
         const child = childMap.get(c.childProductId);
         if (!child) continue;
@@ -34,6 +47,15 @@ export function createProductCostService(db: AppDb) {
           packagingChannel: c.packagingChannel ?? null,
           child,
         });
+        snapshotRows.push({
+          id: c.id,
+          compositionType: c.compositionType,
+          quantity: c.quantity,
+          quantityUnit: c.quantityUnit ?? null,
+          packagingChannel: c.packagingChannel ?? null,
+          childProductId: c.childProductId,
+          child,
+        });
       }
 
       const labor = calculateLaborCostCents(
@@ -41,7 +63,17 @@ export function createProductCostService(db: AppDb) {
         profile?.laborCostPerHourCents,
       );
 
-      return buildProductCostBreakdownCents(rows, labor);
+      return {
+        breakdown: buildProductCostBreakdownCents(rows, labor),
+        componentLines: buildSnapshotComponentLines(snapshotRows),
+      };
+    },
+
+    async getBreakdownForParentProduct(
+      parentProductId: string,
+    ): Promise<ProductCostBreakdownCents> {
+      const { breakdown } = await this.getBreakdownAndSnapshotLines(parentProductId);
+      return breakdown;
     },
   };
 }

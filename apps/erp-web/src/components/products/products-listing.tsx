@@ -576,7 +576,7 @@ export function ProductsListing({
 
       <div className="overflow-visible rounded-xl border border-zinc-200 bg-white shadow-sm">
         <table className="w-full text-left text-sm">
-          <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold tracking-wide text-zinc-500 uppercase">
+          <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold tracking-wide text-zinc-500">
             <tr>
               <th className="w-10 px-2 py-3">
                 <input
@@ -603,10 +603,10 @@ export function ProductsListing({
                   </th>
                   {col.field === "type" ? (
                     <>
-                      <th className="px-3 py-3 text-xs font-semibold tracking-wide text-zinc-500 uppercase">
+                      <th className="px-3 py-3 text-xs font-semibold tracking-wide text-zinc-500">
                         Estrutura
                       </th>
-                      <th className="px-3 py-3 text-xs font-semibold tracking-wide text-zinc-500 uppercase">
+                      <th className="px-3 py-3 text-xs font-semibold tracking-wide text-zinc-500">
                         Variações
                       </th>
                     </>

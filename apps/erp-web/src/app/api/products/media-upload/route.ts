@@ -25,7 +25,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         message:
-          "Não foi possível ler o ficheiro (pedido multipart inválido ou excede o limite de tamanho do servidor / Vercel). Tenta uma imagem mais pequena.",
+          "Não foi possível ler o arquivo (requisição multipart inválida ou acima do limite de tamanho do servidor / Vercel). Tente uma imagem menor.",
       },
       { status: 400 },
     );
@@ -33,14 +33,14 @@ export async function POST(request: Request) {
 
   const file = body.get("file");
   if (!(file instanceof File)) {
-    return NextResponse.json({ message: "Falta o campo de ficheiro (`file`)." }, { status: 400 });
+    return NextResponse.json({ message: "Falta o campo de arquivo (`file`)." }, { status: 400 });
   }
 
   if (file.size > MAX_BYTES) {
     const mb = (file.size / (1024 * 1024)).toFixed(2);
     return NextResponse.json(
       {
-        message: `Esta imagem tem ${mb} MB. O limite é 5 MB por ficheiro (definido na API Tribus ERP).`,
+        message: `Esta imagem tem ${mb} MB. O limite é 5 MB por arquivo (definido na API Tribus ERP).`,
       },
       { status: 400 },
     );
@@ -68,7 +68,7 @@ export async function POST(request: Request) {
   } catch {
     return NextResponse.json(
       {
-        message: `A API devolveu uma resposta inválida (HTTP ${res.status}). Se o ficheiro é grande, pode ser limite da infraestrutura.`,
+        message: `A API retornou uma resposta inválida (HTTP ${res.status}). Se o arquivo for grande, pode ser limite da infraestrutura.`,
       },
       { status: 502 },
     );
@@ -99,7 +99,7 @@ export async function POST(request: Request) {
 
   if (!json.data) {
     return NextResponse.json(
-      { message: "A API não devolveu dados do ficheiro criado." },
+      { message: "A API não retornou dados do arquivo criado." },
       { status: 502 },
     );
   }

@@ -12,6 +12,7 @@ import { createPurchaseService } from "./purchase.service.js";
 import { createProductRepository } from "../repositories/product.repository.js";
 import { createProductVariantRepository } from "../repositories/product-variant.repository.js";
 import { createAuditRepository } from "../repositories/audit.repository.js";
+import { createProductCostSnapshotRepository } from "../repositories/product-cost-snapshot.repository.js";
 import type { StorageProvider } from "../storage/storage-provider.js";
 import { ValidationError } from "../errors/app-error.js";
 import { logger } from "../observability/logger.js";
@@ -77,6 +78,13 @@ export type IngestionChunkState = {
   updated: number;
   skipped: number;
   failed: number;
+  pendingImageTasks?: DeferredImageTask[];
+};
+
+export type DeferredImageTask = {
+  productId: string;
+  mainImageUrl?: string;
+  galleryImageUrls: string[];
 };
 
 export type DryRunItemResult = {
@@ -393,6 +401,75 @@ export function validateIngestionPayload(payload: IngestionPayload): ValidationR
         });
         break;
       }
+      case "purchase_receipt": {
+        const d = obj.data;
+        if (d.supplierRef)
+          expectRef(clientRefs, d.supplierRef, "supplier", ctx, "data.supplierRef", errors);
+        if (!d.supplierId && !d.supplierRef) {
+          warnings.push({
+            ...ctx,
+            field: "data.supplierId",
+            message: "Compra sem fornecedor definido.",
+          });
+        }
+        if (d.purchaseOrderRef)
+          expectRef(
+            clientRefs,
+            d.purchaseOrderRef,
+            "purchase_order",
+            ctx,
+            "data.purchaseOrderRef",
+            errors,
+          );
+        if (d.locationRef)
+          expectRef(clientRefs, d.locationRef, "stock_location", ctx, "data.locationRef", errors);
+        d.items.forEach((it, j) => {
+          if (it.purchasedQuantity <= 0 || it.stockQuantity <= 0) {
+            errors.push({
+              ...ctx,
+              field: `data.items[${j}]`,
+              message: "purchasedQuantity e stockQuantity devem ser > 0.",
+            });
+          }
+          const expectedTotal =
+            it.grossAmountCents -
+            it.discountAmountCents +
+            it.freightAmountCents +
+            it.taxAmountCents +
+            it.otherCostAmountCents;
+          if (it.totalCostCents !== undefined && it.totalCostCents !== expectedTotal) {
+            warnings.push({
+              ...ctx,
+              field: `data.items[${j}].totalCostCents`,
+              message:
+                "totalCostCents difere do cálculo gross-discount+freight+tax+other; será usado o valor informado.",
+            });
+          }
+          if ((it.totalCostCents ?? expectedTotal) / it.stockQuantity < 0.01) {
+            warnings.push({
+              ...ctx,
+              field: `data.items[${j}].stockQuantity`,
+              message: "Custo unitário muito pequeno; valide arredondamento.",
+            });
+          }
+          if (it.productRef) {
+            expectRef(
+              clientRefs,
+              it.productRef,
+              "product",
+              ctx,
+              `data.items[${j}].productRef`,
+              errors,
+            );
+          }
+        });
+        break;
+      }
+      case "product_cost_snapshot":
+        if (obj.data.productRef) {
+          expectRef(clientRefs, obj.data.productRef, "product", ctx, "data.productRef", errors);
+        }
+        break;
       default:
         break;
     }
@@ -473,6 +550,7 @@ type IngestionCtx = {
   purchaseService: ReturnType<typeof createPurchaseService>;
   productsRepo: ReturnType<typeof createProductRepository>;
   variantsRepo: ReturnType<typeof createProductVariantRepository>;
+  productCostSnapshotRepo: ReturnType<typeof createProductCostSnapshotRepository>;
   media: ReturnType<typeof createProductMediaService> | null;
 };
 
@@ -807,6 +885,40 @@ async function predictDryRunObject(
         id: dryRunSyntheticId(obj.client_ref, undefined, objectIndex),
       };
     }
+    case "purchase_receipt": {
+      const locationId =
+        obj.data.locationId ?? (obj.data.locationRef ? refMap[obj.data.locationRef] : undefined);
+      if (!locationId) {
+        return { status: "failed", detail: "locationId/locationRef em falta ou não resolvido." };
+      }
+      if (!obj.data.supplierId && !obj.data.supplierRef) {
+        return {
+          status: "created",
+          id: dryRunSyntheticId(obj.client_ref, undefined, objectIndex),
+          detail: "Warning: compra sem fornecedor definido.",
+        };
+      }
+      return {
+        status: "created",
+        id: dryRunSyntheticId(obj.client_ref, undefined, objectIndex),
+      };
+    }
+    case "product_cost_snapshot": {
+      const productId =
+        obj.data.productId ?? (obj.data.productRef ? refMap[obj.data.productRef] : undefined);
+      if (!productId) {
+        return { status: "failed", detail: "productId/productRef em falta ou não resolvido." };
+      }
+      const n = obj.data.componentCosts?.length ?? 0;
+      return {
+        status: "created",
+        id: dryRunSyntheticId(obj.client_ref, undefined, objectIndex),
+        detail:
+          n > 0
+            ? `Snapshot com ${n} linha(s) em componentCosts (gravadas em component_costs_json).`
+            : undefined,
+      };
+    }
   }
 }
 
@@ -892,6 +1004,8 @@ type IngestionObjectExecOpts = {
   skipProductImageUrls?: boolean;
   /** Orçamento de URLs de imagem por execução (main + galeria), usado no async chunked. */
   imageUrlBudgetRemaining?: number;
+  imageUrlBudgetMax?: number;
+  onDeferImageTask?: (task: DeferredImageTask) => void;
 };
 
 function countImageUrlsInProductData(data: ProductIngestionData): number {
@@ -1041,8 +1155,13 @@ async function createIngestionObject(
               "Imagens por URL omitidas (envelope skipProductImageUrls). Produto actualizado sem alterar imagens.",
             );
           } else if (budgetExceeded) {
+            execOpts.onDeferImageTask?.({
+              productId: updated.id,
+              mainImageUrl: obj.data.main_image_url,
+              galleryImageUrls: [...(obj.data.gallery_image_urls ?? [])],
+            });
             warnings.push(
-              `Imagens por URL adiadas para próximo chunk (budget ${execOpts.imageUrlBudgetRemaining}/${imageUrlCount}).`,
+              `Imagens por URL enfileiradas para processamento automático (budget ${execOpts.imageUrlBudgetRemaining}/${imageUrlCount}).`,
             );
           } else if (hasUrls && ctx.media) {
             const w = await applyProductImagesFromUrls(
@@ -1086,8 +1205,13 @@ async function createIngestionObject(
           "Imagens por URL omitidas (envelope skipProductImageUrls). Produto criado sem imagens.",
         );
       } else if (budgetExceeded) {
+        execOpts.onDeferImageTask?.({
+          productId: product.id,
+          mainImageUrl: obj.data.main_image_url,
+          galleryImageUrls: [...(obj.data.gallery_image_urls ?? [])],
+        });
         warnings.push(
-          `Imagens por URL adiadas para próximo chunk (budget ${execOpts.imageUrlBudgetRemaining}/${imageUrlCount}).`,
+          `Imagens por URL enfileiradas para processamento automático (budget ${execOpts.imageUrlBudgetRemaining}/${imageUrlCount}).`,
         );
       } else if (hasUrls && !ctx.media) {
         if (obj.data.main_image_url) warnings.push("Imagem principal (URL): R2 indisponível.");
@@ -1215,6 +1339,69 @@ async function createIngestionObject(
       const po = await ctx.purchaseService.create(purchaseInput);
       return { id: po.id, outcome: "created" as const, warnings };
     }
+    case "purchase_receipt": {
+      const supplierId =
+        obj.data.supplierId ?? (obj.data.supplierRef ? refMap[obj.data.supplierRef] : undefined);
+      const purchaseOrderId =
+        obj.data.purchaseOrderId ??
+        (obj.data.purchaseOrderRef ? refMap[obj.data.purchaseOrderRef] : undefined);
+      const locationId =
+        obj.data.locationId ?? (obj.data.locationRef ? refMap[obj.data.locationRef] : undefined);
+      if (!locationId) throw new Error("locationId/locationRef em falta.");
+      const receipt = await ctx.purchaseService.createReceipt({
+        externalRef: obj.data.externalRef,
+        purchaseOrderId,
+        supplierId,
+        issueDate: obj.data.issueDate ?? obj.data.purchaseDate!,
+        receivedAt: obj.data.receivedAt,
+        documentNumber: obj.data.documentNumber,
+        documentType: obj.data.documentType ?? "manual",
+        sourceSystem: obj.data.sourceSystem,
+        notes: obj.data.notes,
+        metadata: obj.data.metadata,
+        locationId,
+        items: obj.data.items.map((it) => ({
+          purchaseOrderItemId: it.purchaseOrderItemId,
+          productId: it.productId ?? (it.productRef ? refMap[it.productRef] : undefined),
+          description: it.description,
+          purchasedQuantity: it.purchasedQuantity,
+          purchaseUnit: it.purchaseUnit,
+          stockQuantity: it.stockQuantity,
+          stockUnit: it.stockUnit,
+          grossAmountCents: it.grossAmountCents,
+          discountAmountCents: it.discountAmountCents,
+          freightAmountCents: it.freightAmountCents,
+          taxAmountCents: it.taxAmountCents,
+          otherCostAmountCents: it.otherCostAmountCents,
+          totalCostCents: it.totalCostCents,
+          notes: it.notes,
+          metadata: it.metadata,
+        })),
+      });
+      return { id: receipt.id, outcome: "created", warnings };
+    }
+    case "product_cost_snapshot": {
+      const productId =
+        obj.data.productId ?? (obj.data.productRef ? refMap[obj.data.productRef] : undefined);
+      if (!productId) throw new Error("productId/productRef em falta.");
+      const lines = obj.data.componentCosts;
+      const componentCostsJson = lines && lines.length > 0 ? JSON.stringify(lines) : "[]";
+      const snapshot = await ctx.productCostSnapshotRepo.insert({
+        id: generateId(),
+        productId,
+        snapshotDate: obj.data.snapshotDate,
+        source: obj.data.source,
+        bomVersionId: obj.data.bomVersionId ?? null,
+        materialCostCents: obj.data.materialCostCents,
+        packagingCostCents: obj.data.packagingCostCents,
+        laborCostCents: obj.data.laborCostCents,
+        totalCostCents: obj.data.totalCostCents,
+        componentCostsJson,
+        metadataJson: JSON.stringify(obj.data.metadata ?? {}),
+        createdAt: new Date().toISOString(),
+      });
+      return { id: snapshot.id, outcome: "created", warnings };
+    }
     default: {
       const u: never = obj;
       throw new Error(`Tipo não suportado: ${String((u as IngestionObject).type)}`);
@@ -1231,6 +1418,7 @@ export function createIngestionService(db: AppDb, storage: StorageProvider | und
   const purchaseService = createPurchaseService(db);
   const productsRepo = createProductRepository(db);
   const variantsRepo = createProductVariantRepository(db);
+  const productCostSnapshotRepo = createProductCostSnapshotRepository(db);
   const media = storage ? createProductMediaService(db, storage) : null;
   const auditRepo = createAuditRepository(db);
   const now = () => new Date().toISOString();
@@ -1244,6 +1432,7 @@ export function createIngestionService(db: AppDb, storage: StorageProvider | und
     purchaseService,
     productsRepo,
     variantsRepo,
+    productCostSnapshotRepo,
     media,
   };
 
@@ -1486,6 +1675,7 @@ export function createIngestionService(db: AppDb, storage: StorageProvider | und
               updated: 0,
               skipped: 0,
               failed: 0,
+              pendingImageTasks: [],
             }
           : {
               cursor: state.cursor,
@@ -1495,6 +1685,7 @@ export function createIngestionService(db: AppDb, storage: StorageProvider | und
               updated: state.updated,
               skipped: state.skipped,
               failed: state.failed,
+              pendingImageTasks: state.pendingImageTasks ?? [],
             };
 
       const finish = async (): Promise<{ done: true; result: IngestionResult }> => {
@@ -1555,6 +1746,14 @@ export function createIngestionService(db: AppDb, storage: StorageProvider | und
           options?.maxImageUrlsPerRun !== undefined
             ? Math.max(0, Math.floor(options.maxImageUrlsPerRun))
             : undefined,
+        imageUrlBudgetMax:
+          options?.maxImageUrlsPerRun !== undefined
+            ? Math.max(0, Math.floor(options.maxImageUrlsPerRun))
+            : undefined,
+        onDeferImageTask: (task) => {
+          s.pendingImageTasks ??= [];
+          s.pendingImageTasks.push(task);
+        },
       };
       const counts = {
         created: s.created,
@@ -1585,7 +1784,63 @@ export function createIngestionService(db: AppDb, storage: StorageProvider | und
         await options.onProgress({ processed: endIdx, total: totalSorted });
       }
 
-      if (endIdx >= totalSorted) {
+      const processDeferredImageTasks = async () => {
+        const pending = s.pendingImageTasks ?? [];
+        if (!ctx.media || pending.length === 0) return;
+        let budget = execOpts.imageUrlBudgetRemaining;
+        const maxPerRun = Math.max(
+          1,
+          execOpts.imageUrlBudgetMax ?? options?.maxImageUrlsPerRun ?? 1,
+        );
+
+        while (pending.length > 0) {
+          const head = pending[0]!;
+          const wantsMain = Boolean(head.mainImageUrl);
+          const headCount = (wantsMain ? 1 : 0) + head.galleryImageUrls.length;
+          if (budget !== undefined && budget <= 0) break;
+
+          const allowed =
+            budget === undefined ? headCount : Math.max(1, Math.min(maxPerRun, budget));
+          let takeMain = false;
+          let remain = allowed;
+          if (wantsMain && remain > 0) {
+            takeMain = true;
+            remain -= 1;
+          }
+          const takeGallery = head.galleryImageUrls.slice(0, Math.max(0, remain));
+          if (!takeMain && takeGallery.length === 0) break;
+
+          const partial: ProductIngestionData = {
+            ...(takeMain ? { main_image_url: head.mainImageUrl } : {}),
+            ...(takeGallery.length > 0 ? { gallery_image_urls: takeGallery } : {}),
+          } as ProductIngestionData;
+          const w = await applyProductImagesFromUrls(
+            ctx.media,
+            ctx.productService,
+            head.productId,
+            partial,
+          );
+          if (w.length) {
+            const item = [...s.items].reverse().find((it) => it.id === head.productId);
+            if (item) item.warnings = [...(item.warnings ?? []), ...w];
+          }
+
+          if (takeMain) head.mainImageUrl = undefined;
+          if (takeGallery.length > 0) {
+            head.galleryImageUrls = head.galleryImageUrls.slice(takeGallery.length);
+          }
+          if (!head.mainImageUrl && head.galleryImageUrls.length === 0) {
+            pending.shift();
+          }
+          if (budget !== undefined) {
+            budget = Math.max(0, budget - (takeMain ? 1 : 0) - takeGallery.length);
+          }
+        }
+        execOpts.imageUrlBudgetRemaining = budget;
+      };
+      await processDeferredImageTasks();
+
+      if (endIdx >= totalSorted && (s.pendingImageTasks?.length ?? 0) === 0) {
         return finish();
       }
 

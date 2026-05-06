@@ -20,6 +20,7 @@ import { createProductCompositionService } from "../services/product-composition
 import { verifyInternalToken } from "../auth/verify-internal-token.js";
 import { R2StorageProvider } from "../storage/r2-storage-provider.js";
 import { createProductMediaService } from "../services/product-media.service.js";
+import { createProductCostSnapshotService } from "../services/product-cost-snapshot.service.js";
 
 const products = new Hono<{ Bindings: Env }>();
 
@@ -240,6 +241,54 @@ products.get("/:id/audit", async (c) => {
     const service = createProductService(db);
     const data = await service.listAuditLogsForProduct(c.req.param("id"));
     return c.json({ data });
+  } catch (err) {
+    const { message, code, status } = toApiError(err);
+    return c.json({ message, code }, status);
+  }
+});
+
+products.get("/:id/cost-snapshots", async (c) => {
+  try {
+    const url = new URL(c.req.url);
+    const source = url.searchParams.get("source")?.trim() || undefined;
+    const from = url.searchParams.get("from")?.trim() || undefined;
+    const to = url.searchParams.get("to")?.trim() || undefined;
+    const page = Number(url.searchParams.get("page") ?? "1");
+    const limit = Number(url.searchParams.get("limit") ?? "50");
+    const config = getEnv(c.env);
+    const db = createDb(config.db);
+    const service = createProductCostSnapshotService(db);
+    const data = await service.listByProduct({
+      productId: c.req.param("id"),
+      source,
+      from,
+      to,
+      page: Number.isFinite(page) ? page : 1,
+      limit: Number.isFinite(limit) ? limit : 50,
+    });
+    return c.json({
+      data: data.items,
+      meta: {
+        total: data.total,
+        page: Number.isFinite(page) ? page : 1,
+        limit: Number.isFinite(limit) ? limit : 50,
+      },
+    });
+  } catch (err) {
+    const { message, code, status } = toApiError(err);
+    return c.json({ message, code }, status);
+  }
+});
+
+products.post("/:id/recalculate-cost", async (c) => {
+  try {
+    const config = getEnv(c.env);
+    const db = createDb(config.db);
+    const service = createProductCostSnapshotService(db);
+    const data = await service.createFromCurrentBom(c.req.param("id"), "pricing_review", {
+      trigger: "manual_recalculate",
+    });
+    return c.json({ data }, 201);
   } catch (err) {
     const { message, code, status } = toApiError(err);
     return c.json({ message, code }, status);

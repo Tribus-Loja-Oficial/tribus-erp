@@ -29,6 +29,9 @@ function parseChunkState(raw: string | null | undefined): IngestionChunkState | 
       updated: typeof o.updated === "number" ? o.updated : 0,
       skipped: typeof o.skipped === "number" ? o.skipped : 0,
       failed: typeof o.failed === "number" ? o.failed : 0,
+      pendingImageTasks: Array.isArray(o.pendingImageTasks)
+        ? (o.pendingImageTasks as IngestionChunkState["pendingImageTasks"])
+        : [],
     };
   } catch {
     return null;

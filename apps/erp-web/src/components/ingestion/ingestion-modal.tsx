@@ -155,14 +155,14 @@ function DryRunPanel({ result }: { result: IngestionDryRunResponse["data"] }) {
             {ok ? "Plano previsto sem erros" : "Plano com falhas previstas"}
           </p>
           <p className="text-xs text-zinc-600">
-            {result.planned.created} criado(s), {result.planned.updated} actualizado(s),{" "}
+            {result.planned.created} criado(s), {result.planned.updated} atualizado(s),{" "}
             {result.planned.skipped} ignorado(s), {result.planned.failed} falha(s) prevista(s)
           </p>
         </div>
       </div>
       <p className="text-[10px] leading-snug text-zinc-500">
         Nada foi gravado na base. IDs em <span className="font-mono">refMap</span> podem ser
-        marcadores <span className="font-mono">dry-run:…</span> para objectos novos.
+        marcadores <span className="font-mono">dry-run:…</span> para objetos novos.
       </p>
       <ul className="max-h-[min(28vh,240px)] space-y-1.5 overflow-y-auto text-xs">
         {result.items.map((item) => (
@@ -184,7 +184,7 @@ function DryRunPanel({ result }: { result: IngestionDryRunResponse["data"] }) {
             ) : null}
             <span className="block text-[10px] tracking-wide text-zinc-500 uppercase">
               {item.plannedStatus === "created" && "Seria criado"}
-              {item.plannedStatus === "updated" && "Seria actualizado"}
+              {item.plannedStatus === "updated" && "Seria atualizado"}
               {item.plannedStatus === "skipped" && "Seria ignorado (já existe)"}
               {item.plannedStatus === "failed" && "Falharia"}
             </span>
@@ -220,12 +220,12 @@ function AsyncIngestionJobPanel({
     snapshot?.status === "queued"
       ? "Na fila…"
       : snapshot?.status === "running"
-        ? "A processar…"
+        ? "Processando…"
         : snapshot?.status === "completed"
           ? "Concluído"
           : snapshot?.status === "failed"
             ? "Falhou"
-            : "A iniciar…";
+            : "Iniciando…";
 
   return (
     <div className="mt-4 flex flex-col gap-3 border-t border-violet-200 bg-violet-50/40 px-1 pt-4">
@@ -242,7 +242,7 @@ function AsyncIngestionJobPanel({
           ) : (
             <RefreshCw className="h-3 w-3" />
           )}
-          Actualizar estado
+          Atualizar status
         </button>
       </div>
       <p className="font-mono text-[10px] text-zinc-600">
@@ -259,7 +259,7 @@ function AsyncIngestionJobPanel({
         {snapshot ? `${snapshot.progress.processed} / ${snapshot.progress.total} objetos` : "…"}
       </p>
       {snapshot?.updatedAt ? (
-        <p className="text-[10px] text-zinc-500">Última actualização: {snapshot.updatedAt}</p>
+        <p className="text-[10px] text-zinc-500">Última atualização: {snapshot.updatedAt}</p>
       ) : null}
     </div>
   );
@@ -301,7 +301,7 @@ function ResultPanel({ result }: { result: IngestionExecuteResponse["data"] }) {
           </p>
           <p className="text-xs text-zinc-600">
             {result.created} criado(s)
-            {(result.updated ?? 0) > 0 && `, ${result.updated} actualizado(s)`}
+            {(result.updated ?? 0) > 0 && `, ${result.updated} atualizado(s)`}
             {(result.skipped ?? 0) > 0 && `, ${result.skipped} ignorado(s)`}
             {result.failed > 0 && `, ${result.failed} falha(s)`}
           </p>
@@ -380,7 +380,7 @@ function ResultPanel({ result }: { result: IngestionExecuteResponse["data"] }) {
                   <span className="block font-mono text-emerald-800">ID: {item.id}</span>
                 )}
                 {item.status === "updated" && (
-                  <span className="block font-mono text-blue-800">Actualizado ID: {item.id}</span>
+                  <span className="block font-mono text-blue-800">Atualizado ID: {item.id}</span>
                 )}
                 {item.status === "skipped" && (
                   <span className="block text-zinc-500">Já existe (ID: {item.id})</span>
@@ -594,8 +594,8 @@ export function IngestionModal({ open, onOpenChange }: IngestionModalProps) {
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-zinc-900">Nova ingestão</p>
               <p className="truncate text-xs text-zinc-500">
-                Payloads grandes vão para fila no Worker (202): vê o progresso aqui. Os restantes
-                correm na mesma janela até ao resultado.
+                Arquivos pequenos terminam na hora nesta tela. Arquivos grandes (202) continuam em
+                segundo plano e mostramos o progresso até concluir.
               </p>
             </div>
             <div className="relative shrink-0">
@@ -739,7 +739,7 @@ export function IngestionModal({ open, onOpenChange }: IngestionModalProps) {
               {step === "result" && executeResult && (
                 <>
                   {executeResult.created} criado(s)
-                  {(executeResult.updated ?? 0) > 0 && ` · ${executeResult.updated} actualizado(s)`}
+                  {(executeResult.updated ?? 0) > 0 && ` · ${executeResult.updated} atualizado(s)`}
                   {(executeResult.skipped ?? 0) > 0 && ` · ${executeResult.skipped} ignorado(s)`}
                   {executeResult.failed > 0 && ` · ${executeResult.failed} falha(s)`}
                 </>
@@ -786,7 +786,7 @@ export function IngestionModal({ open, onOpenChange }: IngestionModalProps) {
                     ) : (
                       <Package className="h-3.5 w-3.5" />
                     )}
-                    Ingerir dados
+                    Importar dados
                   </button>
                 </>
               )}

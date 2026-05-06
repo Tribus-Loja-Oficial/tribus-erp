@@ -6,9 +6,11 @@ import { createPurchaseService } from "../services/purchase.service.js";
 import { toApiError } from "../errors/app-error.js";
 import {
   createPurchaseOrderSchema,
+  createPurchaseReceiptSchema,
   updatePurchaseStatusSchema,
   receivePurchaseOrderSchema,
   listPurchaseOrdersSchema,
+  listPurchaseReceiptsSchema,
 } from "../schemas/purchase.schemas.js";
 
 const purchases = new Hono<{ Bindings: Env }>();
@@ -41,6 +43,54 @@ purchases.post("/", async (c) => {
     const service = createPurchaseService(db);
     const data = await service.create(parsed.data);
     return c.json({ data }, 201);
+  } catch (err) {
+    const { message, code, status } = toApiError(err);
+    return c.json({ message, code }, status);
+  }
+});
+
+/** Rotas estáticas `/receipts` antes de `/:id` para não capturar id=receipts. */
+purchases.get("/receipts", async (c) => {
+  const query = Object.fromEntries(new URL(c.req.url).searchParams);
+  const parsed = listPurchaseReceiptsSchema.safeParse(query);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  try {
+    const config = getEnv(c.env);
+    const db = createDb(config.db);
+    const service = createPurchaseService(db);
+    const data = await service.findReceipts(parsed.data);
+    return c.json({ data });
+  } catch (err) {
+    const { message, code, status } = toApiError(err);
+    return c.json({ message, code }, status);
+  }
+});
+
+purchases.post("/receipts", async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const parsed = createPurchaseReceiptSchema.safeParse(body);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  try {
+    const config = getEnv(c.env);
+    const db = createDb(config.db);
+    const service = createPurchaseService(db);
+    const data = await service.createReceipt(parsed.data);
+    return c.json({ data }, 201);
+  } catch (err) {
+    const { message, code, status } = toApiError(err);
+    return c.json({ message, code }, status);
+  }
+});
+
+purchases.get("/receipts/:receiptId", async (c) => {
+  try {
+    const config = getEnv(c.env);
+    const db = createDb(config.db);
+    const service = createPurchaseService(db);
+    const data = await service.findReceiptById(c.req.param("receiptId"));
+    return c.json({ data });
   } catch (err) {
     const { message, code, status } = toApiError(err);
     return c.json({ message, code }, status);

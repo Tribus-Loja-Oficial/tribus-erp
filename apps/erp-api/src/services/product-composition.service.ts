@@ -3,6 +3,7 @@ import { generateId } from "../utils/id.js";
 import { NotFoundError, ConflictError, ValidationError } from "../errors/app-error.js";
 import { createProductRepository } from "../repositories/product.repository.js";
 import { createProductCompositionRepository } from "../repositories/product-composition.repository.js";
+import { createProductCostSnapshotService } from "./product-cost-snapshot.service.js";
 import { lineCostCentsFromComposition } from "../domain/product-cost.js";
 import type {
   CreateProductCompositionInput,
@@ -34,6 +35,7 @@ function validateCompositionRules(opts: {
 export function createProductCompositionService(db: AppDb) {
   const productsRepo = createProductRepository(db);
   const compositionsRepo = createProductCompositionRepository(db);
+  const snapshotService = createProductCostSnapshotService(db);
   const now = () => new Date().toISOString();
 
   return {
@@ -63,7 +65,7 @@ export function createProductCompositionService(db: AppDb) {
       const { unitCostCents, totalCostCents } = lineCostCentsFromComposition(input.quantity, child);
 
       try {
-        return await compositionsRepo.insert({
+        const created = await compositionsRepo.insert({
           id: generateId(),
           parentProductId,
           parentVariantId: null,
@@ -82,6 +84,11 @@ export function createProductCompositionService(db: AppDb) {
           updatedAt: now(),
           archivedAt: null,
         });
+        await snapshotService.createFromCurrentBom(parentProductId, "pricing_review", {
+          trigger: "composition_add",
+          compositionId: created.id,
+        });
+        return created;
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         if (msg.includes("UNIQUE") || msg.toLowerCase().includes("unique")) {
@@ -147,7 +154,12 @@ export function createProductCompositionService(db: AppDb) {
       if (input.isDefault !== undefined) patch.isDefault = input.isDefault;
       if (input.notes !== undefined) patch.notes = input.notes;
 
-      return compositionsRepo.update(compositionId, patch as never);
+      const updated = await compositionsRepo.update(compositionId, patch as never);
+      await snapshotService.createFromCurrentBom(parentProductId, "pricing_review", {
+        trigger: "composition_update",
+        compositionId: updated.id,
+      });
+      return updated;
     },
 
     async archive(parentProductId: string, compositionId: string) {
@@ -157,6 +169,10 @@ export function createProductCompositionService(db: AppDb) {
         throw new ValidationError("Composição não pertence a este produto");
       }
       await compositionsRepo.archive(compositionId);
+      await snapshotService.createFromCurrentBom(parentProductId, "pricing_review", {
+        trigger: "composition_archive",
+        compositionId,
+      });
     },
   };
 }

@@ -1,10 +1,16 @@
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, inArray } from "drizzle-orm";
 import type { AppDb } from "../db/client.js";
 import {
   purchaseOrders,
   purchaseOrderItems,
+  purchaseReceipts,
+  purchaseReceiptItems,
+  inventoryValuationEvents,
   type NewPurchaseOrder,
   type NewPurchaseOrderItem,
+  type NewPurchaseReceipt,
+  type NewPurchaseReceiptItem,
+  type NewInventoryValuationEvent,
 } from "../db/schema/index.js";
 
 export function createPurchaseRepository(db: AppDb) {
@@ -72,6 +78,82 @@ export function createPurchaseRepository(db: AppDb) {
         .where(eq(purchaseOrderItems.id, id))
         .returning();
       return row!;
+    },
+
+    async insertReceipt(data: NewPurchaseReceipt) {
+      const [row] = await db.insert(purchaseReceipts).values(data).returning();
+      return row!;
+    },
+
+    async insertReceiptItem(data: NewPurchaseReceiptItem) {
+      const [row] = await db.insert(purchaseReceiptItems).values(data).returning();
+      return row!;
+    },
+
+    async insertValuationEvent(data: NewInventoryValuationEvent) {
+      const [row] = await db.insert(inventoryValuationEvents).values(data).returning();
+      return row!;
+    },
+
+    async findReceipts(params: { supplierId?: string; limit: number; offset: number }) {
+      const conditions = [];
+      if (params.supplierId) conditions.push(eq(purchaseReceipts.supplierId, params.supplierId));
+      return db
+        .select()
+        .from(purchaseReceipts)
+        .where(conditions.length ? and(...conditions) : undefined)
+        .orderBy(desc(purchaseReceipts.receivedAt))
+        .limit(params.limit)
+        .offset(params.offset);
+    },
+
+    async findReceiptById(id: string) {
+      const [row] = await db.select().from(purchaseReceipts).where(eq(purchaseReceipts.id, id));
+      return row ?? null;
+    },
+
+    async findReceiptItemsByReceiptId(purchaseReceiptId: string) {
+      return db
+        .select()
+        .from(purchaseReceiptItems)
+        .where(eq(purchaseReceiptItems.purchaseReceiptId, purchaseReceiptId));
+    },
+
+    async findReceiptItemsForProduct(productId: string, limit: number) {
+      return db
+        .select({ item: purchaseReceiptItems, receipt: purchaseReceipts })
+        .from(purchaseReceiptItems)
+        .innerJoin(
+          purchaseReceipts,
+          eq(purchaseReceiptItems.purchaseReceiptId, purchaseReceipts.id),
+        )
+        .where(eq(purchaseReceiptItems.productId, productId))
+        .orderBy(desc(purchaseReceipts.receivedAt), desc(purchaseReceiptItems.createdAt))
+        .limit(limit);
+    },
+
+    /** Primeira entrada (mais recente) por produto, para link na composição. */
+    async findLatestReceiptIdPerProductIds(productIds: string[]): Promise<Map<string, string>> {
+      if (productIds.length === 0) return new Map();
+      const rows = await db
+        .select({
+          productId: purchaseReceiptItems.productId,
+          receiptId: purchaseReceiptItems.purchaseReceiptId,
+          receivedAt: purchaseReceipts.receivedAt,
+        })
+        .from(purchaseReceiptItems)
+        .innerJoin(
+          purchaseReceipts,
+          eq(purchaseReceiptItems.purchaseReceiptId, purchaseReceipts.id),
+        )
+        .where(inArray(purchaseReceiptItems.productId, productIds))
+        .orderBy(desc(purchaseReceipts.receivedAt))
+        .limit(400);
+      const map = new Map<string, string>();
+      for (const r of rows) {
+        if (r.productId && !map.has(r.productId)) map.set(r.productId, r.receiptId);
+      }
+      return map;
     },
   };
 }

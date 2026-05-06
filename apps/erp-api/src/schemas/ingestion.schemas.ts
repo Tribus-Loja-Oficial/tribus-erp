@@ -268,6 +268,130 @@ const purchaseItemWithRef = z.object({
   unitPriceCents: z.number().int().nonnegative(),
 });
 
+const purchaseReceiptItemWithRef = z.object({
+  purchaseOrderItemId: z.string().optional(),
+  productId: z.string().optional(),
+  productRef: z.string().min(1).max(200).optional(),
+  description: z.string().optional(),
+  purchasedQuantity: z.number().positive(),
+  purchaseUnit: z.string().min(1),
+  stockQuantity: z.number().positive(),
+  stockUnit: z.string().min(1),
+  grossAmountCents: z.number().int().nonnegative(),
+  discountAmountCents: z.number().int().nonnegative().default(0),
+  freightAmountCents: z.number().int().nonnegative().default(0),
+  taxAmountCents: z.number().int().nonnegative().default(0),
+  otherCostAmountCents: z.number().int().nonnegative().default(0),
+  totalCostCents: z.number().int().nonnegative().optional(),
+  notes: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
+
+export const purchaseReceiptIngestionDataSchema = z
+  .object({
+    externalRef: z.string().min(1).optional(),
+    purchaseOrderId: z.string().optional(),
+    purchaseOrderRef: z.string().min(1).max(200).optional(),
+    supplierId: z.string().optional(),
+    supplierRef: z.string().min(1).max(200).optional(),
+    issueDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional(),
+    purchaseDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional(),
+    receivedAt: z.string().datetime().optional(),
+    documentType: z.enum(["manual", "nfe_xml", "receipt", "invoice", "legacy_import"]).optional(),
+    documentNumber: z.string().optional(),
+    sourceSystem: z.string().optional(),
+    locationId: z.string().optional(),
+    locationRef: z.string().min(1).max(200).optional(),
+    notes: z.string().optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+    items: z.array(purchaseReceiptItemWithRef).min(1),
+  })
+  .refine((d) => d.locationId || d.locationRef, {
+    message: "Indique locationId ou locationRef.",
+    path: ["locationRef"],
+  })
+  .refine((d) => d.issueDate || d.purchaseDate, {
+    message: "Indique issueDate ou purchaseDate.",
+    path: ["issueDate"],
+  });
+
+/** Linhas opcionais gravadas em `product_cost_snapshots.component_costs_json` (espelha snapshots automáticos). */
+export const productCostSnapshotComponentLineIngestionSchema = z
+  .object({
+    compositionId: z.string().min(1).max(200).optional(),
+    childProductId: z.string().min(1).optional(),
+    childSku: z.string().max(200).nullable().optional(),
+    childName: z.string().max(500).nullable().optional(),
+    childProductType: z.string().max(100).nullable().optional(),
+    compositionType: z.string().min(1).max(50),
+    quantity: z.number().nonnegative(),
+    quantityUnit: z.string().max(50).nullable().optional(),
+    packagingChannel: z.enum(["online", "presential"]).nullable().optional(),
+    unitCostBasis: z.enum(["average", "consumption_unit", "legacy_cost_price"]).optional(),
+    unitCost: z.number().nonnegative(),
+    lineTotalCents: z.number().int(),
+    costSource: z.string().max(100).optional(),
+    costUpdatedAt: z.string().max(40).nullable().optional(),
+    lastPurchaseDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .nullable()
+      .optional(),
+    averageCostUnit: z.string().max(50).nullable().optional(),
+  })
+  .strict();
+
+export const productCostSnapshotIngestionDataSchema = z
+  .object({
+    productId: z.string().optional(),
+    productRef: z.string().min(1).max(200).optional(),
+    snapshotDate: z.string().datetime(),
+    source: z.enum([
+      "legacy_ingestion",
+      "manual",
+      "purchase_recalculation",
+      "production_order",
+      "pricing_review",
+    ]),
+    materialCostCents: z.number().int().nonnegative().default(0),
+    packagingCostCents: z.number().int().nonnegative().default(0),
+    laborCostCents: z.number().int().nonnegative().default(0),
+    totalCostCents: z.number().int().nonnegative(),
+    bomVersionId: z.string().optional(),
+    componentCosts: z.array(productCostSnapshotComponentLineIngestionSchema).max(500).optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+  })
+  .strict()
+  .refine((d) => Boolean(d.productId?.trim()) || Boolean(d.productRef?.trim()), {
+    message: "Indique productId ou productRef.",
+    path: ["productRef"],
+  })
+  .refine(
+    (d) => d.totalCostCents === d.materialCostCents + d.packagingCostCents + d.laborCostCents,
+    {
+      message: "totalCostCents deve ser materialCostCents + packagingCostCents + laborCostCents.",
+      path: ["totalCostCents"],
+    },
+  )
+  .refine(
+    (d) => {
+      if (!d.componentCosts?.length) return true;
+      const sumLines = d.componentCosts.reduce((acc, l) => acc + l.lineTotalCents, 0);
+      return sumLines === d.materialCostCents + d.packagingCostCents;
+    },
+    {
+      message:
+        "A soma de componentCosts[].lineTotalCents deve ser materialCostCents + packagingCostCents (linhas de composição, sem mão de obra).",
+      path: ["componentCosts"],
+    },
+  );
+
 export const purchaseOrderIngestionDataSchema = createPurchaseOrderSchema
   .omit({ items: true })
   .extend({
@@ -378,6 +502,18 @@ export const ingestionObjectSchema = z.union([
     client_ref: clientRefField,
     data: purchaseOrderIngestionDataSchema,
   }),
+  z.object({
+    type: z.literal("purchase_receipt"),
+    action: ingestionActionField,
+    client_ref: clientRefField,
+    data: purchaseReceiptIngestionDataSchema,
+  }),
+  z.object({
+    type: z.literal("product_cost_snapshot"),
+    action: ingestionActionField,
+    client_ref: clientRefField,
+    data: productCostSnapshotIngestionDataSchema,
+  }),
 ]);
 
 /** Limite por payload (ordenação interna + refMap global); ficheiros grandes não precisam ser divididos manualmente. */
@@ -426,6 +562,8 @@ export const INGESTION_TYPE_LABELS: Record<IngestionObjectType, string> = {
   inventory_movement: "Movimento de stock",
   order: "Pedido",
   purchase_order: "Ordem de compra",
+  purchase_receipt: "Entrada de compra",
+  product_cost_snapshot: "Snapshot de custo",
 };
 
 export type ProductIngestionData = z.infer<typeof productIngestionDataSchema>;
@@ -444,4 +582,6 @@ export const INGESTION_TYPE_ORDER: Record<IngestionObjectType, number> = {
   inventory_movement: 9,
   order: 10,
   purchase_order: 11,
+  purchase_receipt: 12,
+  product_cost_snapshot: 13,
 };

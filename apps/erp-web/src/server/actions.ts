@@ -415,6 +415,70 @@ export async function receivePurchaseOrderAction(formData: FormData) {
   redirect(`/purchases/${id}`);
 }
 
+export async function createPurchaseReceiptAction(formData: FormData) {
+  const issueDate = String(formData.get("issueDate") ?? "").trim();
+  const locationId = String(formData.get("locationId") ?? "").trim();
+  const productId = String(formData.get("productId") ?? "").trim();
+  const purchasedQuantity = Number(formData.get("purchasedQuantity") ?? "0");
+  const stockQuantity = Number(formData.get("stockQuantity") ?? "0");
+  if (!issueDate || !locationId || !productId || purchasedQuantity <= 0 || stockQuantity <= 0) {
+    redirect(
+      "/purchases/receipts/new?error=" + encodeURIComponent("Preencha os campos obrigatórios"),
+    );
+  }
+
+  try {
+    await erpApiFetch({
+      method: "POST",
+      path: "/purchases/receipts",
+      body: {
+        externalRef: optionalId(formData.get("externalRef")),
+        supplierId: optionalId(formData.get("supplierId")),
+        issueDate,
+        documentType: String(formData.get("documentType") ?? "manual"),
+        documentNumber: optionalId(formData.get("documentNumber")),
+        sourceSystem: optionalId(formData.get("sourceSystem")),
+        locationId,
+        notes: optionalId(formData.get("notes")),
+        items: [
+          {
+            productId,
+            description: optionalId(formData.get("description")),
+            purchasedQuantity,
+            purchaseUnit: String(formData.get("purchaseUnit") ?? "").trim() || "un",
+            stockQuantity,
+            stockUnit: String(formData.get("stockUnit") ?? "").trim() || "un",
+            grossAmountCents: moneyToCents(formData.get("grossAmount")),
+            discountAmountCents: formData.get("discountAmount")
+              ? moneyToCents(formData.get("discountAmount"))
+              : 0,
+            freightAmountCents: formData.get("freightAmount")
+              ? moneyToCents(formData.get("freightAmount"))
+              : 0,
+            taxAmountCents: formData.get("taxAmount") ? moneyToCents(formData.get("taxAmount")) : 0,
+            otherCostAmountCents: formData.get("otherCostAmount")
+              ? moneyToCents(formData.get("otherCostAmount"))
+              : 0,
+            totalCostCents: formData.get("totalCost")
+              ? moneyToCents(formData.get("totalCost"))
+              : undefined,
+            notes: optionalId(formData.get("itemNotes")),
+          },
+        ],
+      },
+    });
+    revalidatePath("/purchases");
+    revalidatePath("/inventory");
+    revalidatePath("/products");
+  } catch (e) {
+    redirect(
+      "/purchases/receipts/new?error=" +
+        encodeURIComponent(e instanceof Error ? e.message : "Erro ao registrar entrada"),
+    );
+  }
+  redirect("/purchases");
+}
+
 export async function payPayableAction(formData: FormData) {
   const id = String(formData.get("id") ?? "").trim();
   const financialAccountId = String(formData.get("financialAccountId") ?? "").trim();

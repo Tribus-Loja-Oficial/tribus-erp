@@ -1,0 +1,91 @@
+{
+  "version": "1.0",
+  "mode": "create",
+  "objects": [
+    {
+      "type": "stock_location",
+      "client_ref": "loc_snapshot_demo",
+      "data": {
+        "name": "Principal (demo snapshot)",
+        "type": "main"
+      }
+    },
+    {
+      "type": "product",
+      "client_ref": "cmp_insumo_demo",
+      "data": {
+        "sku": "SNAP-DEMO-INS-001",
+        "name": "Insumo para demo de snapshot",
+        "productType": "raw_material",
+        "salePriceCents": 0,
+        "costPriceCents": 80,
+        "status": "active"
+      }
+    },
+    {
+      "type": "product",
+      "client_ref": "prd_acabado_demo",
+      "data": {
+        "sku": "SNAP-DEMO-PRD-001",
+        "name": "Produto acabado — demo snapshot com linhas",
+        "productType": "finished_product",
+        "salePriceCents": 9900,
+        "costPriceCents": 4500,
+        "status": "active"
+      }
+    },
+    {
+      "type": "product_composition",
+      "data": {
+        "parentProductRef": "prd_acabado_demo",
+        "childProductRef": "cmp_insumo_demo",
+        "quantity": 2,
+        "quantityUnit": "g",
+        "compositionType": "bom",
+        "required": true,
+        "isDefault": true
+      }
+    },
+    {
+      "type": "product_cost_snapshot",
+      "client_ref": "snap_demo_20260506",
+      "data": {
+        "productRef": "prd_acabado_demo",
+        "snapshotDate": "2026-05-06T15:00:00.000Z",
+        "source": "legacy_ingestion",
+        "materialCostCents": 400,
+        "packagingCostCents": 80,
+        "laborCostCents": 50,
+        "totalCostCents": 530,
+        "componentCosts": [
+          {
+            "compositionType": "bom",
+            "quantity": 2,
+            "quantityUnit": "g",
+            "unitCostBasis": "average",
+            "unitCost": 200,
+            "lineTotalCents": 400,
+            "costSource": "purchase_average",
+            "childName": "Insumo para demo de snapshot",
+            "childSku": "SNAP-DEMO-INS-001"
+          },
+          {
+            "compositionType": "packaging",
+            "quantity": 1,
+            "quantityUnit": "unit",
+            "packagingChannel": "online",
+            "unitCostBasis": "legacy_cost_price",
+            "unitCost": 80,
+            "lineTotalCents": 80,
+            "costSource": "legacy_ingestion",
+            "childName": "Embalagem online (planilha legada)"
+          }
+        ],
+        "metadata": {
+          "importBatchId": "demo-snapshot-component-lines",
+          "note": "totalCostCents = materiais + embalagem + MO; linhas somam só materiais + embalagem."
+        }
+      }
+    }
+  ]
+}

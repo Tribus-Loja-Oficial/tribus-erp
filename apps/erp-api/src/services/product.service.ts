@@ -10,9 +10,13 @@ import { createProductProductionProfileRepository } from "../repositories/produc
 import { createAuditRepository } from "../repositories/audit.repository.js";
 import {
   calculateLaborCostCents,
+  childCostUnitBasisForProduct,
+  compositionLineUsesLegacyCostRisk,
   deriveCostPerConsumptionUnitCents,
   lineCostCentsFromComposition,
 } from "../domain/product-cost.js";
+import { createInventoryRepository } from "../repositories/inventory.repository.js";
+import { createPurchaseRepository } from "../repositories/purchase.repository.js";
 import { createProductCostService } from "./product-cost.service.js";
 import type {
   CreateProductInput,
@@ -52,6 +56,8 @@ export function createProductService(db: AppDb) {
   const profileRepo = createProductProductionProfileRepository(db);
   const costService = createProductCostService(db);
   const auditRepo = createAuditRepository(db);
+  const inventoryRepo = createInventoryRepository(db);
+  const purchaseRepo = createPurchaseRepository(db);
   const now = () => new Date().toISOString();
 
   return {
@@ -230,11 +236,14 @@ export function createProductService(db: AppDb) {
       const profile = await profileRepo.findByProductId(id);
       const costBreakdown = await costService.getBreakdownForParentProduct(id);
 
+      const latestReceiptByChild = await purchaseRepo.findLatestReceiptIdPerProductIds(childIds);
+
       const compositionsWithChild = compositions.map((c) => {
         const ch = childMap.get(c.childProductId);
         const { unitCostCents, totalCostCents } = ch
           ? lineCostCentsFromComposition(c.quantity, ch)
           : { unitCostCents: 0, totalCostCents: 0 };
+        const basis = ch ? childCostUnitBasisForProduct(ch) : "legacy_cost_price";
         return {
           ...c,
           childSku: ch?.sku ?? null,
@@ -243,6 +252,66 @@ export function createProductService(db: AppDb) {
           childCostPriceCents: ch?.costPriceCents ?? 0,
           childUnitCostCents: unitCostCents,
           lineCostCents: totalCostCents,
+          childCostSource: ch?.costSource ?? null,
+          childCostUpdatedAt: ch?.costUpdatedAt ?? null,
+          childLastPurchaseDate: ch?.lastPurchaseDate ?? null,
+          childUnitCostBasis: basis,
+          childLegacyCostWarning: ch ? compositionLineUsesLegacyCostRisk(ch) : true,
+          childAverageCostUnit: ch?.averageCostUnit ?? null,
+          childLatestReceiptId: latestReceiptByChild.get(c.childProductId) ?? null,
+        };
+      });
+
+      const movements = await inventoryRepo.findMovementsByProduct(id, 80);
+      const locationIds = [...new Set(movements.map((m) => m.locationId))];
+      const locationRows = await Promise.all(
+        locationIds.map((lid) => inventoryRepo.findLocationById(lid)),
+      );
+      const locNameById = new Map(locationRows.filter(Boolean).map((l) => [l!.id, l!.name]));
+
+      const stockMovements = movements.map((m) => ({
+        id: m.id,
+        type: m.type,
+        quantity: m.quantity,
+        unitCostCents: m.unitCostCents,
+        referenceType: m.referenceType,
+        referenceId: m.referenceId,
+        notes: m.notes,
+        createdAt: m.createdAt,
+        locationName: locNameById.get(m.locationId) ?? m.locationId,
+      }));
+
+      const receiptJoinRows = await purchaseRepo.findReceiptItemsForProduct(id, 40);
+      const purchaseReceiptHistory = receiptJoinRows.map(({ item, receipt }) => ({
+        receiptId: receipt.id,
+        receivedAt: receipt.receivedAt,
+        issueDate: receipt.issueDate,
+        documentType: receipt.documentType,
+        documentNumber: receipt.documentNumber,
+        stockQuantity: item.stockQuantity,
+        stockUnit: item.stockUnit,
+        totalCostCents: item.totalCostCents,
+        receiptItemId: item.id,
+      }));
+
+      const asChildCompositions = await compositionsRepo.findActiveByChildId(id);
+      const parentIds = [...new Set(asChildCompositions.map((c) => c.parentProductId))];
+      const parentProducts = parentIds.length ? await productsRepo.findByIds(parentIds) : [];
+      const parentMap = new Map(parentProducts.map((p) => [p.id, p]));
+      const bomParentsGrouped = new Map<string, number>();
+      for (const c of asChildCompositions) {
+        bomParentsGrouped.set(
+          c.parentProductId,
+          (bomParentsGrouped.get(c.parentProductId) ?? 0) + 1,
+        );
+      }
+      const bomParents = [...bomParentsGrouped.entries()].map(([parentProductId, lineCount]) => {
+        const p = parentMap.get(parentProductId);
+        return {
+          parentProductId,
+          parentSku: p?.sku ?? null,
+          parentName: p?.name ?? null,
+          lineCount,
         };
       });
 
@@ -264,6 +333,9 @@ export function createProductService(db: AppDb) {
         children,
         costBreakdown,
         variants,
+        stockMovements,
+        purchaseReceiptHistory,
+        bomParents,
       };
     },
 

@@ -184,6 +184,16 @@ export const products = sqliteTable(
     consumptionUnit: text("consumption_unit"),
     acquisitionCostCents: integer("acquisition_cost_cents"),
     costPerConsumptionUnitCents: real("cost_per_consumption_unit_cents"),
+    averageCostDecimal: real("average_cost_decimal"),
+    averageCostUnit: text("average_cost_unit"),
+    lastPurchaseCostDecimal: real("last_purchase_cost_decimal"),
+    lastPurchaseDate: text("last_purchase_date"),
+    costSource: text("cost_source", {
+      enum: ["legacy_ingestion", "manual", "purchase_average", "unknown"],
+    })
+      .notNull()
+      .default("unknown"),
+    costUpdatedAt: text("cost_updated_at"),
     producedInternally: integer("produced_internally", { mode: "boolean" })
       .notNull()
       .default(false),
@@ -825,6 +835,118 @@ export const purchaseOrderItems = sqliteTable("purchase_order_items", {
   createdAt: text("created_at").notNull(),
 });
 
+export const purchaseReceipts = sqliteTable(
+  "purchase_receipts",
+  {
+    id: text("id").primaryKey(),
+    externalRef: text("external_ref"),
+    purchaseOrderId: text("purchase_order_id").references(() => purchaseOrders.id),
+    supplierId: text("supplier_id").references(() => suppliers.id),
+    issueDate: text("issue_date").notNull(),
+    receivedAt: text("received_at").notNull(),
+    documentNumber: text("document_number"),
+    documentType: text("document_type", {
+      enum: ["manual", "nfe_xml", "receipt", "invoice", "legacy_import"],
+    })
+      .notNull()
+      .default("manual"),
+    sourceSystem: text("source_system"),
+    notes: text("notes"),
+    metadataJson: text("metadata_json").default("{}"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [
+    uniqueIndex("purchase_receipts_external_ref_idx").on(t.externalRef),
+    index("purchase_receipts_supplier_idx").on(t.supplierId),
+    index("purchase_receipts_purchase_order_idx").on(t.purchaseOrderId),
+    index("purchase_receipts_received_at_idx").on(t.receivedAt),
+  ],
+);
+
+export const purchaseReceiptItems = sqliteTable(
+  "purchase_receipt_items",
+  {
+    id: text("id").primaryKey(),
+    purchaseReceiptId: text("purchase_receipt_id")
+      .notNull()
+      .references(() => purchaseReceipts.id),
+    purchaseOrderItemId: text("purchase_order_item_id").references(() => purchaseOrderItems.id),
+    productId: text("product_id").references(() => products.id),
+    description: text("description"),
+    purchasedQuantity: real("purchased_quantity").notNull(),
+    purchaseUnit: text("purchase_unit").notNull(),
+    conversionFactorToStockUnit: real("conversion_factor_to_stock_unit").notNull(),
+    stockQuantity: real("stock_quantity").notNull(),
+    stockUnit: text("stock_unit").notNull(),
+    grossAmountCents: integer("gross_amount_cents").notNull(),
+    discountAmountCents: integer("discount_amount_cents").notNull().default(0),
+    freightAmountCents: integer("freight_amount_cents").notNull().default(0),
+    taxAmountCents: integer("tax_amount_cents").notNull().default(0),
+    otherCostAmountCents: integer("other_cost_amount_cents").notNull().default(0),
+    totalCostCents: integer("total_cost_cents").notNull(),
+    unitCostDecimal: real("unit_cost_decimal").notNull(),
+    notes: text("notes"),
+    metadataJson: text("metadata_json").default("{}"),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [
+    index("purchase_receipt_items_receipt_idx").on(t.purchaseReceiptId),
+    index("purchase_receipt_items_product_idx").on(t.productId),
+  ],
+);
+
+export const inventoryValuationEvents = sqliteTable(
+  "inventory_valuation_events",
+  {
+    id: text("id").primaryKey(),
+    productId: text("product_id")
+      .notNull()
+      .references(() => products.id),
+    sourceType: text("source_type").notNull(),
+    sourceId: text("source_id"),
+    quantityBefore: real("quantity_before").notNull().default(0),
+    valueBeforeCents: integer("value_before_cents").notNull().default(0),
+    quantityIn: real("quantity_in").notNull().default(0),
+    valueInCents: integer("value_in_cents").notNull().default(0),
+    quantityAfter: real("quantity_after").notNull().default(0),
+    valueAfterCents: integer("value_after_cents").notNull().default(0),
+    averageCostBeforeDecimal: real("average_cost_before_decimal"),
+    averageCostAfterDecimal: real("average_cost_after_decimal"),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [index("inventory_valuation_events_product_idx").on(t.productId, t.createdAt)],
+);
+
+export const productCostSnapshots = sqliteTable(
+  "product_cost_snapshots",
+  {
+    id: text("id").primaryKey(),
+    productId: text("product_id")
+      .notNull()
+      .references(() => products.id),
+    snapshotDate: text("snapshot_date").notNull(),
+    source: text("source", {
+      enum: [
+        "legacy_ingestion",
+        "manual",
+        "purchase_recalculation",
+        "production_order",
+        "pricing_review",
+      ],
+    }).notNull(),
+    bomVersionId: text("bom_version_id"),
+    materialCostCents: integer("material_cost_cents").notNull().default(0),
+    packagingCostCents: integer("packaging_cost_cents").notNull().default(0),
+    laborCostCents: integer("labor_cost_cents").notNull().default(0),
+    totalCostCents: integer("total_cost_cents").notNull().default(0),
+    componentCostsJson: text("component_costs_json").default("[]"),
+    metadataJson: text("metadata_json").default("{}"),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [index("product_cost_snapshots_product_idx").on(t.productId, t.snapshotDate)],
+);
+
 // ─── Product Tags ────────────────────────────────────────────────────────────
 
 export const productTags = sqliteTable("product_tags", {
@@ -1036,6 +1158,14 @@ export type PurchaseOrder = typeof purchaseOrders.$inferSelect;
 export type NewPurchaseOrder = typeof purchaseOrders.$inferInsert;
 export type PurchaseOrderItem = typeof purchaseOrderItems.$inferSelect;
 export type NewPurchaseOrderItem = typeof purchaseOrderItems.$inferInsert;
+export type PurchaseReceipt = typeof purchaseReceipts.$inferSelect;
+export type NewPurchaseReceipt = typeof purchaseReceipts.$inferInsert;
+export type PurchaseReceiptItem = typeof purchaseReceiptItems.$inferSelect;
+export type NewPurchaseReceiptItem = typeof purchaseReceiptItems.$inferInsert;
+export type InventoryValuationEvent = typeof inventoryValuationEvents.$inferSelect;
+export type NewInventoryValuationEvent = typeof inventoryValuationEvents.$inferInsert;
+export type ProductCostSnapshot = typeof productCostSnapshots.$inferSelect;
+export type NewProductCostSnapshot = typeof productCostSnapshots.$inferInsert;
 export type ProductTag = typeof productTags.$inferSelect;
 export type NewProductTag = typeof productTags.$inferInsert;
 export type BillOfMaterials = typeof billOfMaterials.$inferSelect;

@@ -11,6 +11,13 @@ interface PurchaseOrder {
   totalAmountCents: number;
   supplierId: string | null;
 }
+interface PurchaseReceipt {
+  id: string;
+  issueDate: string;
+  receivedAt: string;
+  documentType: string;
+  supplierId: string | null;
+}
 
 const STATUS_LABELS: Record<string, string> = {
   draft: "Rascunho",
@@ -22,14 +29,23 @@ const STATUS_LABELS: Record<string, string> = {
 
 export default async function PurchasesPage() {
   let orders: PurchaseOrder[] = [];
+  let receipts: PurchaseReceipt[] = [];
   try {
-    const res = await erpApiFetch<{ data: PurchaseOrder[] }>({
-      path: "/purchases",
-      searchParams: { limit: 40 },
-    });
-    orders = res.data;
+    const [resOrders, resReceipts] = await Promise.all([
+      erpApiFetch<{ data: PurchaseOrder[] }>({
+        path: "/purchases",
+        searchParams: { limit: 40 },
+      }),
+      erpApiFetch<{ data: PurchaseReceipt[] }>({
+        path: "/purchases/receipts",
+        searchParams: { limit: 40 },
+      }),
+    ]);
+    orders = resOrders.data;
+    receipts = resReceipts.data;
   } catch {
     orders = [];
+    receipts = [];
   }
 
   return (
@@ -38,12 +54,20 @@ export default async function PurchasesPage() {
       <div className="flex flex-1 flex-col gap-4 p-6">
         <div className="flex items-center justify-between">
           <p className="text-sm text-zinc-600">Ordens de compra com fornecedores.</p>
-          <Link
-            href="/purchases/new"
-            className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
-          >
-            Nova ordem de compra
-          </Link>
+          <div className="flex gap-2">
+            <Link
+              href="/purchases/receipts/new"
+              className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100"
+            >
+              Nova entrada
+            </Link>
+            <Link
+              href="/purchases/new"
+              className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
+            >
+              Nova ordem de compra
+            </Link>
+          </div>
         </div>
         <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
           <table className="w-full text-left text-sm">
@@ -96,6 +120,50 @@ export default async function PurchasesPage() {
                     <td className="px-4 py-3">
                       <Link
                         href={`/purchases/${o.id}`}
+                        className="text-xs text-zinc-500 underline hover:text-zinc-900"
+                      >
+                        Ver
+                      </Link>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
+          <div className="border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-sm font-semibold text-zinc-700">
+            Entradas de compra
+          </div>
+          <table className="w-full text-left text-sm">
+            <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold tracking-wide text-zinc-500">
+              <tr>
+                <th className="px-4 py-3">ID</th>
+                <th className="px-4 py-3">Emissão</th>
+                <th className="px-4 py-3">Recebida em</th>
+                <th className="px-4 py-3">Tipo doc.</th>
+                <th className="px-4 py-3" />
+              </tr>
+            </thead>
+            <tbody>
+              {receipts.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-4 py-8 text-center text-zinc-500">
+                    Nenhuma entrada registrada.
+                  </td>
+                </tr>
+              ) : (
+                receipts.map((r) => (
+                  <tr key={r.id} className="border-b border-zinc-100 last:border-0">
+                    <td className="px-4 py-3 font-mono text-xs text-zinc-500">
+                      {r.id.slice(0, 8)}…
+                    </td>
+                    <td className="px-4 py-3 text-zinc-600">{r.issueDate}</td>
+                    <td className="px-4 py-3 text-zinc-600">{r.receivedAt}</td>
+                    <td className="px-4 py-3 text-zinc-600">{r.documentType}</td>
+                    <td className="px-4 py-3">
+                      <Link
+                        href={`/purchases/receipts/${r.id}`}
                         className="text-xs text-zinc-500 underline hover:text-zinc-900"
                       >
                         Ver

@@ -5,7 +5,11 @@ import { erpApiFetch } from "@/lib/api/erp-api-client";
 import type {
   CompositionRow,
   ProductAuditLogRow,
+  ProductCostSnapshotRow,
   ProductCostBreakdown,
+  ProductStockMovementRow,
+  ProductPurchaseReceiptHistoryRow,
+  ProductBomParentRow,
 } from "@/components/products/product-operational-form";
 import type { VariantApiRow } from "@/components/products/product-variants-panel";
 
@@ -18,6 +22,10 @@ export interface ProductOperationalEditPayload {
   collections: { id: string; name: string }[];
   locations: { id: string; name: string }[];
   auditLogs: ProductAuditLogRow[];
+  costSnapshots: ProductCostSnapshotRow[];
+  stockMovements: ProductStockMovementRow[];
+  purchaseReceiptHistory: ProductPurchaseReceiptHistoryRow[];
+  bomParents: ProductBomParentRow[];
 }
 
 /** Dados para montar `ProductOperationalForm` (ex.: popup na listagem). */
@@ -31,6 +39,9 @@ export async function getProductOperationalEditPayloadAction(
         compositions?: CompositionRow[];
         costBreakdown?: ProductCostBreakdown | null;
         variants?: VariantApiRow[];
+        stockMovements?: ProductStockMovementRow[];
+        purchaseReceiptHistory?: ProductPurchaseReceiptHistoryRow[];
+        bomParents?: ProductBomParentRow[];
       };
     }>({ path: `/products/${productId}/detail` }),
     erpApiFetch<{ data: { id: string; name: string }[] }>({ path: "/products/categories" }),
@@ -44,6 +55,7 @@ export async function getProductOperationalEditPayloadAction(
   }
 
   let auditLogs: ProductAuditLogRow[] = [];
+  let costSnapshots: ProductCostSnapshotRow[] = [];
   try {
     const aRes = await erpApiFetch<{ data: ProductAuditLogRow[] }>({
       path: `/products/${productId}/audit`,
@@ -51,6 +63,14 @@ export async function getProductOperationalEditPayloadAction(
     auditLogs = aRes.data ?? [];
   } catch {
     auditLogs = [];
+  }
+  try {
+    const sRes = await erpApiFetch<{ data: ProductCostSnapshotRow[] }>({
+      path: `/products/${productId}/cost-snapshots`,
+    });
+    costSnapshots = sRes.data ?? [];
+  } catch {
+    costSnapshots = [];
   }
 
   return {
@@ -62,6 +82,10 @@ export async function getProductOperationalEditPayloadAction(
     collections: colRes.data ?? [],
     locations: locRes.data ?? [],
     auditLogs,
+    costSnapshots,
+    stockMovements: detail.stockMovements ?? [],
+    purchaseReceiptHistory: detail.purchaseReceiptHistory ?? [],
+    bomParents: detail.bomParents ?? [],
   };
 }
 
@@ -146,4 +170,13 @@ export async function updateProductCompositionAction(
     body,
   });
   revalidatePath(`/products/${productId}`);
+}
+
+export async function recalculateProductCostSnapshotAction(productId: string) {
+  await erpApiFetch({
+    method: "POST",
+    path: `/products/${productId}/recalculate-cost`,
+  });
+  revalidatePath(`/products/${productId}`);
+  revalidatePath("/products");
 }

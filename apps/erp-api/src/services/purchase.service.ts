@@ -4,16 +4,22 @@ import { NotFoundError, BadRequestError } from "../errors/app-error.js";
 import { createPurchaseRepository } from "../repositories/purchase.repository.js";
 import { createInventoryService } from "./inventory.service.js";
 import { createAuditRepository } from "../repositories/audit.repository.js";
+import { createProductRepository } from "../repositories/product.repository.js";
+import { createProductCostSnapshotService } from "./product-cost-snapshot.service.js";
 import type {
   CreatePurchaseOrderInput,
+  CreatePurchaseReceiptInput,
   UpdatePurchaseStatusInput,
   ReceivePurchaseOrderInput,
   ListPurchaseOrdersParams,
+  ListPurchaseReceiptsParams,
 } from "../schemas/purchase.schemas.js";
 
 export function createPurchaseService(db: AppDb) {
   const purchaseRepo = createPurchaseRepository(db);
   const auditRepo = createAuditRepository(db);
+  const productsRepo = createProductRepository(db);
+  const snapshotService = createProductCostSnapshotService(db);
   const now = () => new Date().toISOString();
 
   return {
@@ -82,6 +88,18 @@ export function createPurchaseService(db: AppDb) {
     async findMany(params: ListPurchaseOrdersParams & { page?: number }) {
       const { page = 1, limit = 20, ...rest } = params;
       return purchaseRepo.findMany({ ...rest, limit, offset: (page - 1) * limit });
+    },
+
+    async findReceipts(params: ListPurchaseReceiptsParams & { page?: number }) {
+      const { page = 1, limit = 20, ...rest } = params;
+      return purchaseRepo.findReceipts({ ...rest, limit, offset: (page - 1) * limit });
+    },
+
+    async findReceiptById(receiptId: string) {
+      const receipt = await purchaseRepo.findReceiptById(receiptId);
+      if (!receipt) throw new NotFoundError("Purchase receipt", receiptId);
+      const items = await purchaseRepo.findReceiptItemsByReceiptId(receiptId);
+      return { ...receipt, items };
     },
 
     async updateStatus(id: string, input: UpdatePurchaseStatusInput, actorId?: string) {
@@ -169,6 +187,153 @@ export function createPurchaseService(db: AppDb) {
       });
 
       return updated;
+    },
+
+    async createReceipt(input: CreatePurchaseReceiptInput, actorId?: string) {
+      const inventoryService = createInventoryService(db);
+      const receivedAt = input.receivedAt ?? now();
+      const receipt = await purchaseRepo.insertReceipt({
+        id: generateId(),
+        externalRef: input.externalRef ?? null,
+        purchaseOrderId: input.purchaseOrderId ?? null,
+        supplierId: input.supplierId ?? null,
+        issueDate: input.issueDate,
+        receivedAt,
+        documentNumber: input.documentNumber ?? null,
+        documentType: input.documentType,
+        sourceSystem: input.sourceSystem ?? null,
+        notes: input.notes ?? null,
+        metadataJson: JSON.stringify(input.metadata ?? {}),
+        createdAt: now(),
+        updatedAt: now(),
+      });
+
+      const impactedComponents = new Set<string>();
+      for (const item of input.items) {
+        const productId = item.productId ?? null;
+        if (!productId) {
+          throw new BadRequestError("purchase_receipt_item sem productId não é suportado na V1.");
+        }
+        impactedComponents.add(productId);
+        await inventoryService.addMovement(
+          {
+            productId,
+            locationId: input.locationId,
+            type: "purchase",
+            quantity: Math.max(1, Math.round(item.stockQuantity)),
+            unitCostCents: item.totalCostCents
+              ? Math.max(0, Math.round(item.totalCostCents / item.stockQuantity))
+              : Math.max(
+                  0,
+                  Math.round(
+                    (item.grossAmountCents -
+                      item.discountAmountCents +
+                      item.freightAmountCents +
+                      item.taxAmountCents +
+                      item.otherCostAmountCents) /
+                      item.stockQuantity,
+                  ),
+                ),
+            referenceType: "purchase_receipt",
+            referenceId: receipt.id,
+            notes: item.notes,
+          },
+          actorId,
+        );
+
+        const totalCostCents =
+          item.totalCostCents ??
+          item.grossAmountCents -
+            item.discountAmountCents +
+            item.freightAmountCents +
+            item.taxAmountCents +
+            item.otherCostAmountCents;
+        const unitCostDecimal = totalCostCents / item.stockQuantity;
+
+        await purchaseRepo.insertReceiptItem({
+          id: generateId(),
+          purchaseReceiptId: receipt.id,
+          purchaseOrderItemId: item.purchaseOrderItemId ?? null,
+          productId,
+          description: item.description ?? null,
+          purchasedQuantity: item.purchasedQuantity,
+          purchaseUnit: item.purchaseUnit,
+          conversionFactorToStockUnit: item.stockQuantity / item.purchasedQuantity,
+          stockQuantity: item.stockQuantity,
+          stockUnit: item.stockUnit,
+          grossAmountCents: item.grossAmountCents,
+          discountAmountCents: item.discountAmountCents,
+          freightAmountCents: item.freightAmountCents,
+          taxAmountCents: item.taxAmountCents,
+          otherCostAmountCents: item.otherCostAmountCents,
+          totalCostCents,
+          unitCostDecimal,
+          notes: item.notes ?? null,
+          metadataJson: JSON.stringify(item.metadata ?? {}),
+          createdAt: now(),
+        });
+
+        const currentProduct = await productsRepo.findById(productId);
+        if (currentProduct) {
+          const quantityAfter = currentProduct.currentStock;
+          const quantityBefore = Math.max(0, quantityAfter - item.stockQuantity);
+          const averageCostBefore = currentProduct.averageCostDecimal ?? 0;
+          const valueBefore = Math.round(quantityBefore * averageCostBefore);
+          const valueIn = Math.round(totalCostCents);
+          const valueAfter = valueBefore + valueIn;
+          const averageCostAfter = quantityAfter > 0 ? valueAfter / quantityAfter : unitCostDecimal;
+
+          await productsRepo.update(productId, {
+            averageCostDecimal: averageCostAfter,
+            averageCostUnit: item.stockUnit,
+            lastPurchaseCostDecimal: unitCostDecimal,
+            lastPurchaseDate: input.issueDate,
+            costSource: "purchase_average",
+            costUpdatedAt: now(),
+          });
+
+          await purchaseRepo.insertValuationEvent({
+            id: generateId(),
+            productId,
+            sourceType: "purchase_receipt",
+            sourceId: receipt.id,
+            quantityBefore,
+            valueBeforeCents: valueBefore,
+            quantityIn: item.stockQuantity,
+            valueInCents: valueIn,
+            quantityAfter,
+            valueAfterCents: valueAfter,
+            averageCostBeforeDecimal: averageCostBefore,
+            averageCostAfterDecimal: averageCostAfter,
+            createdAt: now(),
+          });
+        }
+      }
+
+      for (const childProductId of impactedComponents) {
+        await snapshotService.createForImpactedParentsByComponent(
+          childProductId,
+          "purchase_recalculation",
+          {
+            trigger: "purchase_receipt",
+            receiptId: receipt.id,
+            childProductId,
+          },
+        );
+      }
+
+      await auditRepo.insert({
+        id: generateId(),
+        actorId: actorId ?? null,
+        actorType: "user",
+        action: "purchase.receipt.created",
+        entityType: "purchase_receipt",
+        entityId: receipt.id,
+        afterJson: JSON.stringify({ purchaseOrderId: input.purchaseOrderId ?? null }),
+        createdAt: now(),
+      });
+
+      return receipt;
     },
   };
 }

@@ -24,7 +24,9 @@ export type IngestionObjectTypeId =
   | "product_composition"
   | "inventory_movement"
   | "order"
-  | "purchase_order";
+  | "purchase_order"
+  | "purchase_receipt"
+  | "product_cost_snapshot";
 
 export type IngestionTypeReference = {
   type: IngestionObjectTypeId;
@@ -46,7 +48,7 @@ const envCommon: IngestionTypeReference["envelope"] = [
     requirement: "optional",
     hint:
       '"skip" (default): insere se não existe, ignora se existe. ' +
-      '"upsert": actualiza campos enviados se existe (merge-patch), cria se não existe. ' +
+      '"upsert": atualiza campos enviados se existe (merge-patch), cria se não existe. ' +
       "Suporte a upsert: category (chave: slug), collection (chave: slug), product (chave: slug ou sku). " +
       "Outros tipos: campo aceite mas ignorado.",
   },
@@ -67,6 +69,8 @@ export const INGESTION_TYPE_LABELS_UI: Record<IngestionObjectTypeId, string> = {
   inventory_movement: "Movimento de stock",
   order: "Pedido",
   purchase_order: "Ordem de compra",
+  purchase_receipt: "Entrada de compra",
+  product_cost_snapshot: "Snapshot de custo",
 };
 
 export const INGESTION_TYPE_REFERENCES: IngestionTypeReference[] = [
@@ -338,6 +342,56 @@ export const INGESTION_TYPE_REFERENCES: IngestionTypeReference[] = [
       },
       { key: "issueDate", requirement: "required", valueType: "YYYY-MM-DD" },
       { key: "items", requirement: "required", valueType: "array" },
+    ],
+  },
+  {
+    type: "purchase_receipt",
+    summary: "Entrada de compra/estoque com item embutido e impacto em custo médio.",
+    envelope: envCommon,
+    dataFields: [
+      {
+        key: "issueDate",
+        requirement: "conditional",
+        condition: "ou purchaseDate (YYYY-MM-DD)",
+        valueType: "YYYY-MM-DD",
+      },
+      { key: "supplierRef", requirement: "optional", valueType: "string" },
+      {
+        key: "locationRef",
+        requirement: "conditional",
+        condition: "ou locationId",
+        valueType: "string",
+      },
+      { key: "items", requirement: "required", valueType: "array" },
+    ],
+  },
+  {
+    type: "product_cost_snapshot",
+    summary:
+      "Snapshot histórico de custo do produto acabado; total = material + packaging + labor; linhas opcionais em componentCosts.",
+    envelope: envCommon,
+    dataFields: [
+      {
+        key: "productRef",
+        requirement: "conditional",
+        condition: "ou productId",
+        valueType: "string",
+      },
+      { key: "snapshotDate", requirement: "required", valueType: "datetime ISO" },
+      { key: "source", requirement: "required", valueType: "enum" },
+      { key: "materialCostCents", requirement: "required", valueType: "int (≥0)" },
+      { key: "packagingCostCents", requirement: "required", valueType: "int (≥0)" },
+      { key: "laborCostCents", requirement: "required", valueType: "int (≥0)" },
+      {
+        key: "totalCostCents",
+        requirement: "required",
+        valueType: "int = material+packaging+labor",
+      },
+      {
+        key: "componentCosts",
+        requirement: "optional",
+        valueType: "array estrito; soma lineTotalCents = materialCostCents + packagingCostCents",
+      },
     ],
   },
 ];

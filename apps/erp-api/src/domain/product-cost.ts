@@ -75,6 +75,10 @@ export function calculateEstimatedProductCost(
 
 /** Custo unitário do componente na linha de composição (cents por unidade de quantidade informada na composição). */
 export function childUnitCostCentsForCompositionLine(child: Product): number {
+  const averageCost = child.averageCostDecimal;
+  if (averageCost != null && Number.isFinite(averageCost) && averageCost >= 0) {
+    return averageCost;
+  }
   const perConsumption = child.costPerConsumptionUnitCents;
   if (perConsumption != null && Number.isFinite(perConsumption) && perConsumption >= 0) {
     return perConsumption;
@@ -152,4 +156,81 @@ export function deriveCostPerConsumptionUnitCents(product: {
   const pq = product.purchaseQuantity;
   if (acq == null || pq == null || pq <= 0 || acq < 0) return null;
   return acq / pq;
+}
+
+/** Qual campo do cadastro do componente alimenta o custo unitário na linha de composição. */
+export type ChildCostUnitBasis = "average" | "consumption_unit" | "legacy_cost_price";
+
+export function childCostUnitBasisForProduct(child: Product): ChildCostUnitBasis {
+  const averageCost = child.averageCostDecimal;
+  if (averageCost != null && Number.isFinite(averageCost) && averageCost >= 0) {
+    return "average";
+  }
+  const perConsumption = child.costPerConsumptionUnitCents;
+  if (perConsumption != null && Number.isFinite(perConsumption) && perConsumption >= 0) {
+    return "consumption_unit";
+  }
+  return "legacy_cost_price";
+}
+
+/** Risco de custo “só planilha” — sem média de compra consolidada. */
+export function compositionLineUsesLegacyCostRisk(child: Product): boolean {
+  const basis = childCostUnitBasisForProduct(child);
+  if (basis === "legacy_cost_price") return true;
+  return child.costSource === "legacy_ingestion";
+}
+
+/** Linhas persistidas em `product_cost_snapshots.component_costs_json`. */
+export type ProductCostSnapshotComponentLine = {
+  compositionId: string;
+  childProductId: string;
+  childSku: string | null;
+  childName: string | null;
+  childProductType: string | null;
+  compositionType: string;
+  quantity: number;
+  quantityUnit: string | null;
+  packagingChannel: string | null;
+  unitCostBasis: ChildCostUnitBasis;
+  /** Mesma convenção numérica que `childUnitCostCentsForCompositionLine`. */
+  unitCost: number;
+  lineTotalCents: number;
+  costSource: string;
+  costUpdatedAt: string | null;
+  lastPurchaseDate: string | null;
+  averageCostUnit: string | null;
+};
+
+export function buildSnapshotComponentLines(
+  rows: Array<{
+    id: string;
+    compositionType: string;
+    quantity: number;
+    quantityUnit: string | null;
+    packagingChannel: string | null;
+    childProductId: string;
+    child: Product;
+  }>,
+): ProductCostSnapshotComponentLine[] {
+  return rows.map((row) => {
+    const { unitCostCents, totalCostCents } = lineCostCentsFromComposition(row.quantity, row.child);
+    return {
+      compositionId: row.id,
+      childProductId: row.childProductId,
+      childSku: row.child.sku,
+      childName: row.child.name,
+      childProductType: row.child.productType,
+      compositionType: row.compositionType,
+      quantity: row.quantity,
+      quantityUnit: row.quantityUnit,
+      packagingChannel: row.packagingChannel,
+      unitCostBasis: childCostUnitBasisForProduct(row.child),
+      unitCost: unitCostCents,
+      lineTotalCents: totalCostCents,
+      costSource: row.child.costSource,
+      costUpdatedAt: row.child.costUpdatedAt ?? null,
+      lastPurchaseDate: row.child.lastPurchaseDate ?? null,
+      averageCostUnit: row.child.averageCostUnit ?? null,
+    };
+  });
 }

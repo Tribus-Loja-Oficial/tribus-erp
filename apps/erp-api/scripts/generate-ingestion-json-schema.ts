@@ -72,6 +72,7 @@ const envelope: Record<string, unknown> = {
     "action 'upsert' data schema is partial (only natural key required); action 'skip'/'omitted' data schema is full (all required fields must be present).",
     "Types without upsert support (stock_location, party, customer, supplier, product_variant, product_composition, inventory_movement, order, purchase_order): action field is accepted but ignored at runtime.",
     "Response items[].status values: 'created' (new insert), 'updated' (upsert patch applied), 'skipped' (existed, skip action), 'failed' (error).",
+    "product_cost_snapshot: totalCostCents must equal materialCostCents + packagingCostCents + laborCostCents; if componentCosts is non-empty, sum of lineTotalCents must equal materialCostCents + packagingCostCents (composition lines only, not labor).",
   ],
 };
 

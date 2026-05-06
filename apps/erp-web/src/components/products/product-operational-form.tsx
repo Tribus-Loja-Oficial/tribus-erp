@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useRef, useState, useTransition } from "react";
-import { formatCurrency } from "@/lib/utils";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { formatCurrency, formatDateTime } from "@/lib/utils";
 import {
   addProductCompositionAction,
   createProductOperationalAction,
+  recalculateProductCostSnapshotAction,
   removeProductCompositionAction,
   updateProductCompositionAction,
   updateProductOperationalAction,
@@ -39,6 +40,44 @@ export interface CompositionRow {
   childCostPriceCents?: number;
   childUnitCostCents?: number;
   lineCostCents?: number;
+  childCostSource?: string | null;
+  childCostUpdatedAt?: string | null;
+  childLastPurchaseDate?: string | null;
+  childUnitCostBasis?: "average" | "consumption_unit" | "legacy_cost_price";
+  childLegacyCostWarning?: boolean;
+  childAverageCostUnit?: string | null;
+  childLatestReceiptId?: string | null;
+}
+
+export interface ProductStockMovementRow {
+  id: string;
+  type: string;
+  quantity: number;
+  unitCostCents: number | null;
+  referenceType: string | null;
+  referenceId: string | null;
+  notes: string | null;
+  createdAt: string;
+  locationName: string;
+}
+
+export interface ProductPurchaseReceiptHistoryRow {
+  receiptId: string;
+  receivedAt: string;
+  issueDate: string;
+  documentType: string;
+  documentNumber: string | null;
+  stockQuantity: number;
+  stockUnit: string;
+  totalCostCents: number;
+  receiptItemId: string;
+}
+
+export interface ProductBomParentRow {
+  parentProductId: string;
+  parentSku: string | null;
+  parentName: string | null;
+  lineCount: number;
 }
 
 export interface ProductCostBreakdown {
@@ -59,6 +98,39 @@ export interface ProductAuditLogRow {
   beforeJson?: string | null;
   afterJson?: string | null;
 }
+
+/** Espelha o que a API grava em `component_costs_json` (snapshots automáticos). */
+export interface ProductCostSnapshotComponentLineRow {
+  compositionId?: string;
+  childProductId?: string;
+  childSku?: string | null;
+  childName?: string | null;
+  childProductType?: string | null;
+  compositionType?: string;
+  quantity?: number;
+  quantityUnit?: string | null;
+  packagingChannel?: string | null;
+  unitCostBasis?: string;
+  unitCost?: number;
+  lineTotalCents?: number;
+  costSource?: string;
+  costUpdatedAt?: string | null;
+  lastPurchaseDate?: string | null;
+  averageCostUnit?: string | null;
+}
+
+export interface ProductCostSnapshotRow {
+  id: string;
+  snapshotDate: string;
+  source: string;
+  materialCostCents: number;
+  packagingCostCents: number;
+  laborCostCents: number;
+  totalCostCents: number;
+  componentCosts?: ProductCostSnapshotComponentLineRow[];
+}
+
+type SnapshotSourceFilter = "all" | ProductCostSnapshotRow["source"];
 
 type TabId =
   | "general"
@@ -145,6 +217,44 @@ function markup(saleCents: number, totalCostCents: number): number | null {
   return saleCents / totalCostCents;
 }
 
+function compositionCostBasisLabel(basis: string | undefined): string {
+  switch (basis) {
+    case "average":
+      return "Custo médio ponderado";
+    case "consumption_unit":
+      return "Custo proporcional (cadastro)";
+    case "legacy_cost_price":
+      return "Preço de custo (legado)";
+    default:
+      return "—";
+  }
+}
+
+function productCostSourceLabel(src: string | null | undefined): string {
+  const s = src ?? "unknown";
+  const map: Record<string, string> = {
+    purchase_average: "Média de compras",
+    legacy_ingestion: "Importação legada",
+    manual: "Manual",
+    unknown: "Desconhecido",
+  };
+  return map[s] ?? s;
+}
+
+const MOVEMENT_TYPE_LABELS: Record<string, string> = {
+  purchase: "Compra / entrada",
+  sale: "Venda",
+  return: "Devolução",
+  adjustment: "Ajuste",
+  production_in: "Produção (entrada)",
+  production_out: "Produção (saída)",
+  transfer_in: "Transferência (entrada)",
+  transfer_out: "Transferência (saída)",
+  damaged: "Avaria",
+  reservation: "Reserva",
+  release_reservation: "Liberação de reserva",
+};
+
 function parseGalleryFileIdsFromProduct(raw: unknown): string {
   if (raw == null) return "";
   if (typeof raw === "string") {
@@ -200,6 +310,16 @@ interface ProductOperationalFormProps {
   collections: SelectOption[];
   locations: SelectOption[];
   initialAuditLogs?: ProductAuditLogRow[];
+  initialCostSnapshots?: ProductCostSnapshotRow[];
+  snapshotSourceFilter?: SnapshotSourceFilter;
+  snapshotDateFrom?: string;
+  snapshotDateTo?: string;
+  snapshotPage?: number;
+  snapshotLimit?: number;
+  snapshotTotal?: number;
+  initialStockMovements?: ProductStockMovementRow[];
+  initialPurchaseReceiptHistory?: ProductPurchaseReceiptHistoryRow[];
+  initialBomParents?: ProductBomParentRow[];
   /** Quando true: layout compacto, sem breadcrumb; Cancelar / «voltar» chamam `onClose`. */
   embedded?: boolean;
   onClose?: () => void;
@@ -216,6 +336,16 @@ export function ProductOperationalForm({
   collections,
   locations,
   initialAuditLogs = [],
+  initialCostSnapshots = [],
+  snapshotSourceFilter = "all",
+  snapshotDateFrom = "",
+  snapshotDateTo = "",
+  snapshotPage = 1,
+  snapshotLimit = 10,
+  snapshotTotal = 0,
+  initialStockMovements = [],
+  initialPurchaseReceiptHistory = [],
+  initialBomParents = [],
   embedded = false,
   onClose,
 }: ProductOperationalFormProps) {
@@ -224,6 +354,7 @@ export function ProductOperationalForm({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [expandedSnapshotId, setExpandedSnapshotId] = useState<string | null>(null);
   const mainImageFileInputRef = useRef<HTMLInputElement>(null);
   const galleryImageFileInputRef = useRef<HTMLInputElement>(null);
   const [mediaUploadKind, setMediaUploadKind] = useState<"main" | "gallery" | null>(null);
@@ -417,6 +548,32 @@ export function ProductOperationalForm({
     () => initialCompositions.filter((r) => r.compositionType === "packaging"),
     [initialCompositions],
   );
+  const snapshotSources = useMemo(
+    () => [...new Set(initialCostSnapshots.map((s) => s.source))].sort(),
+    [initialCostSnapshots],
+  );
+  const snapshotTotalPages = Math.max(
+    1,
+    Math.ceil((snapshotTotal || 0) / Math.max(1, snapshotLimit)),
+  );
+
+  useEffect(() => {
+    if (expandedSnapshotId && !initialCostSnapshots.some((s) => s.id === expandedSnapshotId)) {
+      setExpandedSnapshotId(null);
+    }
+  }, [expandedSnapshotId, initialCostSnapshots]);
+
+  const updateSnapshotQuery = (patch: Partial<Record<string, string>>) => {
+    if (!productId) return;
+    const q = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+    for (const [k, v] of Object.entries(patch)) {
+      if (!v || (k === "source" && v === "all")) q.delete(k);
+      else q.set(k, v);
+    }
+    const qs = q.toString();
+    router.replace(`/products/${productId}${qs ? `?${qs}` : ""}`);
+    router.refresh();
+  };
 
   function productTypeLabel(t: string | null | undefined): string {
     const m: Record<string, string> = {
@@ -563,7 +720,7 @@ export function ProductOperationalForm({
         json = (await res.json()) as typeof json;
       } catch {
         throw new Error(
-          `Resposta inválida do servidor (HTTP ${res.status}). Se o ficheiro é grande, pode ser limite da infraestrutura (ex.: Vercel).`,
+          `Resposta inválida do servidor (HTTP ${res.status}). Se o arquivo for grande, pode ser limite da infraestrutura (ex.: Vercel).`,
         );
       }
       if (!res.ok) {
@@ -575,7 +732,7 @@ export function ProductOperationalForm({
         );
       }
       if (!json.data) {
-        throw new Error("Resposta inválida: a API não devolveu os dados do ficheiro.");
+        throw new Error("Resposta inválida: a API não retornou os dados do arquivo.");
       }
       const row = json.data;
       if (target === "main") {
@@ -1129,6 +1286,29 @@ export function ProductOperationalForm({
                     Custo base (campo acima) é independente. Totais com composição e produção vêm da
                     aba Composição e do perfil de produção.
                   </p>
+                  <ul className="mt-2 grid gap-1 text-xs text-zinc-600 sm:grid-cols-2">
+                    <li>
+                      Custo médio atual:{" "}
+                      {initialProduct.averageCostDecimal != null
+                        ? `R$ ${Number(initialProduct.averageCostDecimal).toFixed(4)}`
+                        : "—"}
+                    </li>
+                    <li>Unidade do custo médio: {String(initialProduct.averageCostUnit ?? "—")}</li>
+                    <li>
+                      Último custo de compra:{" "}
+                      {initialProduct.lastPurchaseCostDecimal != null
+                        ? `R$ ${Number(initialProduct.lastPurchaseCostDecimal).toFixed(4)}`
+                        : "—"}
+                    </li>
+                    <li>
+                      Origem do custo:{" "}
+                      {productCostSourceLabel(String(initialProduct.costSource ?? "unknown"))}
+                    </li>
+                    <li>
+                      Atualizado em:{" "}
+                      {String(initialProduct.costUpdatedAt ?? initialProduct.updatedAt ?? "—")}
+                    </li>
+                  </ul>
                   {costBreakdown ? (
                     <ul className="mt-2 grid gap-1 text-xs text-zinc-600 sm:grid-cols-2">
                       <li>Materiais: {formatCurrency(costBreakdown.materialCostCents)}</li>
@@ -1150,6 +1330,31 @@ export function ProductOperationalForm({
                       Guarde o produto e defina composição para ver o detalhe de custos.
                     </p>
                   )}
+                  {mode === "edit" && productId && initialBomParents.length > 0 ? (
+                    <div className="mt-3 rounded-md border border-zinc-200 bg-white px-3 py-2">
+                      <p className="text-xs font-semibold text-zinc-700">
+                        Usado na composição (BOM) de
+                      </p>
+                      <ul className="mt-2 space-y-1 text-xs text-zinc-600">
+                        {initialBomParents.map((p) => (
+                          <li key={p.parentProductId}>
+                            <Link
+                              href={`/products/${p.parentProductId}`}
+                              className="font-medium text-zinc-900 underline hover:text-zinc-700"
+                            >
+                              {p.parentName ?? p.parentProductId}
+                            </Link>
+                            {p.parentSku ? (
+                              <span className="ml-2 font-mono text-zinc-500">{p.parentSku}</span>
+                            ) : null}
+                            {p.lineCount > 1 ? (
+                              <span className="ml-2 text-zinc-500">({p.lineCount} linhas)</span>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
                   <div className="mt-3 flex flex-wrap gap-4 border-t border-zinc-200 pt-3 text-zinc-800">
                     <span>
                       Margem (online):{" "}
@@ -1260,10 +1465,123 @@ export function ProductOperationalForm({
                     ))}
                   </select>
                 </div>
-                <div className="rounded-md border border-dashed border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-500 md:col-span-2">
-                  Em breve: estoque atual, reservado, disponível e últimas movimentações (via módulo
-                  de estoque).
-                </div>
+                {mode === "edit" && productId ? (
+                  <div className="space-y-4 md:col-span-2">
+                    <div className="rounded-lg border border-zinc-200 bg-white px-4 py-3 text-sm">
+                      <p className="font-medium text-zinc-800">Estoque atual (agregado)</p>
+                      <p className="mt-1 text-zinc-700 tabular-nums">
+                        {String(initialProduct.currentStock ?? 0)}{" "}
+                        <span className="text-zinc-500">
+                          ({String(initialProduct.unitOfMeasure ?? "unit")})
+                        </span>
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-zinc-200 bg-white px-4 py-3">
+                      <p className="text-sm font-medium text-zinc-800">Últimas movimentações</p>
+                      {initialStockMovements.length === 0 ? (
+                        <p className="mt-2 text-xs text-zinc-500">Nenhum movimento registrado.</p>
+                      ) : (
+                        <div className="mt-2 overflow-x-auto">
+                          <table className="min-w-full text-left text-xs">
+                            <thead className="border-b border-zinc-200 text-zinc-500">
+                              <tr>
+                                <th className="py-1.5 pr-3">Data</th>
+                                <th className="py-1.5 pr-3">Tipo</th>
+                                <th className="py-1.5 pr-3 text-right">Qtd</th>
+                                <th className="py-1.5 pr-3">Local</th>
+                                <th className="py-1.5 pr-3">Ref.</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {initialStockMovements.map((m) => (
+                                <tr key={m.id} className="border-b border-zinc-100 text-zinc-700">
+                                  <td className="py-1.5 pr-3 text-zinc-600 tabular-nums">
+                                    {formatDateTime(m.createdAt)}
+                                  </td>
+                                  <td className="py-1.5 pr-3">
+                                    {MOVEMENT_TYPE_LABELS[m.type] ?? m.type}
+                                  </td>
+                                  <td className="py-1.5 pr-3 text-right tabular-nums">
+                                    {m.quantity}
+                                  </td>
+                                  <td className="py-1.5 pr-3">{m.locationName}</td>
+                                  <td className="py-1.5 pr-3">
+                                    {m.referenceType === "purchase_receipt" && m.referenceId ? (
+                                      <Link
+                                        href={`/purchases/receipts/${m.referenceId}`}
+                                        className="text-sky-700 underline hover:text-sky-900"
+                                      >
+                                        Entrada
+                                      </Link>
+                                    ) : (
+                                      <span className="text-zinc-500">
+                                        {m.referenceType ?? "—"}
+                                        {m.referenceId ? ` · ${m.referenceId.slice(0, 8)}…` : ""}
+                                      </span>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                    <div className="rounded-lg border border-zinc-200 bg-white px-4 py-3">
+                      <p className="text-sm font-medium text-zinc-800">
+                        Histórico de entradas (NF / manual)
+                      </p>
+                      {initialPurchaseReceiptHistory.length === 0 ? (
+                        <p className="mt-2 text-xs text-zinc-500">
+                          Nenhuma entrada de compra vinculada a este produto.
+                        </p>
+                      ) : (
+                        <div className="mt-2 overflow-x-auto">
+                          <table className="min-w-full text-left text-xs">
+                            <thead className="border-b border-zinc-200 text-zinc-500">
+                              <tr>
+                                <th className="py-1.5 pr-3">Recebido</th>
+                                <th className="py-1.5 pr-3">Doc.</th>
+                                <th className="py-1.5 pr-3 text-right">Qtd</th>
+                                <th className="py-1.5 pr-3 text-right">Total</th>
+                                <th className="py-1.5 pr-3" />
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {initialPurchaseReceiptHistory.map((r) => (
+                                <tr
+                                  key={`${r.receiptId}-${r.receiptItemId}`}
+                                  className="border-b border-zinc-100 text-zinc-700"
+                                >
+                                  <td className="py-1.5 pr-3 text-zinc-600 tabular-nums">
+                                    {formatDateTime(r.receivedAt)}
+                                  </td>
+                                  <td className="py-1.5 pr-3">
+                                    {r.documentNumber ?? r.documentType}
+                                  </td>
+                                  <td className="py-1.5 pr-3 text-right tabular-nums">
+                                    {r.stockQuantity} {r.stockUnit}
+                                  </td>
+                                  <td className="py-1.5 pr-3 text-right tabular-nums">
+                                    {formatCurrency(r.totalCostCents)}
+                                  </td>
+                                  <td className="py-1.5 pr-3">
+                                    <Link
+                                      href={`/purchases/receipts/${r.receiptId}`}
+                                      className="text-sky-700 underline hover:text-sky-900"
+                                    >
+                                      Abrir
+                                    </Link>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             )}
 
@@ -1287,7 +1605,7 @@ export function ProductOperationalForm({
                       </h3>
                       <div className="overflow-x-auto rounded-lg border border-zinc-200">
                         <table className="min-w-full text-left text-sm">
-                          <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold text-zinc-600 uppercase">
+                          <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold text-zinc-600">
                             <tr>
                               <th className="px-3 py-2">Produto</th>
                               <th className="px-3 py-2">Tipo</th>
@@ -1295,6 +1613,9 @@ export function ProductOperationalForm({
                               <th className="px-3 py-2">Unid.</th>
                               <th className="px-3 py-2 text-right">Custo unit.</th>
                               <th className="px-3 py-2 text-right">Custo calc.</th>
+                              <th className="px-3 py-2">Origem do custo</th>
+                              <th className="px-3 py-2">Atualizado</th>
+                              <th className="px-3 py-2">Entrada</th>
                               <th className="px-3 py-2">Obs.</th>
                               <th className="px-3 py-2" />
                             </tr>
@@ -1302,7 +1623,7 @@ export function ProductOperationalForm({
                           <tbody>
                             {bomRows.length === 0 ? (
                               <tr>
-                                <td colSpan={8} className="px-3 py-4 text-center text-zinc-500">
+                                <td colSpan={11} className="px-3 py-4 text-center text-zinc-500">
                                   Nenhum material na BOM.
                                 </td>
                               </tr>
@@ -1310,7 +1631,7 @@ export function ProductOperationalForm({
                               bomRows.map((row) =>
                                 editCompId === row.id ? (
                                   <tr key={row.id} className="border-b border-zinc-100 bg-zinc-50">
-                                    <td colSpan={8} className="px-3 py-4">
+                                    <td colSpan={11} className="px-3 py-4">
                                       <p className="mb-3 text-xs font-semibold text-zinc-700">
                                         Editar linha (BOM)
                                       </p>
@@ -1452,6 +1773,34 @@ export function ProductOperationalForm({
                                     <td className="px-3 py-2 text-right tabular-nums">
                                       {formatCurrency(row.lineCostCents ?? 0)}
                                     </td>
+                                    <td className="px-3 py-2 align-top text-xs text-zinc-700">
+                                      <div>{compositionCostBasisLabel(row.childUnitCostBasis)}</div>
+                                      <div className="mt-0.5 text-zinc-500">
+                                        {productCostSourceLabel(row.childCostSource)}
+                                      </div>
+                                      {row.childLegacyCostWarning ? (
+                                        <div className="mt-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-950">
+                                          Custo legado — registre compras para média real
+                                        </div>
+                                      ) : null}
+                                    </td>
+                                    <td className="px-3 py-2 align-top text-xs text-zinc-600 tabular-nums">
+                                      {row.childCostUpdatedAt
+                                        ? formatDateTime(String(row.childCostUpdatedAt))
+                                        : "—"}
+                                    </td>
+                                    <td className="px-3 py-2 align-top text-xs">
+                                      {row.childLatestReceiptId ? (
+                                        <Link
+                                          href={`/purchases/receipts/${row.childLatestReceiptId}`}
+                                          className="text-sky-700 underline hover:text-sky-900"
+                                        >
+                                          Última entrada
+                                        </Link>
+                                      ) : (
+                                        <span className="text-zinc-500">—</span>
+                                      )}
+                                    </td>
                                     <td className="max-w-[140px] truncate px-3 py-2 text-xs text-zinc-600">
                                       {row.notes ?? "—"}
                                     </td>
@@ -1484,20 +1833,23 @@ export function ProductOperationalForm({
                       <h3 className="text-sm font-semibold text-zinc-900">2. Embalagem</h3>
                       <div className="overflow-x-auto rounded-lg border border-zinc-200">
                         <table className="min-w-full text-left text-sm">
-                          <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold text-zinc-600 uppercase">
+                          <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold text-zinc-600">
                             <tr>
                               <th className="px-3 py-2">Produto</th>
                               <th className="px-3 py-2">Canal</th>
                               <th className="px-3 py-2 text-right">Qtd</th>
                               <th className="px-3 py-2 text-right">Custo unit.</th>
                               <th className="px-3 py-2 text-right">Custo calc.</th>
+                              <th className="px-3 py-2">Origem do custo</th>
+                              <th className="px-3 py-2">Atualizado</th>
+                              <th className="px-3 py-2">Entrada</th>
                               <th className="px-3 py-2" />
                             </tr>
                           </thead>
                           <tbody>
                             {packagingRows.length === 0 ? (
                               <tr>
-                                <td colSpan={6} className="px-3 py-4 text-center text-zinc-500">
+                                <td colSpan={9} className="px-3 py-4 text-center text-zinc-500">
                                   Nenhuma embalagem cadastrada.
                                 </td>
                               </tr>
@@ -1505,7 +1857,7 @@ export function ProductOperationalForm({
                               packagingRows.map((row) =>
                                 editCompId === row.id ? (
                                   <tr key={row.id} className="border-b border-zinc-100 bg-zinc-50">
-                                    <td colSpan={6} className="px-3 py-4">
+                                    <td colSpan={9} className="px-3 py-4">
                                       <p className="mb-3 text-xs font-semibold text-zinc-700">
                                         Editar linha (embalagem)
                                       </p>
@@ -1586,6 +1938,34 @@ export function ProductOperationalForm({
                                     </td>
                                     <td className="px-3 py-2 text-right tabular-nums">
                                       {formatCurrency(row.lineCostCents ?? 0)}
+                                    </td>
+                                    <td className="px-3 py-2 align-top text-xs text-zinc-700">
+                                      <div>{compositionCostBasisLabel(row.childUnitCostBasis)}</div>
+                                      <div className="mt-0.5 text-zinc-500">
+                                        {productCostSourceLabel(row.childCostSource)}
+                                      </div>
+                                      {row.childLegacyCostWarning ? (
+                                        <div className="mt-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-950">
+                                          Custo legado — registre compras para média real
+                                        </div>
+                                      ) : null}
+                                    </td>
+                                    <td className="px-3 py-2 align-top text-xs text-zinc-600 tabular-nums">
+                                      {row.childCostUpdatedAt
+                                        ? formatDateTime(String(row.childCostUpdatedAt))
+                                        : "—"}
+                                    </td>
+                                    <td className="px-3 py-2 align-top text-xs">
+                                      {row.childLatestReceiptId ? (
+                                        <Link
+                                          href={`/purchases/receipts/${row.childLatestReceiptId}`}
+                                          className="text-sky-700 underline hover:text-sky-900"
+                                        >
+                                          Última entrada
+                                        </Link>
+                                      ) : (
+                                        <span className="text-zinc-500">—</span>
+                                      )}
                                     </td>
                                     <td className="space-x-2 px-3 py-2 text-right whitespace-nowrap">
                                       <button
@@ -2048,7 +2428,7 @@ export function ProductOperationalForm({
                   ) : null}
                   <p className="mt-1 text-xs text-zinc-500">
                     Cada <strong className="font-medium">imagem</strong> ao enviar: JPEG, PNG ou
-                    WebP até <strong className="font-medium">5 MB por ficheiro</strong> (não é um
+                    WebP até <strong className="font-medium">5 MB por arquivo</strong> (não é um
                     limite do “tamanho total” da galeria). O limite aplica-se no clique de envio; ao{" "}
                     <strong className="font-medium">Salvar</strong> o produto só vão os IDs (texto),
                     não os binários. Até {MAX_GALLERY_IMAGE_SLOTS} IDs. Colar IDs não refaz upload.
@@ -2071,6 +2451,27 @@ export function ProductOperationalForm({
                   </p>
                 </div>
                 <div>
+                  {mode === "edit" && productId ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        startTransition(async () => {
+                          try {
+                            await recalculateProductCostSnapshotAction(productId);
+                            setSuccess("Snapshot de custo recalculado com sucesso.");
+                            router.refresh();
+                          } catch (e) {
+                            setError(
+                              e instanceof Error ? e.message : "Erro ao recalcular snapshot.",
+                            );
+                          }
+                        })
+                      }
+                      className="mb-3 rounded-md border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-100"
+                    >
+                      Recalcular custo do produto
+                    </button>
+                  ) : null}
                   <p className="mb-2 text-xs font-semibold tracking-wide text-zinc-600 uppercase">
                     Auditoria recente
                   </p>
@@ -2094,6 +2495,217 @@ export function ProductOperationalForm({
                       ))}
                     </ul>
                   )}
+                </div>
+                <div>
+                  <p className="mb-2 text-xs font-semibold tracking-wide text-zinc-600 uppercase">
+                    Snapshots de custo
+                  </p>
+                  <div className="mb-3 grid gap-2 sm:grid-cols-4">
+                    <select
+                      value={snapshotSourceFilter}
+                      onChange={(e) => {
+                        updateSnapshotQuery({
+                          source: e.target.value,
+                          page: "1",
+                        });
+                      }}
+                      className="rounded-md border border-zinc-300 px-2 py-1.5 text-xs"
+                    >
+                      <option value="all">Todas as origens</option>
+                      {snapshotSources.map((src) => (
+                        <option key={src} value={src}>
+                          {src}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="date"
+                      value={snapshotDateFrom}
+                      onChange={(e) => {
+                        updateSnapshotQuery({ from: e.target.value, page: "1" });
+                      }}
+                      className="rounded-md border border-zinc-300 px-2 py-1.5 text-xs"
+                    />
+                    <input
+                      type="date"
+                      value={snapshotDateTo}
+                      onChange={(e) => {
+                        updateSnapshotQuery({ to: e.target.value, page: "1" });
+                      }}
+                      className="rounded-md border border-zinc-300 px-2 py-1.5 text-xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        updateSnapshotQuery({
+                          source: "all",
+                          from: "",
+                          to: "",
+                          page: "1",
+                        });
+                      }}
+                      className="rounded-md border border-zinc-300 px-2 py-1.5 text-xs text-zinc-700 hover:bg-zinc-100"
+                    >
+                      Limpar filtros
+                    </button>
+                  </div>
+                  {initialCostSnapshots.length === 0 ? (
+                    <p className="text-xs text-zinc-500">
+                      {snapshotTotal === 0
+                        ? snapshotSourceFilter !== "all" || snapshotDateFrom || snapshotDateTo
+                          ? "Nenhum snapshot encontrado com os filtros atuais."
+                          : "Nenhum snapshot de custo registrado para este produto."
+                        : "Não há itens nesta página."}
+                    </p>
+                  ) : (
+                    <ul className="max-h-[min(28rem,70vh)] space-y-2 overflow-y-auto rounded-md border border-zinc-200 bg-zinc-50 p-3 text-xs">
+                      {initialCostSnapshots.map((s) => {
+                        const lines = Array.isArray(s.componentCosts) ? s.componentCosts : [];
+                        const expanded = expandedSnapshotId === s.id;
+                        return (
+                          <li key={s.id} className="border-b border-zinc-200 pb-2 last:border-0">
+                            <div className="flex flex-wrap justify-between gap-2 text-zinc-800">
+                              <span className="font-medium">{s.source}</span>
+                              <span className="text-zinc-500 tabular-nums">{s.snapshotDate}</span>
+                            </div>
+                            <div className="mt-1 text-zinc-600">
+                              Materiais {formatCurrency(s.materialCostCents)} | Embalagem{" "}
+                              {formatCurrency(s.packagingCostCents)} | Mão de obra{" "}
+                              {formatCurrency(s.laborCostCents)} | Total{" "}
+                              <strong className="text-zinc-800">
+                                {formatCurrency(s.totalCostCents)}
+                              </strong>
+                            </div>
+                            <div className="mt-2">
+                              {lines.length > 0 ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandedSnapshotId(expanded ? null : s.id)}
+                                  className="text-sky-700 underline hover:text-sky-900"
+                                >
+                                  {expanded
+                                    ? "Ocultar componentes da composição"
+                                    : `Ver ${lines.length} linha(s) de componentes`}
+                                </button>
+                              ) : (
+                                <span className="text-zinc-400">
+                                  Sem detalhe por componente neste registro (snapshots antigos ou
+                                  import manual).
+                                </span>
+                              )}
+                            </div>
+                            {expanded && lines.length > 0 ? (
+                              <div className="mt-2 overflow-x-auto rounded border border-zinc-200 bg-white">
+                                <table className="min-w-full text-left text-[11px]">
+                                  <thead className="border-b border-zinc-200 bg-zinc-50 text-zinc-600">
+                                    <tr>
+                                      <th className="px-2 py-1.5">Componente</th>
+                                      <th className="px-2 py-1.5">Tipo</th>
+                                      <th className="px-2 py-1.5 text-right">Qtd</th>
+                                      <th className="px-2 py-1.5">Unid.</th>
+                                      <th className="px-2 py-1.5">Canal</th>
+                                      <th className="px-2 py-1.5">Base custo</th>
+                                      <th className="px-2 py-1.5 text-right">Custo unit.</th>
+                                      <th className="px-2 py-1.5 text-right">Linha</th>
+                                      <th className="px-2 py-1.5">Origem cadastro</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {lines.map((line, idx) => (
+                                      <tr
+                                        key={line.compositionId ?? `${s.id}-${idx}`}
+                                        className="border-b border-zinc-100 text-zinc-700"
+                                      >
+                                        <td className="px-2 py-1.5 align-top">
+                                          <div className="font-medium text-zinc-900">
+                                            {line.childName ?? line.childProductId ?? "—"}
+                                          </div>
+                                          {line.childSku ? (
+                                            <div className="font-mono text-zinc-500">
+                                              {line.childSku}
+                                            </div>
+                                          ) : null}
+                                          {line.childProductId ? (
+                                            <Link
+                                              href={`/products/${line.childProductId}`}
+                                              className="text-sky-700 underline hover:text-sky-900"
+                                            >
+                                              Abrir produto
+                                            </Link>
+                                          ) : null}
+                                        </td>
+                                        <td className="px-2 py-1.5 align-top">
+                                          {line.compositionType ?? "—"}
+                                        </td>
+                                        <td className="px-2 py-1.5 text-right align-top tabular-nums">
+                                          {line.quantity ?? "—"}
+                                        </td>
+                                        <td className="px-2 py-1.5 align-top text-zinc-600">
+                                          {line.quantityUnit ?? "—"}
+                                        </td>
+                                        <td className="px-2 py-1.5 align-top text-zinc-600">
+                                          {line.packagingChannel
+                                            ? packagingChannelLabel(line.packagingChannel)
+                                            : "—"}
+                                        </td>
+                                        <td className="px-2 py-1.5 align-top">
+                                          {compositionCostBasisLabel(line.unitCostBasis)}
+                                        </td>
+                                        <td className="px-2 py-1.5 text-right align-top tabular-nums">
+                                          {line.unitCost != null
+                                            ? formatCurrency(line.unitCost)
+                                            : "—"}
+                                        </td>
+                                        <td className="px-2 py-1.5 text-right align-top font-medium tabular-nums">
+                                          {line.lineTotalCents != null
+                                            ? formatCurrency(line.lineTotalCents)
+                                            : "—"}
+                                        </td>
+                                        <td className="px-2 py-1.5 align-top text-zinc-600">
+                                          {productCostSourceLabel(line.costSource)}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            ) : null}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                  {snapshotTotal > Math.max(1, snapshotLimit) ? (
+                    <div className="mt-2 flex items-center justify-between text-xs text-zinc-600">
+                      <span>
+                        Página {snapshotPage} de {snapshotTotalPages}
+                      </span>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          disabled={snapshotPage <= 1}
+                          onClick={() =>
+                            updateSnapshotQuery({ page: String(Math.max(1, snapshotPage - 1)) })
+                          }
+                          className="rounded border border-zinc-300 px-2 py-1 disabled:opacity-40"
+                        >
+                          Anterior
+                        </button>
+                        <button
+                          type="button"
+                          disabled={snapshotPage >= snapshotTotalPages}
+                          onClick={() =>
+                            updateSnapshotQuery({
+                              page: String(Math.min(snapshotTotalPages, snapshotPage + 1)),
+                            })
+                          }
+                          className="rounded border border-zinc-300 px-2 py-1 disabled:opacity-40"
+                        >
+                          Próxima
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             )}

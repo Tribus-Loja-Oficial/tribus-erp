@@ -22,6 +22,19 @@ export function createProductCompositionRepository(db: AppDb) {
         .orderBy(asc(productCompositions.createdAt));
     },
 
+    async findActiveByChildId(childProductId: string): Promise<ProductComposition[]> {
+      return db
+        .select()
+        .from(productCompositions)
+        .where(
+          and(
+            eq(productCompositions.childProductId, childProductId),
+            isNull(productCompositions.parentVariantId),
+            isNull(productCompositions.archivedAt),
+          ),
+        );
+    },
+
     async findById(id: string): Promise<ProductComposition | null> {
       const rows = await db
         .select()

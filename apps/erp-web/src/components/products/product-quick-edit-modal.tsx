@@ -113,6 +113,9 @@ export function ProductQuickEditModal({ productId, productLabel, onClose }: Prop
               collections={payload.collections}
               locations={payload.locations}
               initialAuditLogs={payload.auditLogs}
+              initialStockMovements={payload.stockMovements}
+              initialPurchaseReceiptHistory={payload.purchaseReceiptHistory}
+              initialBomParents={payload.bomParents}
               embedded
               onClose={onClose}
             />
