@@ -3,10 +3,8 @@ main = "src/index.ts"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
 
-# Ingestão na fila + D1: evita exceededCpu em planos com teto baixo (ex. ~50 ms bundled).
-# Workers Paid: até 300_000 ms; ajustar no dashboard se o deploy falhar.
-[limits]
-cpu_ms = 30000
+# CPU customizada: só Workers Paid — ver https://developers.cloudflare.com/workers/wrangler/configuration/#limits
+# Plano Free: não uses [limits] aqui (deploy falha). Usa INGESTION_QUEUE_CHUNK_SIZE baixo no dashboard.
 
 [vars]
 ENVIRONMENT = "development"
@@ -37,9 +35,6 @@ enabled = true
 
 [env.production]
 name = "tribus-erp-api"
-
-[env.production.limits]
-cpu_ms = 30000
 
 [env.production.vars]
 ENVIRONMENT = "production"
