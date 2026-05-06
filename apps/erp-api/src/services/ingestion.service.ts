@@ -68,6 +68,17 @@ export type IngestionResult = {
   refMap: Record<string, string>;
 };
 
+/** Estado persistido entre mensagens da fila (ingestão por chunks). */
+export type IngestionChunkState = {
+  cursor: number;
+  refMap: Record<string, string>;
+  items: IngestionItemResult[];
+  created: number;
+  updated: number;
+  skipped: number;
+  failed: number;
+};
+
 export type DryRunItemResult = {
   index: number;
   type: IngestionObjectType;
@@ -411,6 +422,54 @@ type IngestionCtx = {
   variantsRepo: ReturnType<typeof createProductVariantRepository>;
   media: ReturnType<typeof createProductMediaService> | null;
 };
+
+/** Processa objectos sortedObjects[start..end) (índices por ordem de dependência). */
+async function processIngestionSlice(
+  sortedObjects: IngestionObject[],
+  start: number,
+  end: number,
+  ctx: IngestionCtx,
+  refMap: Record<string, string>,
+  items: IngestionItemResult[],
+  counts: { created: number; updated: number; skipped: number; failed: number },
+  originalIndexMap: Map<IngestionObject, number>,
+  execOpts: IngestionObjectExecOpts,
+  afterEachObject?: (sortedProcessedCount: number) => void | Promise<void>,
+): Promise<void> {
+  for (let idx = start; idx < end; idx++) {
+    const obj = sortedObjects[idx]!;
+    const originalIndex = originalIndexMap.get(obj) ?? -1;
+    const itemBase: Omit<IngestionItemResult, "status" | "id" | "error" | "warnings"> = {
+      index: originalIndex,
+      type: obj.type,
+      clientRef: obj.client_ref,
+    };
+
+    try {
+      const { id, outcome, warnings } = await createIngestionObject(obj, ctx, refMap, execOpts);
+      if (obj.client_ref) refMap[obj.client_ref] = id;
+      items.push({
+        ...itemBase,
+        status: outcome,
+        id,
+        warnings: warnings.length ? warnings : undefined,
+      });
+      if (outcome === "created") counts.created++;
+      else if (outcome === "updated") counts.updated++;
+      else counts.skipped++;
+    } catch (err) {
+      let message = err instanceof Error ? err.message : "Erro desconhecido";
+      const cause = err instanceof Error ? err.cause : undefined;
+      if (cause instanceof Error && cause.message) {
+        message += ` | ${cause.message}`;
+      }
+      items.push({ ...itemBase, status: "failed", error: message });
+      counts.failed++;
+    }
+
+    await afterEachObject?.(idx + 1);
+  }
+}
 
 function slugifyForDryRun(text: string): string {
   return text
@@ -1194,10 +1253,6 @@ export function createIngestionService(db: AppDb, storage: StorageProvider | und
       const sortedObjects = sortByDependency(payload.objects);
       const refMap: Record<string, string> = {};
       const items: IngestionItemResult[] = [];
-      let created = 0;
-      let updated = 0;
-      let skipped = 0;
-      let failed = 0;
       const execOpts: IngestionObjectExecOpts = {
         skipProductImageUrls: payload.skipProductImageUrls === true,
       };
@@ -1226,39 +1281,24 @@ export function createIngestionService(db: AppDb, storage: StorageProvider | und
         await onProgress({ processed: processedCount, total: totalObjects });
       };
 
-      for (const obj of sortedObjects) {
-        const originalIndex = originalIndexMap.get(obj) ?? -1;
-        const itemBase: Omit<IngestionItemResult, "status" | "id" | "error" | "warnings"> = {
-          index: originalIndex,
-          type: obj.type,
-          clientRef: obj.client_ref,
-        };
+      const counts = { created: 0, updated: 0, skipped: 0, failed: 0 };
+      await processIngestionSlice(
+        sortedObjects,
+        0,
+        sortedObjects.length,
+        ctx,
+        refMap,
+        items,
+        counts,
+        originalIndexMap,
+        execOpts,
+        async (sortedProcessedCount) => {
+          processedCount = sortedProcessedCount;
+          await emitProgressIfNeeded();
+        },
+      );
 
-        try {
-          const { id, outcome, warnings } = await createIngestionObject(obj, ctx, refMap, execOpts);
-          if (obj.client_ref) refMap[obj.client_ref] = id;
-          items.push({
-            ...itemBase,
-            status: outcome,
-            id,
-            warnings: warnings.length ? warnings : undefined,
-          });
-          if (outcome === "created") created++;
-          else if (outcome === "updated") updated++;
-          else skipped++;
-        } catch (err) {
-          let message = err instanceof Error ? err.message : "Erro desconhecido";
-          const cause = err instanceof Error ? err.cause : undefined;
-          if (cause instanceof Error && cause.message) {
-            message += ` | ${cause.message}`;
-          }
-          items.push({ ...itemBase, status: "failed", error: message });
-          failed++;
-        }
-
-        processedCount++;
-        await emitProgressIfNeeded();
-      }
+      const { created, updated, skipped, failed } = counts;
 
       items.sort((a, b) => a.index - b.index);
 
@@ -1291,6 +1331,151 @@ export function createIngestionService(db: AppDb, storage: StorageProvider | und
       }
 
       return { total: payload.objects.length, created, updated, skipped, failed, items, refMap };
+    },
+
+    /**
+     * Um passo da ingestão assíncrona (fila): processa até `chunkSize` objectos na ordem de dependência,
+     * persistindo estado entre invocações via `IngestionChunkState`.
+     */
+    async executeIngestionChunk(
+      payload: IngestionPayload,
+      state: IngestionChunkState | null,
+      chunkSize: number,
+      options?: {
+        actorId?: string | null;
+        onProgress?: (p: { processed: number; total: number }) => void | Promise<void>;
+      },
+    ): Promise<
+      | { done: true; result: IngestionResult }
+      | { done: false; state: IngestionChunkState; processedSoFar: number; total: number }
+    > {
+      const validation = validateIngestionPayload(payload);
+      if (!validation.valid) {
+        throw new ValidationError(
+          "Payload de ingestão inválido",
+          semanticIssuesToZodIssues(validation.errors),
+        );
+      }
+
+      const sortedObjects = sortByDependency(payload.objects);
+      const totalSorted = sortedObjects.length;
+      const chunk = Math.max(1, Math.floor(chunkSize));
+
+      const s: IngestionChunkState =
+        state === null
+          ? {
+              cursor: 0,
+              refMap: {},
+              items: [],
+              created: 0,
+              updated: 0,
+              skipped: 0,
+              failed: 0,
+            }
+          : {
+              cursor: state.cursor,
+              refMap: state.refMap,
+              items: state.items,
+              created: state.created,
+              updated: state.updated,
+              skipped: state.skipped,
+              failed: state.failed,
+            };
+
+      const finish = async (): Promise<{ done: true; result: IngestionResult }> => {
+        s.items.sort((a, b) => a.index - b.index);
+        try {
+          await auditRepo.insert({
+            id: generateId(),
+            actorId: options?.actorId ?? null,
+            actorType: "api",
+            action: "ingestion.executed",
+            entityType: "ingestion",
+            entityId: "execute",
+            metadataJson: JSON.stringify({
+              total: payload.objects.length,
+              created: s.created,
+              updated: s.updated,
+              skipped: s.skipped,
+              failed: s.failed,
+              byType: validation.summary.byType,
+              skipProductImageUrls: payload.skipProductImageUrls === true,
+              ingestionChunked: true,
+            }),
+            createdAt: now(),
+          });
+        } catch (e) {
+          logger.error("ingestion audit log failed after chunked execute", {
+            error: String(e),
+            total: payload.objects.length,
+            created: s.created,
+            failed: s.failed,
+          });
+        }
+        return {
+          done: true,
+          result: {
+            total: payload.objects.length,
+            created: s.created,
+            updated: s.updated,
+            skipped: s.skipped,
+            failed: s.failed,
+            items: s.items,
+            refMap: s.refMap,
+          },
+        };
+      };
+
+      if (s.cursor >= totalSorted) {
+        return finish();
+      }
+
+      const endIdx = Math.min(s.cursor + chunk, totalSorted);
+      const originalIndexMap = new Map<IngestionObject, number>(
+        payload.objects.map((obj, i) => [obj, i]),
+      );
+      const execOpts: IngestionObjectExecOpts = {
+        skipProductImageUrls: payload.skipProductImageUrls === true,
+      };
+      const counts = {
+        created: s.created,
+        updated: s.updated,
+        skipped: s.skipped,
+        failed: s.failed,
+      };
+
+      await processIngestionSlice(
+        sortedObjects,
+        s.cursor,
+        endIdx,
+        ctx,
+        s.refMap,
+        s.items,
+        counts,
+        originalIndexMap,
+        execOpts,
+      );
+
+      s.cursor = endIdx;
+      s.created = counts.created;
+      s.updated = counts.updated;
+      s.skipped = counts.skipped;
+      s.failed = counts.failed;
+
+      if (options?.onProgress) {
+        await options.onProgress({ processed: endIdx, total: totalSorted });
+      }
+
+      if (endIdx >= totalSorted) {
+        return finish();
+      }
+
+      return {
+        done: false,
+        state: s,
+        processedSoFar: endIdx,
+        total: totalSorted,
+      };
     },
   };
 }

@@ -128,7 +128,7 @@ Bindings D1 e R2 configurados em `wrangler.toml`:
 
 ### Fila de ingestão assíncrona (Cloudflare Queues)
 
-A ingestão em segundo plano usa uma **Queue** e a tabela D1 **`ingestion_jobs`** (migração `0012_ingestion_jobs.sql`). Sem fila configurada, `POST /internal/ingestion/jobs` responde **503** (`QUEUE_UNAVAILABLE`) e a UI mostra erro claro.
+A ingestão em segundo plano usa uma **Queue** e a tabela D1 **`ingestion_jobs`** (migrações `0012_ingestion_jobs.sql` e `0013_ingestion_jobs_chunk_state.sql` para `chunk_state_json` entre chunks). Sem fila configurada, `POST /internal/ingestion/jobs` responde **503** (`QUEUE_UNAVAILABLE`) e a UI mostra erro claro.
 
 1. Criar a fila (nome alinhado ao `wrangler.toml`, ex. `tribus-erp-ingestion-queue`):
 
@@ -148,6 +148,8 @@ A ingestão em segundo plano usa uma **Queue** e a tabela D1 **`ingestion_jobs`*
    ```
 
 **erp-web (opcional):** `INGESTION_SYNC_MAX_OBJECTS`, `INGESTION_SYNC_MAX_BODY_BYTES` — limiares acima dos quais `POST /api/admin/ingestion/execute` usa o modo assíncrono (ver `ingestion-sync-thresholds.ts`).
+
+**erp-api / Worker (opcional):** `INGESTION_QUEUE_CHUNK_SIZE` — objectos processados por invocação do consumer (por defeito **30** no código). Reduzir se os logs mostrarem `exceededCpu` em cargas pesadas; aumentar com cautela (mais CPU por mensagem).
 
 ---
 

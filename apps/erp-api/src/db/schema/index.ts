@@ -773,6 +773,8 @@ export const ingestionJobs = sqliteTable(
     updatedAt: text("updated_at").notNull(),
     startedAt: text("started_at"),
     finishedAt: text("finished_at"),
+    /** JSON: cursor, refMap, items, counts — entre mensagens da fila (ingestão chunked). */
+    chunkStateJson: text("chunk_state_json"),
   },
   (t) => [
     index("ingestion_jobs_status_idx").on(t.status),

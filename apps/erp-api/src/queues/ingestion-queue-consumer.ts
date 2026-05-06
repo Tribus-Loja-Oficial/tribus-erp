@@ -2,12 +2,41 @@ import type { Env } from "../types/env.js";
 import { getEnv } from "../config/env.js";
 import { createDb } from "../db/client.js";
 import { createIngestionJobRepository } from "../repositories/ingestion-job.repository.js";
-import { createIngestionService } from "../services/ingestion.service.js";
+import { createIngestionService, type IngestionChunkState } from "../services/ingestion.service.js";
 import { R2StorageProvider } from "../storage/r2-storage-provider.js";
 import { ingestionPayloadSchema } from "../schemas/ingestion.schemas.js";
 import { logger } from "../observability/logger.js";
 
 type JobMessage = { jobId?: string };
+
+const DEFAULT_QUEUE_CHUNK = 30;
+
+function parseChunkState(raw: string | null | undefined): IngestionChunkState | null {
+  if (raw == null || !String(raw).trim()) return null;
+  try {
+    const o = JSON.parse(String(raw)) as Record<string, unknown>;
+    if (typeof o.cursor !== "number" || o.cursor < 0) return null;
+    if (typeof o.refMap !== "object" || o.refMap === null || Array.isArray(o.refMap)) return null;
+    if (!Array.isArray(o.items)) return null;
+    return {
+      cursor: o.cursor,
+      refMap: o.refMap as Record<string, string>,
+      items: o.items as IngestionChunkState["items"],
+      created: typeof o.created === "number" ? o.created : 0,
+      updated: typeof o.updated === "number" ? o.updated : 0,
+      skipped: typeof o.skipped === "number" ? o.skipped : 0,
+      failed: typeof o.failed === "number" ? o.failed : 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function queueChunkSize(env: Env): number {
+  const n = Number(env.INGESTION_QUEUE_CHUNK_SIZE);
+  if (Number.isFinite(n) && n >= 1) return Math.min(Math.floor(n), 500);
+  return DEFAULT_QUEUE_CHUNK;
+}
 
 export async function handleIngestionQueue(
   batch: MessageBatch<JobMessage>,
@@ -19,12 +48,20 @@ export async function handleIngestionQueue(
   const storage = new R2StorageProvider(config.r2);
   const ingestion = createIngestionService(db, storage);
   const now = () => new Date().toISOString();
+  const queue = env.INGESTION_QUEUE;
+  const chunkSize = queueChunkSize(env);
 
   for (const msg of batch.messages) {
     try {
       const jobId = typeof msg.body?.jobId === "string" ? msg.body.jobId.trim() : "";
       if (!jobId) {
         msg.ack();
+        continue;
+      }
+
+      if (!queue) {
+        logger.error("ingestion queue consumer: INGESTION_QUEUE binding missing");
+        msg.retry();
         continue;
       }
 
@@ -55,6 +92,7 @@ export async function handleIngestionQueue(
           errorMessage: "Falha ao interpretar payload_json do job.",
           updatedAt: now(),
           finishedAt: now(),
+          chunkStateJson: null,
         });
         msg.ack();
         continue;
@@ -66,33 +104,53 @@ export async function handleIngestionQueue(
           errorMessage: "Payload armazenado inválido (schema).",
           updatedAt: now(),
           finishedAt: now(),
+          chunkStateJson: null,
         });
         msg.ack();
         continue;
       }
 
-      const total = payloadParsed.data.objects.length;
-
-      try {
-        const result = await ingestion.executeIngestion(payloadParsed.data, {
-          actorId: null,
-          onProgress: async ({ processed, total: tot }) => {
-            await jobRepo.updateProgress(jobId, {
-              progressProcessed: processed,
-              progressTotal: tot,
-              updatedAt: now(),
-            });
-          },
-        });
-
+      const rawChunk = job.chunkStateJson;
+      const chunkState = parseChunkState(rawChunk);
+      if (rawChunk?.trim() && chunkState === null) {
         await jobRepo.updateProgress(jobId, {
-          status: "completed",
-          progressProcessed: total,
-          progressTotal: total,
-          resultJson: JSON.stringify(result),
+          status: "failed",
+          errorMessage: "Estado de chunk inválido (chunk_state_json).",
           updatedAt: now(),
           finishedAt: now(),
+          chunkStateJson: null,
         });
+        msg.ack();
+        continue;
+      }
+
+      try {
+        const outcome = await ingestion.executeIngestionChunk(
+          payloadParsed.data,
+          chunkState,
+          chunkSize,
+        );
+
+        if (outcome.done) {
+          await jobRepo.updateProgress(jobId, {
+            status: "completed",
+            progressProcessed: outcome.result.total,
+            progressTotal: outcome.result.total,
+            resultJson: JSON.stringify(outcome.result),
+            chunkStateJson: null,
+            updatedAt: now(),
+            finishedAt: now(),
+          });
+        } else {
+          await jobRepo.updateProgress(jobId, {
+            status: "running",
+            progressProcessed: outcome.processedSoFar,
+            progressTotal: outcome.total,
+            chunkStateJson: JSON.stringify(outcome.state),
+            updatedAt: now(),
+          });
+          await queue.send({ jobId });
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         await jobRepo.updateProgress(jobId, {
@@ -100,6 +158,7 @@ export async function handleIngestionQueue(
           errorMessage: message,
           updatedAt: now(),
           finishedAt: now(),
+          chunkStateJson: null,
         });
         logger.error("ingestion job execute failed", { jobId, error: message });
       }

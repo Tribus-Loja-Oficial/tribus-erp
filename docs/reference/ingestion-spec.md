@@ -131,7 +131,11 @@ Se o envelope `dryRun` + `payload` for inválido (Zod), `valid: false` e mensage
 
 ### Modo assíncrono (fila + estado na UI)
 
-Para **um único** `executeIngestion` por payload (referências `*Ref` válidas no mesmo lote), cargas grandes não devem partir o JSON em vários executes sem alterar regras: o Worker grava o payload num job em **D1** (`ingestion_jobs`) e o **consumer** da fila Cloudflare corre **`executeIngestion` uma vez**, actualizando progresso durante o loop.
+Para **um único** fluxo lógico por payload (referências `*Ref` válidas no mesmo lote), cargas grandes não devem partir o JSON em vários `POST /internal/ingestion/execute` sem alterar regras: o Worker grava o payload num job em **D1** (`ingestion_jobs`) e o **consumer** da fila processa os objectos **na ordem de dependência** em **várias invocações curtas** (chunks). Entre invocações o estado (`cursor`, `refMap`, `items` parciais, contagens) fica em **`chunk_state_json`**; após cada chunk o consumer grava o estado, envia **outra mensagem** com o mesmo `jobId` para a fila e faz **`ack`** da mensagem actual — evita `exceededCpu` e evita recomeçar do zero quando a fila reentrega mensagens.
+
+**Tamanho do chunk (Worker):** variável opcional **`INGESTION_QUEUE_CHUNK_SIZE`** (número de objectos por invocação; por defeito **30**, teto prático **500** no código). Valores mais baixos usam menos CPU por mensagem e mais mensagens na fila; afinar se ainda aparecer `exceededCpu`.
+
+**Idempotência:** se uma invocação falhar **antes** de persistir o estado, a fila pode reprocessar o último chunk; as operações de ingestão devem manter-se **idempotentes** (`upsert` / `skip` por chave natural), como já é desejável para retries genéricos.
 
 **Rotas internas:**
 

@@ -246,6 +246,7 @@ internal.post("/ingestion/jobs", async (c) => {
       updatedAt: ts,
       startedAt: null,
       finishedAt: null,
+      chunkStateJson: null,
     });
 
     await queue.send({ jobId });

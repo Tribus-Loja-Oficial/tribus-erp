@@ -11,4 +11,6 @@ export interface Env {
   TRIBUS_ERP_R2: R2Bucket;
   /** Fila para ingestão assíncrona (`wrangler queues create`). Opcional em dev sem fila. */
   INGESTION_QUEUE?: Queue<{ jobId: string }>;
+  /** Máx. objectos por invocação do consumer (evita exceededCpu). Opcional; default 30. */
+  INGESTION_QUEUE_CHUNK_SIZE?: string;
 }

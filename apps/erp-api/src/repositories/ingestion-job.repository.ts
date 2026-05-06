@@ -27,6 +27,7 @@ export function createIngestionJobRepository(db: AppDb) {
         updatedAt: string;
         startedAt: string | null;
         finishedAt: string | null;
+        chunkStateJson: string | null;
       }>,
     ) {
       await db.update(ingestionJobs).set(patch).where(eq(ingestionJobs.id, id));
