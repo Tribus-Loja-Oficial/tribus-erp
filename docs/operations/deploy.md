@@ -149,7 +149,9 @@ A ingestão em segundo plano usa uma **Queue** e a tabela D1 **`ingestion_jobs`*
 
 **erp-web (opcional):** `INGESTION_SYNC_MAX_OBJECTS`, `INGESTION_SYNC_MAX_BODY_BYTES` — limiares acima dos quais `POST /api/admin/ingestion/execute` usa o modo assíncrono (ver `ingestion-sync-thresholds.ts`).
 
-**erp-api / Worker (opcional):** `INGESTION_QUEUE_CHUNK_SIZE` — objectos processados por invocação do consumer (por defeito **30** no código). Reduzir se os logs mostrarem `exceededCpu` em cargas pesadas; aumentar com cautela (mais CPU por mensagem).
+**erp-api / Worker (opcional):** `INGESTION_QUEUE_CHUNK_SIZE` — objectos por invocação do consumer (por defeito **10**; máx. **200** no código). Reduzir (ex. `3`–`5`) se persistir `exceededCpu`.
+
+O `wrangler.toml` inclui **`[limits] cpu_ms = 30000`** (e o mesmo em `env.production`) para alinhar ao Workers Paid; em planos antigos com teto ~50 ms de CPU, o deploy pode exigir ajuste no dashboard ou chunk menor.
 
 ---
 

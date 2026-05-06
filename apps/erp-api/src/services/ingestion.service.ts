@@ -187,6 +187,17 @@ function expectRef(
   }
 }
 
+/** Resumo por tipo (audit) sem validação semântica — uso em continuações chunked. */
+export function ingestionPayloadSummaryOnly(
+  payload: IngestionPayload,
+): ValidationResult["summary"] {
+  const byType: Record<string, number> = {};
+  for (const o of payload.objects) {
+    byType[o.type] = (byType[o.type] ?? 0) + 1;
+  }
+  return { total: payload.objects.length, byType };
+}
+
 export function validateIngestionPayload(payload: IngestionPayload): ValidationResult {
   const errors: ValidationIssue[] = [];
   const warnings: ValidationIssue[] = [];
@@ -1344,12 +1355,21 @@ export function createIngestionService(db: AppDb, storage: StorageProvider | und
       options?: {
         actorId?: string | null;
         onProgress?: (p: { processed: number; total: number }) => void | Promise<void>;
+        /** Quando true, o payload já foi validado no 1.º chunk; poupa CPU nas mensagens seguintes. */
+        assumePayloadSemanticallyValid?: boolean;
       },
     ): Promise<
       | { done: true; result: IngestionResult }
       | { done: false; state: IngestionChunkState; processedSoFar: number; total: number }
     > {
-      const validation = validateIngestionPayload(payload);
+      const validation = options?.assumePayloadSemanticallyValid
+        ? ({
+            valid: true,
+            errors: [],
+            warnings: [],
+            summary: ingestionPayloadSummaryOnly(payload),
+          } satisfies ValidationResult)
+        : validateIngestionPayload(payload);
       if (!validation.valid) {
         throw new ValidationError(
           "Payload de ingestão inválido",

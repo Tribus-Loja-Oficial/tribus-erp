@@ -4,12 +4,13 @@ import { createDb } from "../db/client.js";
 import { createIngestionJobRepository } from "../repositories/ingestion-job.repository.js";
 import { createIngestionService, type IngestionChunkState } from "../services/ingestion.service.js";
 import { R2StorageProvider } from "../storage/r2-storage-provider.js";
-import { ingestionPayloadSchema } from "../schemas/ingestion.schemas.js";
+import { ingestionPayloadSchema, type IngestionPayload } from "../schemas/ingestion.schemas.js";
 import { logger } from "../observability/logger.js";
 
 type JobMessage = { jobId?: string };
 
-const DEFAULT_QUEUE_CHUNK = 30;
+/** Conservador para contas com CPU por invocação ~50 ms; sobrescrever com INGESTION_QUEUE_CHUNK_SIZE. */
+const DEFAULT_QUEUE_CHUNK = 10;
 
 function parseChunkState(raw: string | null | undefined): IngestionChunkState | null {
   if (raw == null || !String(raw).trim()) return null;
@@ -34,7 +35,7 @@ function parseChunkState(raw: string | null | undefined): IngestionChunkState | 
 
 function queueChunkSize(env: Env): number {
   const n = Number(env.INGESTION_QUEUE_CHUNK_SIZE);
-  if (Number.isFinite(n) && n >= 1) return Math.min(Math.floor(n), 500);
+  if (Number.isFinite(n) && n >= 1) return Math.min(Math.floor(n), 200);
   return DEFAULT_QUEUE_CHUNK;
 }
 
@@ -83,25 +84,13 @@ export async function handleIngestionQueue(
         startedAt: job.startedAt ?? now(),
       });
 
-      let payloadParsed;
+      let rawPayload: unknown;
       try {
-        payloadParsed = ingestionPayloadSchema.safeParse(JSON.parse(job.payloadJson));
+        rawPayload = JSON.parse(job.payloadJson);
       } catch {
         await jobRepo.updateProgress(jobId, {
           status: "failed",
           errorMessage: "Falha ao interpretar payload_json do job.",
-          updatedAt: now(),
-          finishedAt: now(),
-          chunkStateJson: null,
-        });
-        msg.ack();
-        continue;
-      }
-
-      if (!payloadParsed.success) {
-        await jobRepo.updateProgress(jobId, {
-          status: "failed",
-          errorMessage: "Payload armazenado inválido (schema).",
           updatedAt: now(),
           finishedAt: now(),
           chunkStateJson: null,
@@ -124,12 +113,32 @@ export async function handleIngestionQueue(
         continue;
       }
 
+      /** Após o 1.º chunk, evita Zod + validação semântica completa (poupa CPU por mensagem). */
+      const assumeSemanticValid = chunkState !== null && chunkState.cursor > 0;
+
+      let payloadData: IngestionPayload;
+      if (assumeSemanticValid) {
+        payloadData = rawPayload as IngestionPayload;
+      } else {
+        const payloadParsed = ingestionPayloadSchema.safeParse(rawPayload);
+        if (!payloadParsed.success) {
+          await jobRepo.updateProgress(jobId, {
+            status: "failed",
+            errorMessage: "Payload armazenado inválido (schema).",
+            updatedAt: now(),
+            finishedAt: now(),
+            chunkStateJson: null,
+          });
+          msg.ack();
+          continue;
+        }
+        payloadData = payloadParsed.data;
+      }
+
       try {
-        const outcome = await ingestion.executeIngestionChunk(
-          payloadParsed.data,
-          chunkState,
-          chunkSize,
-        );
+        const outcome = await ingestion.executeIngestionChunk(payloadData, chunkState, chunkSize, {
+          assumePayloadSemanticallyValid: assumeSemanticValid,
+        });
 
         if (outcome.done) {
           await jobRepo.updateProgress(jobId, {
