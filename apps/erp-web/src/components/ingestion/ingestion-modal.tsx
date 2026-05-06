@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import {
   AlertCircle,
@@ -9,17 +9,24 @@ import {
   FileJson2,
   Loader2,
   Package,
+  RefreshCw,
   WandSparkles,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   validateIngestionAction,
+  revalidateAfterIngestionAction,
   type IngestionDryRunResponse,
   type IngestionExecuteResponse,
   type IngestionValidationResponse,
 } from "@/server/ingestion-actions";
-import { postAdminIngestionJson } from "@/lib/ingestion-admin-fetch";
+import {
+  fetchAdminIngestionJob,
+  postAdminIngestionExecute,
+  postAdminIngestionJson,
+  type IngestionJobStatusPayload,
+} from "@/lib/ingestion-admin-fetch";
 import { INGESTION_TEMPLATES } from "@/features/ingestion/lib/ingestion-templates";
 import { IngestionFieldReferencePanel } from "@/features/ingestion/components/ingestion-field-reference-panel";
 import { INGESTION_TYPE_LABELS_UI } from "@/features/ingestion/lib/ingestion-field-reference";
@@ -194,6 +201,70 @@ function DryRunPanel({ result }: { result: IngestionDryRunResponse["data"] }) {
   );
 }
 
+function AsyncIngestionJobPanel({
+  jobId,
+  snapshot,
+  manualPending,
+  onRefresh,
+}: {
+  jobId: string;
+  snapshot: IngestionJobStatusPayload | null;
+  manualPending: boolean;
+  onRefresh: () => void;
+}) {
+  const pct =
+    snapshot && snapshot.progress.total > 0
+      ? Math.min(100, Math.round((snapshot.progress.processed / snapshot.progress.total) * 100))
+      : 0;
+  const label =
+    snapshot?.status === "queued"
+      ? "Na fila…"
+      : snapshot?.status === "running"
+        ? "A processar…"
+        : snapshot?.status === "completed"
+          ? "Concluído"
+          : snapshot?.status === "failed"
+            ? "Falhou"
+            : "A iniciar…";
+
+  return (
+    <div className="mt-4 flex flex-col gap-3 border-t border-violet-200 bg-violet-50/40 px-1 pt-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-violet-900">Ingestão em segundo plano</p>
+        <button
+          type="button"
+          disabled={manualPending}
+          onClick={() => onRefresh()}
+          className="inline-flex items-center gap-1 rounded-md border border-violet-200 bg-white px-2 py-1 text-[11px] font-medium text-violet-800 hover:bg-violet-50 disabled:opacity-50"
+        >
+          {manualPending ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : (
+            <RefreshCw className="h-3 w-3" />
+          )}
+          Actualizar estado
+        </button>
+      </div>
+      <p className="font-mono text-[10px] text-zinc-600">
+        job: <span className="text-zinc-900">{jobId}</span>
+      </p>
+      <p className="text-xs text-zinc-700">{label}</p>
+      <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-200">
+        <div
+          className="h-full bg-violet-600 transition-[width] duration-300"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <p className="text-[11px] text-zinc-600">
+        {snapshot ? `${snapshot.progress.processed} / ${snapshot.progress.total} objetos` : "…"}
+      </p>
+      {snapshot?.updatedAt ? (
+        <p className="text-[10px] text-zinc-500">Última actualização: {snapshot.updatedAt}</p>
+      ) : null}
+    </div>
+  );
+}
+
 function ResultPanel({ result }: { result: IngestionExecuteResponse["data"] }) {
   const ok = result.failed === 0;
   const totalFail =
@@ -290,6 +361,9 @@ export function IngestionModal({ open, onOpenChange }: IngestionModalProps) {
   const [validatePending, setValidatePending] = useState(false);
   const [executePending, setExecutePending] = useState(false);
   const [dryRunPending, setDryRunPending] = useState(false);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [asyncJobSnapshot, setAsyncJobSnapshot] = useState<IngestionJobStatusPayload | null>(null);
+  const [jobManualPending, setJobManualPending] = useState(false);
 
   const resetState = useCallback(() => {
     setJsonText(INGESTION_DEFAULT_JSON);
@@ -298,6 +372,9 @@ export function IngestionModal({ open, onOpenChange }: IngestionModalProps) {
     setValidation(null);
     setExecuteResult(null);
     setDryRunResult(null);
+    setActiveJobId(null);
+    setAsyncJobSnapshot(null);
+    setJobManualPending(false);
     setTemplateOpen(false);
   }, []);
 
@@ -351,12 +428,13 @@ export function IngestionModal({ open, onOpenChange }: IngestionModalProps) {
     setExecutePending(true);
     try {
       const payload = JSON.parse(jsonText) as unknown;
-      const res = await postAdminIngestionJson<IngestionExecuteResponse>(
-        "/api/admin/ingestion/execute",
-        payload,
-        [207, 422],
-      );
-      setExecuteResult(res.data);
+      const out = await postAdminIngestionExecute(payload);
+      if (out.mode === "async") {
+        setActiveJobId(out.jobId);
+        setAsyncJobSnapshot(null);
+        return;
+      }
+      setExecuteResult(out.result);
       setStep("result");
     } catch (e) {
       setParseError(e instanceof Error ? e.message : "Erro ao executar");
@@ -364,6 +442,61 @@ export function IngestionModal({ open, onOpenChange }: IngestionModalProps) {
       setExecutePending(false);
     }
   };
+
+  const refreshJobSnapshot = useCallback(async () => {
+    if (!activeJobId) return;
+    setJobManualPending(true);
+    try {
+      const snap = await fetchAdminIngestionJob(activeJobId);
+      setAsyncJobSnapshot(snap);
+      if (snap.status === "completed" && snap.result) {
+        setExecuteResult(snap.result);
+        setStep("result");
+        setActiveJobId(null);
+        await revalidateAfterIngestionAction();
+      } else if (snap.status === "failed") {
+        setParseError(snap.error ?? "A ingestão falhou no servidor.");
+        setActiveJobId(null);
+      }
+    } catch (e) {
+      setParseError(e instanceof Error ? e.message : "Erro ao consultar o job");
+    } finally {
+      setJobManualPending(false);
+    }
+  }, [activeJobId]);
+
+  useEffect(() => {
+    if (!activeJobId) return;
+    let cancelled = false;
+
+    const poll = async () => {
+      try {
+        const snap = await fetchAdminIngestionJob(activeJobId);
+        if (cancelled) return;
+        setAsyncJobSnapshot(snap);
+        if (snap.status === "completed" && snap.result) {
+          setExecuteResult(snap.result);
+          setStep("result");
+          setActiveJobId(null);
+          await revalidateAfterIngestionAction();
+        } else if (snap.status === "failed") {
+          setParseError(snap.error ?? "A ingestão falhou no servidor.");
+          setActiveJobId(null);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setParseError(e instanceof Error ? e.message : "Erro ao consultar o job");
+        }
+      }
+    };
+
+    void poll();
+    const id = setInterval(poll, 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [activeJobId]);
 
   const runDryRun = async () => {
     setParseError(null);
@@ -384,7 +517,7 @@ export function IngestionModal({ open, onOpenChange }: IngestionModalProps) {
 
   const jsonOk = !!jsonText.trim() && !parseError;
   const canValidate = jsonOk && step !== "result";
-  const canExecute = step === "validated" && validation?.valid && !executePending;
+  const canExecute = step === "validated" && validation?.valid && !executePending && !activeJobId;
   const canDryRun = step === "validated" && validation?.valid && !dryRunPending;
 
   const rightTitle =
@@ -407,8 +540,8 @@ export function IngestionModal({ open, onOpenChange }: IngestionModalProps) {
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-zinc-900">Nova ingestão</p>
               <p className="truncate text-xs text-zinc-500">
-                JSON validado na API (Worker); ingestão corre via rota com timeout alargado — podes
-                esperar na mesma janela até o resultado.
+                Payloads grandes vão para fila no Worker (202): vê o progresso aqui. Os restantes
+                correm na mesma janela até ao resultado.
               </p>
             </div>
             <div className="relative shrink-0">
@@ -433,6 +566,8 @@ export function IngestionModal({ open, onOpenChange }: IngestionModalProps) {
                         setStep("edit");
                         setValidation(null);
                         setDryRunResult(null);
+                        setActiveJobId(null);
+                        setAsyncJobSnapshot(null);
                         setTemplateOpen(false);
                       }}
                       className="flex w-full flex-col gap-0.5 border-b border-zinc-100 px-3 py-2.5 text-left last:border-0 hover:bg-zinc-50"
@@ -515,6 +650,14 @@ export function IngestionModal({ open, onOpenChange }: IngestionModalProps) {
                   <div className="flex min-h-0 flex-col gap-0">
                     <ValidationPanel result={validation} />
                     {dryRunResult && <DryRunPanel result={dryRunResult} />}
+                    {activeJobId ? (
+                      <AsyncIngestionJobPanel
+                        jobId={activeJobId}
+                        snapshot={asyncJobSnapshot}
+                        manualPending={jobManualPending}
+                        onRefresh={() => void refreshJobSnapshot()}
+                      />
+                    ) : null}
                   </div>
                 )}
                 {step === "result" && executeResult && <ResultPanel result={executeResult} />}
@@ -534,6 +677,9 @@ export function IngestionModal({ open, onOpenChange }: IngestionModalProps) {
                   {dryRunResult?.valid === true && dryRunResult.planned.failed === 0 && (
                     <span className="text-sky-700"> · simulação OK</span>
                   )}
+                  {activeJobId ? (
+                    <span className="text-violet-700"> · ingestão em segundo plano</span>
+                  ) : null}
                 </>
               )}
               {step === "result" && executeResult && (
@@ -598,6 +744,8 @@ export function IngestionModal({ open, onOpenChange }: IngestionModalProps) {
                     setExecuteResult(null);
                     setValidation(null);
                     setDryRunResult(null);
+                    setActiveJobId(null);
+                    setAsyncJobSnapshot(null);
                   }}
                   className="rounded-lg border border-zinc-200 px-3 py-2 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
                 >

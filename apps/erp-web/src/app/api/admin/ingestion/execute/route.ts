@@ -1,13 +1,17 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { assertAdminApiSession } from "@/lib/server/assert-admin-api";
-import { upstreamIngestionExecute } from "@/lib/server/erp-ingestion-upstream";
+import {
+  upstreamIngestionEnqueue,
+  upstreamIngestionExecute,
+} from "@/lib/server/erp-ingestion-upstream";
+import { shouldEnqueueIngestionAsync } from "@/lib/ingestion-sync-thresholds";
 
 /**
- * Ingestão pode demorar vários minutos (imagens, muitos objectos).
- * Server Actions na Vercel têm timeout baixo; esta rota prolonga o limite do runtime.
+ * Modo síncrono: espera pelo Worker até ao fim (limitado pelo plano Vercel — Hobby ~60s).
+ * Modo assíncrono: payloads grandes são enfileirados no Worker (`INGESTION_QUEUE`); resposta 202 + jobId.
  *
- * @see https://vercel.com/docs/functions/routing#max-duration — Hobby ~10s; Pro até 300s.
+ * @see https://vercel.com/docs/functions/configuring-functions/duration
  */
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
@@ -29,7 +33,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "Corpo JSON inválido ou em falta." }, { status: 400 });
   }
 
-  const upstream = await upstreamIngestionExecute(payload);
+  const useAsync = shouldEnqueueIngestionAsync(payload);
+  const upstream = useAsync
+    ? await upstreamIngestionEnqueue(payload)
+    : await upstreamIngestionExecute(payload);
   const rawText = await upstream.text();
 
   if (upstream.status === 200 || upstream.status === 207 || upstream.status === 422) {
@@ -43,6 +50,9 @@ export async function POST(request: Request) {
 
   return new NextResponse(rawText || "{}", {
     status: upstream.status,
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(useAsync && upstream.status === 202 ? { "X-Ingestion-Mode": "async" } : {}),
+    },
   });
 }

@@ -117,3 +117,14 @@ export async function dryRunIngestionAction(payload: unknown): Promise<Ingestion
     body: payload,
   });
 }
+
+/** Chamado no cliente quando um job assíncrono termina para refrescar listagens. */
+export async function revalidateAfterIngestionAction(): Promise<void> {
+  await assertAdminIngestion();
+  revalidatePath("/products");
+  revalidatePath("/customers");
+  revalidatePath("/suppliers");
+  revalidatePath("/inventory");
+  revalidatePath("/orders");
+  revalidatePath("/purchases");
+}

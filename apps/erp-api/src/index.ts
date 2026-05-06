@@ -1,6 +1,5 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import type { Env } from "./types/env.js";
 import { generateRequestId } from "./observability/request-id.js";
 import { logger } from "./observability/logger.js";
 import { health } from "./routes/health.js";
@@ -17,6 +16,8 @@ import { suppliers } from "./routes/suppliers.js";
 import { purchases } from "./routes/purchases.js";
 import { production } from "./routes/production.js";
 import { reports } from "./routes/reports.js";
+import type { Env } from "./types/env.js";
+import { handleIngestionQueue } from "./queues/ingestion-queue-consumer.js";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -66,4 +67,9 @@ app.onError((err, c) => {
   return c.json({ message: "Internal server error", code: "INTERNAL_ERROR" }, 500);
 });
 
-export default app;
+export default {
+  fetch: app.fetch,
+  async queue(batch: MessageBatch, env: Env, _ctx: ExecutionContext): Promise<void> {
+    await handleIngestionQueue(batch as MessageBatch<{ jobId: string }>, env);
+  },
+};

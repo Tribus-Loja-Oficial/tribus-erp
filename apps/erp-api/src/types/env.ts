@@ -9,4 +9,6 @@ export interface Env {
   MONITOR_COVERAGE_TOKEN?: string;
   TRIBUS_ERP_DB: D1Database;
   TRIBUS_ERP_R2: R2Bucket;
+  /** Fila para ingestão assíncrona (`wrangler queues create`). Opcional em dev sem fila. */
+  INGESTION_QUEUE?: Queue<{ jobId: string }>;
 }

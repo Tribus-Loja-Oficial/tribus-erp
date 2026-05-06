@@ -17,6 +17,7 @@ import {
 import { createIngestionService, validateIngestionPayload } from "../services/ingestion.service.js";
 import { generateId } from "../utils/id.js";
 import { createAuditRepository } from "../repositories/audit.repository.js";
+import { createIngestionJobRepository } from "../repositories/ingestion-job.repository.js";
 import {
   productionOrderConsumptions,
   productionOrderLosses,
@@ -56,6 +57,7 @@ import {
   parties,
   auditLogs,
   integrationEvents,
+  ingestionJobs,
 } from "../db/schema/index.js";
 
 const internal = new Hono<{ Bindings: Env }>();
@@ -202,6 +204,105 @@ internal.post("/ingestion/dry-run", async (c) => {
   }
 });
 
+/** Enfileira ingestão completa para processamento assíncrono (consumer da fila). */
+internal.post("/ingestion/jobs", async (c) => {
+  try {
+    const config = getEnv(c.env);
+    verifyInternalToken(c.req.header("Authorization"), config.erpInternalSecret);
+
+    const queue = c.env.INGESTION_QUEUE;
+    if (!queue) {
+      return c.json(
+        {
+          code: "QUEUE_UNAVAILABLE",
+          message:
+            "INGESTION_QUEUE não configurada. Crie a fila Cloudflare e faça deploy com wrangler (ver docs).",
+        },
+        503,
+      );
+    }
+
+    const body = await c.req.json().catch(() => null);
+    const parsed = ingestionPayloadSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+    }
+
+    const db = createDb(config.db);
+    const jobRepo = createIngestionJobRepository(db);
+    const jobId = generateId();
+    const ts = new Date().toISOString();
+    const total = parsed.data.objects.length;
+
+    await jobRepo.insert({
+      id: jobId,
+      status: "queued",
+      payloadJson: JSON.stringify(parsed.data),
+      progressProcessed: 0,
+      progressTotal: total,
+      resultJson: null,
+      errorMessage: null,
+      createdAt: ts,
+      updatedAt: ts,
+      startedAt: null,
+      finishedAt: null,
+    });
+
+    await queue.send({ jobId });
+
+    return c.json({ data: { jobId, status: "queued" as const } }, 202);
+  } catch (err) {
+    const { message, code, status } = toApiError(err);
+    return c.json({ message, code }, status);
+  }
+});
+
+internal.get("/ingestion/jobs/:id", async (c) => {
+  try {
+    const config = getEnv(c.env);
+    verifyInternalToken(c.req.header("Authorization"), config.erpInternalSecret);
+
+    const db = createDb(config.db);
+    const jobRepo = createIngestionJobRepository(db);
+    const id = c.req.param("id")?.trim();
+    if (!id) return c.json({ message: "ID inválido" }, 400);
+
+    const job = await jobRepo.findById(id);
+    if (!job) return c.json({ message: "Job não encontrado", code: "NOT_FOUND" }, 404);
+
+    let result: unknown = null;
+    if (job.resultJson) {
+      try {
+        result = JSON.parse(job.resultJson) as unknown;
+      } catch {
+        result = null;
+      }
+    }
+
+    return c.json(
+      {
+        data: {
+          jobId: job.id,
+          status: job.status,
+          progress: {
+            processed: job.progressProcessed,
+            total: job.progressTotal,
+          },
+          result,
+          error: job.errorMessage,
+          updatedAt: job.updatedAt,
+          startedAt: job.startedAt,
+          finishedAt: job.finishedAt,
+        },
+      },
+      200,
+    );
+  } catch (err) {
+    const { message, code, status } = toApiError(err);
+    return c.json({ message, code }, status);
+  }
+});
+
 internal.post("/fiscal/xml/import", async (c) => {
   try {
     const config = getEnv(c.env);
@@ -338,6 +439,7 @@ internal.post("/data/reset", async (c) => {
       db.delete(customers),
       db.delete(suppliers),
       db.delete(parties),
+      db.delete(ingestionJobs),
       db.delete(auditLogs),
       db.delete(integrationEvents),
     ]);

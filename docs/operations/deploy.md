@@ -126,6 +126,29 @@ Bindings D1 e R2 configurados em `wrangler.toml`:
 - `TRIBUS_ERP_DB` → D1 database
 - `TRIBUS_ERP_R2` → R2 bucket
 
+### Fila de ingestão assíncrona (Cloudflare Queues)
+
+A ingestão em segundo plano usa uma **Queue** e a tabela D1 **`ingestion_jobs`** (migração `0012_ingestion_jobs.sql`). Sem fila configurada, `POST /internal/ingestion/jobs` responde **503** (`QUEUE_UNAVAILABLE`) e a UI mostra erro claro.
+
+1. Criar a fila (nome alinhado ao `wrangler.toml`, ex. `tribus-erp-ingestion-queue`):
+
+   ```bash
+   cd apps/erp-api
+   npx wrangler queues create tribus-erp-ingestion-queue
+   ```
+
+   Ou criar no dashboard Cloudflare → Queues.
+
+2. O `wrangler.toml` já declara producer/consumer com binding **`INGESTION_QUEUE`** e `max_batch_size = 1` no consumer de ingestão.
+
+3. Aplicar migrations D1 (inclui `ingestion_jobs`) antes ou no mesmo ciclo de deploy:
+
+   ```bash
+   npx wrangler d1 migrations apply tribus-erp-db --remote
+   ```
+
+**erp-web (opcional):** `INGESTION_SYNC_MAX_OBJECTS`, `INGESTION_SYNC_MAX_BODY_BYTES` — limiares acima dos quais `POST /api/admin/ingestion/execute` usa o modo assíncrono (ver `ingestion-sync-thresholds.ts`).
+
 ---
 
 ## Migrations

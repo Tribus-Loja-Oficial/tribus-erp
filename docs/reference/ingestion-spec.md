@@ -2,8 +2,10 @@
 
 Contrato espelhado no **tribus-hub**: envelope `version` / `mode` / `objects`, `client_ref` único, `refMap` no resultado, validação semântica de campos `*Ref`, execução ordenada por dependência.
 
-- **API:** `POST /internal/ingestion/validate` e `POST /internal/ingestion/execute` (Bearer interno, igual a `/internal/orders/ingest`).
-- **Web:** apenas **administradores** vêem o botão **Ingestão** no header. A **execução** e o **dry-run** usam rotas `POST /api/admin/ingestion/execute` e `POST /api/admin/ingestion/dry-run` com **`maxDuration` alargado** (até 300s na execução no Vercel Pro), para o browser poder **esperar na mesma página** até ao JSON completo — sem fila assíncrona. A **validação** continua por server action (rápida). O segredo da API ERP não sai para o browser.
+- **API:** `POST /internal/ingestion/validate`, `POST /internal/ingestion/execute`, `POST /internal/ingestion/jobs`, `GET /internal/ingestion/jobs/:id` (Bearer interno, igual a `/internal/orders/ingest`).
+- **Web:** apenas **administradores** vêem o botão **Ingestão** no header. O **dry-run** usa `POST /api/admin/ingestion/dry-run`. A **execução** usa `POST /api/admin/ingestion/execute`: payloads **pequenos** continuam **síncronos** (proxy ao Worker até ao resultado); payloads **grandes** são **enfileirados** no Worker (`202` + `jobId`) e o modal faz **polling** em `GET /api/admin/ingestion/jobs/[id]` até `completed` / `failed`. A **validação** continua por server action (rápida). O segredo da API ERP não sai para o browser.
+
+**Limites Vercel:** no plano **Hobby**, o teto prático por Function é ~**60 s** — o `maxDuration` alto na rota **não** remove esse limite no Hobby; usar **`skipProductImageUrls`** e lotes menores quando o sync estiver no limite. No **Pro**, durações maiores são possíveis conforme a documentação Vercel.
 
 ## Convenção JSON
 
@@ -126,6 +128,23 @@ Se o envelope `dryRun` + `payload` for inválido (Zod), `valid: false` e mensage
 - `200` se nenhuma falha; `207` se criados/actualizados/ignorados + falhas; `422` se tudo falhou.
 - Corpo: `{ data: { total, created, updated, skipped, failed, items, refMap } }`.
   - `items[].status`: `"created"` | `"updated"` | `"skipped"` | `"failed"`.
+
+### Modo assíncrono (fila + estado na UI)
+
+Para **um único** `executeIngestion` por payload (referências `*Ref` válidas no mesmo lote), cargas grandes não devem partir o JSON em vários executes sem alterar regras: o Worker grava o payload num job em **D1** (`ingestion_jobs`) e o **consumer** da fila Cloudflare corre **`executeIngestion` uma vez**, actualizando progresso durante o loop.
+
+**Rotas internas:**
+
+| Rota                               | Descrição                                                                                                                                                                                                 |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /internal/ingestion/jobs`    | Valida o envelope; insere job `queued`; `queue.send({ jobId })`; **`202`** `{ data: { jobId, status: "queued" } }`. Sem binding `INGESTION_QUEUE`: **`503`** `{ code: "QUEUE_UNAVAILABLE", message: … }`. |
+| `GET /internal/ingestion/jobs/:id` | **`200`** `{ data: { jobId, status, progress: { processed, total }, result?, error?, updatedAt, startedAt?, finishedAt? } }`.                                                                             |
+
+**Decisão sync vs async (erp-web, servidor):** enfileira se `objects.length` **ou** o tamanho em bytes do JSON serializado exceder limiares. Por defeito: **80** objectos e **512 KiB** (`apps/erp-web/src/lib/ingestion-sync-thresholds.ts`). Sobrescrever com **`INGESTION_SYNC_MAX_OBJECTS`** e **`INGESTION_SYNC_MAX_BODY_BYTES`** (variáveis de ambiente no deploy Vercel).
+
+**Web:** `POST /api/admin/ingestion/execute` devolve `202` no ramo async (header opcional `X-Ingestion-Mode: async`). O cliente consulta `GET /api/admin/ingestion/jobs/[id]` em intervalos (~2 s) até estado terminal; o resultado final replica o `data` da execução síncrona (`items`, contagens, `refMap`).
+
+**Operações:** criar a fila (`tribus-erp-ingestion-queue`), binding no Worker, migração D1 `ingestion_jobs` — ver [deploy.md](../operations/deploy.md).
 
 ## Schema JSON e exemplos (contrato para IA)
 

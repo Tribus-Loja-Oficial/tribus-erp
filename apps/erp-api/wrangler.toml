@@ -18,6 +18,15 @@ migrations_dir = "src/db/migrations"
 binding = "TRIBUS_ERP_R2"
 bucket_name = "tribus-erp-documents"
 
+[[queues.producers]]
+binding = "INGESTION_QUEUE"
+queue = "tribus-erp-ingestion-queue"
+
+[[queues.consumers]]
+queue = "tribus-erp-ingestion-queue"
+max_batch_size = 1
+max_batch_timeout = 30
+
 [observability]
 enabled = true
 
@@ -38,3 +47,12 @@ migrations_dir = "src/db/migrations"
 [[env.production.r2_buckets]]
 binding = "TRIBUS_ERP_R2"
 bucket_name = "tribus-erp-documents"
+
+[[env.production.queues.producers]]
+binding = "INGESTION_QUEUE"
+queue = "tribus-erp-ingestion-queue"
+
+[[env.production.queues.consumers]]
+queue = "tribus-erp-ingestion-queue"
+max_batch_size = 1
+max_batch_timeout = 30

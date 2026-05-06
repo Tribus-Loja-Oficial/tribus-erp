@@ -757,6 +757,29 @@ export const integrationEvents = sqliteTable(
   ],
 );
 
+export const ingestionJobs = sqliteTable(
+  "ingestion_jobs",
+  {
+    id: text("id").primaryKey(),
+    status: text("status", {
+      enum: ["queued", "running", "completed", "failed"],
+    }).notNull(),
+    payloadJson: text("payload_json").notNull(),
+    progressProcessed: integer("progress_processed").notNull().default(0),
+    progressTotal: integer("progress_total").notNull().default(0),
+    resultJson: text("result_json"),
+    errorMessage: text("error_message"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    startedAt: text("started_at"),
+    finishedAt: text("finished_at"),
+  },
+  (t) => [
+    index("ingestion_jobs_status_idx").on(t.status),
+    index("ingestion_jobs_created_at_idx").on(t.createdAt),
+  ],
+);
+
 // ─── Purchases ──────────────────────────────────────────────────────────────
 
 export const purchaseOrders = sqliteTable(

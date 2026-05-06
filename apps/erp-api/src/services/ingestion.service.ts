@@ -1177,7 +1177,11 @@ export function createIngestionService(db: AppDb, storage: StorageProvider | und
 
     async executeIngestion(
       payload: IngestionPayload,
-      options?: { actorId?: string | null },
+      options?: {
+        actorId?: string | null;
+        /** Chamado durante o processamento (ex.: jobs assíncronos); com throttle interno. */
+        onProgress?: (p: { processed: number; total: number }) => void | Promise<void>;
+      },
     ): Promise<IngestionResult> {
       const validation = validateIngestionPayload(payload);
       if (!validation.valid) {
@@ -1201,6 +1205,26 @@ export function createIngestionService(db: AppDb, storage: StorageProvider | und
       const originalIndexMap = new Map<IngestionObject, number>(
         payload.objects.map((obj, i) => [obj, i]),
       );
+
+      const totalObjects = sortedObjects.length;
+      let processedCount = 0;
+      let lastProgressEmitMs = 0;
+      let lastProgressEmittedCount = 0;
+      const PROGRESS_EMIT_MIN_MS = 500;
+      const PROGRESS_EMIT_MIN_STEP = 25;
+
+      const emitProgressIfNeeded = async () => {
+        const onProgress = options?.onProgress;
+        if (!onProgress) return;
+        const now = Date.now();
+        const isLast = processedCount >= totalObjects;
+        const stepOk = processedCount - lastProgressEmittedCount >= PROGRESS_EMIT_MIN_STEP;
+        const timeOk = now - lastProgressEmitMs >= PROGRESS_EMIT_MIN_MS;
+        if (!isLast && !stepOk && !timeOk) return;
+        lastProgressEmitMs = now;
+        lastProgressEmittedCount = processedCount;
+        await onProgress({ processed: processedCount, total: totalObjects });
+      };
 
       for (const obj of sortedObjects) {
         const originalIndex = originalIndexMap.get(obj) ?? -1;
@@ -1231,6 +1255,9 @@ export function createIngestionService(db: AppDb, storage: StorageProvider | und
           items.push({ ...itemBase, status: "failed", error: message });
           failed++;
         }
+
+        processedCount++;
+        await emitProgressIfNeeded();
       }
 
       items.sort((a, b) => a.index - b.index);
