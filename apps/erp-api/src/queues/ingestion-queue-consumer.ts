@@ -9,8 +9,10 @@ import { logger } from "../observability/logger.js";
 
 type JobMessage = { jobId?: string };
 
-/** Conservador para contas com CPU por invocação ~50 ms; sobrescrever com INGESTION_QUEUE_CHUNK_SIZE. */
-const DEFAULT_QUEUE_CHUNK = 10;
+/** Conservador para contas free: menos objectos por execução do consumer. */
+const DEFAULT_QUEUE_CHUNK = 5;
+/** Orçamento padrão de URLs de imagem por execução (main + galeria). */
+const DEFAULT_IMAGE_URL_BUDGET = 12;
 
 function parseChunkState(raw: string | null | undefined): IngestionChunkState | null {
   if (raw == null || !String(raw).trim()) return null;
@@ -39,6 +41,12 @@ function queueChunkSize(env: Env): number {
   return DEFAULT_QUEUE_CHUNK;
 }
 
+function imageUrlBudgetPerRun(env: Env): number {
+  const n = Number(env.INGESTION_QUEUE_MAX_IMAGE_URLS_PER_RUN);
+  if (Number.isFinite(n) && n >= 0) return Math.min(Math.floor(n), 500);
+  return DEFAULT_IMAGE_URL_BUDGET;
+}
+
 export async function handleIngestionQueue(
   batch: MessageBatch<JobMessage>,
   env: Env,
@@ -51,6 +59,7 @@ export async function handleIngestionQueue(
   const now = () => new Date().toISOString();
   const queue = env.INGESTION_QUEUE;
   const chunkSize = queueChunkSize(env);
+  const imageBudget = imageUrlBudgetPerRun(env);
 
   for (const msg of batch.messages) {
     try {
@@ -138,6 +147,7 @@ export async function handleIngestionQueue(
       try {
         const outcome = await ingestion.executeIngestionChunk(payloadData, chunkState, chunkSize, {
           assumePayloadSemanticallyValid: assumeSemanticValid,
+          maxImageUrlsPerRun: imageBudget,
         });
 
         if (outcome.done) {

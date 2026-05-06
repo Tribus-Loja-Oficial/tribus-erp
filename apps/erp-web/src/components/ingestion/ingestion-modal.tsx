@@ -269,6 +269,13 @@ function ResultPanel({ result }: { result: IngestionExecuteResponse["data"] }) {
   const ok = result.failed === 0;
   const totalFail =
     result.created === 0 && (result.updated ?? 0) === 0 && (result.skipped ?? 0) === 0;
+  const [showSuccessItems, setShowSuccessItems] = useState(false);
+  const issueItems = result.items.filter(
+    (item) => item.status === "failed" || item.warnings?.length,
+  );
+  const successItems = result.items.filter(
+    (item) => item.status !== "failed" && (!item.warnings || item.warnings.length === 0),
+  );
   return (
     <div className="flex h-full flex-col gap-3">
       <div
@@ -300,42 +307,89 @@ function ResultPanel({ result }: { result: IngestionExecuteResponse["data"] }) {
           </p>
         </div>
       </div>
-      <ul className="max-h-[min(40vh,320px)] space-y-1.5 overflow-y-auto text-xs">
-        {result.items.map((item) => (
-          <li
-            key={item.index}
-            className={cn(
-              "rounded-md border px-2 py-1.5",
-              item.status === "created" && "border-emerald-200 bg-emerald-50/50",
-              item.status === "updated" && "border-blue-200 bg-blue-50/50",
-              item.status === "skipped" && "border-zinc-200 bg-zinc-50/50",
-              item.status === "failed" && "border-red-200 bg-red-50/50",
-            )}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between rounded-md border border-amber-200 bg-amber-50/40 px-2 py-1.5">
+          <p className="text-xs font-semibold text-amber-900">
+            Atenção ({issueItems.length}) · warnings e erros
+          </p>
+        </div>
+        <ul className="max-h-[min(28vh,220px)] space-y-1.5 overflow-y-auto text-xs">
+          {issueItems.length === 0 ? (
+            <li className="rounded-md border border-emerald-200 bg-emerald-50/60 px-2 py-1.5 text-emerald-800">
+              Sem warnings/erros neste lote.
+            </li>
+          ) : (
+            issueItems.map((item) => (
+              <li
+                key={`issue-${item.index}`}
+                className={cn(
+                  "rounded-md border px-2 py-1.5",
+                  item.status === "failed" && "border-red-200 bg-red-50/50",
+                  item.status !== "failed" && "border-amber-200 bg-amber-50/50",
+                )}
+              >
+                <span className="font-mono text-zinc-500">[{item.index}]</span>{" "}
+                {INGESTION_TYPE_LABELS_UI[item.type as keyof typeof INGESTION_TYPE_LABELS_UI] ??
+                  item.type}{" "}
+                {item.clientRef ? (
+                  <span className="font-mono text-[10px] text-zinc-500"> ref:{item.clientRef}</span>
+                ) : null}
+                {item.status === "failed" && (
+                  <span className="block text-red-800">{item.error}</span>
+                )}
+                {item.warnings?.map((w, j) => (
+                  <div key={j} className="text-amber-800">
+                    {w}
+                  </div>
+                ))}
+              </li>
+            ))
+          )}
+        </ul>
+      </div>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between rounded-md border border-emerald-200 bg-emerald-50/40 px-2 py-1.5">
+          <p className="text-xs font-semibold text-emerald-900">Sucessos ({successItems.length})</p>
+          <button
+            type="button"
+            onClick={() => setShowSuccessItems((v) => !v)}
+            className="text-[11px] font-medium text-emerald-800 hover:underline"
           >
-            <span className="font-mono text-zinc-500">[{item.index}]</span>{" "}
-            {INGESTION_TYPE_LABELS_UI[item.type as keyof typeof INGESTION_TYPE_LABELS_UI] ??
-              item.type}{" "}
-            {item.clientRef ? (
-              <span className="font-mono text-[10px] text-zinc-500"> ref:{item.clientRef}</span>
-            ) : null}
-            {item.status === "created" && (
-              <span className="block font-mono text-emerald-800">ID: {item.id}</span>
-            )}
-            {item.status === "updated" && (
-              <span className="block font-mono text-blue-800">Actualizado ID: {item.id}</span>
-            )}
-            {item.status === "skipped" && (
-              <span className="block text-zinc-500">Já existe (ID: {item.id})</span>
-            )}
-            {item.status === "failed" && <span className="block text-red-800">{item.error}</span>}
-            {item.warnings?.map((w, j) => (
-              <div key={j} className="text-amber-800">
-                {w}
-              </div>
+            {showSuccessItems ? "Ocultar" : "Mostrar"}
+          </button>
+        </div>
+        {showSuccessItems ? (
+          <ul className="max-h-[min(24vh,180px)] space-y-1.5 overflow-y-auto text-xs">
+            {successItems.map((item) => (
+              <li
+                key={`ok-${item.index}`}
+                className={cn(
+                  "rounded-md border px-2 py-1.5",
+                  item.status === "created" && "border-emerald-200 bg-emerald-50/50",
+                  item.status === "updated" && "border-blue-200 bg-blue-50/50",
+                  item.status === "skipped" && "border-zinc-200 bg-zinc-50/50",
+                )}
+              >
+                <span className="font-mono text-zinc-500">[{item.index}]</span>{" "}
+                {INGESTION_TYPE_LABELS_UI[item.type as keyof typeof INGESTION_TYPE_LABELS_UI] ??
+                  item.type}{" "}
+                {item.clientRef ? (
+                  <span className="font-mono text-[10px] text-zinc-500"> ref:{item.clientRef}</span>
+                ) : null}
+                {item.status === "created" && (
+                  <span className="block font-mono text-emerald-800">ID: {item.id}</span>
+                )}
+                {item.status === "updated" && (
+                  <span className="block font-mono text-blue-800">Actualizado ID: {item.id}</span>
+                )}
+                {item.status === "skipped" && (
+                  <span className="block text-zinc-500">Já existe (ID: {item.id})</span>
+                )}
+              </li>
             ))}
-          </li>
-        ))}
-      </ul>
+          </ul>
+        ) : null}
+      </div>
       {Object.keys(result.refMap).length > 0 && (
         <pre className="max-h-32 overflow-auto rounded bg-zinc-900 p-2 font-mono text-[10px] text-zinc-100">
           {JSON.stringify(result.refMap, null, 2)}

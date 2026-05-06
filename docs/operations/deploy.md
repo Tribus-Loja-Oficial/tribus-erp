@@ -149,7 +149,12 @@ A ingestão em segundo plano usa uma **Queue** e a tabela D1 **`ingestion_jobs`*
 
 **erp-web (opcional):** `INGESTION_SYNC_MAX_OBJECTS`, `INGESTION_SYNC_MAX_BODY_BYTES` — limiares acima dos quais `POST /api/admin/ingestion/execute` usa o modo assíncrono (ver `ingestion-sync-thresholds.ts`).
 
-**erp-api / Worker (opcional):** `INGESTION_QUEUE_CHUNK_SIZE` — objectos por invocação do consumer (por defeito **10**; máx. **200** no código). No **plano Free**, reduzir (ex. `3`–`5` ou `1`) se aparecer `exceededCpu`.
+**erp-api / Worker (opcional):**
+
+- `INGESTION_QUEUE_CHUNK_SIZE` — objectos por invocação do consumer (por defeito **5**; máx. **200** no código).
+- `INGESTION_QUEUE_MAX_IMAGE_URLS_PER_RUN` — orçamento de URLs de imagens por execução (main + galeria; por defeito **12**).
+
+No **plano Free**, reduzir chunk (ex. `3` ou `1`) e/ou budget de imagens se aparecer `exceededCpu` / `Too many subrequests`.
 
 **Workers Paid:** podes adicionar ao `wrangler.toml` uma secção `[limits]` / `[env.production.limits]` com `cpu_ms` (ver [documentação](https://developers.cloudflare.com/workers/wrangler/configuration/#limits)). No **plano Free** essa secção **não** é permitida — o `wrangler deploy` falha com erro `100328`.
 

@@ -107,6 +107,48 @@ function sortByDependency(objects: IngestionObject[]): IngestionObject[] {
   return [...objects].sort((a, b) => INGESTION_TYPE_ORDER[a.type] - INGESTION_TYPE_ORDER[b.type]);
 }
 
+/**
+ * O modelo de composição BOM não permite duas linhas activas com o mesmo
+ * parent+child. Quando o payload traz linhas repetidas para o mesmo par,
+ * consolidamos antes de executar para evitar UNIQUE no D1.
+ */
+function normalizeIngestionPayload(payload: IngestionPayload): IngestionPayload {
+  const out: IngestionObject[] = [];
+  type CompositionObject = Extract<IngestionObject, { type: "product_composition" }>;
+  const byCompKey = new Map<string, CompositionObject>();
+
+  for (const obj of payload.objects) {
+    if (obj.type !== "product_composition") {
+      out.push(obj);
+      continue;
+    }
+
+    const key = [
+      obj.data.parentProductRef,
+      obj.data.childProductRef ?? "",
+      obj.data.childSku ?? "",
+      obj.data.compositionType,
+      obj.data.packagingChannel ?? "",
+    ].join("::");
+
+    const prev = byCompKey.get(key);
+    if (!prev) {
+      byCompKey.set(key, obj);
+      out.push(obj);
+      continue;
+    }
+
+    // Soma deterministicamente a quantidade para o mesmo parent+child.
+    prev.data.quantity += obj.data.quantity;
+    if (obj.data.notes?.trim()) {
+      const base = prev.data.notes?.trim();
+      prev.data.notes = base ? `${base}\n${obj.data.notes}` : obj.data.notes;
+    }
+  }
+
+  return { ...payload, objects: out };
+}
+
 function stripProductIngestionUrls(
   data: ProductIngestionData,
 ): Omit<
@@ -848,7 +890,13 @@ async function resolveChildProductIdWithBatch(
 
 type IngestionObjectExecOpts = {
   skipProductImageUrls?: boolean;
+  /** Orçamento de URLs de imagem por execução (main + galeria), usado no async chunked. */
+  imageUrlBudgetRemaining?: number;
 };
+
+function countImageUrlsInProductData(data: ProductIngestionData): number {
+  return (data.main_image_url ? 1 : 0) + (data.gallery_image_urls?.length ?? 0);
+}
 
 async function createIngestionObject(
   obj: IngestionObject,
@@ -981,9 +1029,20 @@ async function createIngestionObject(
         const updated = await ctx.productsRepo.upsertProductBySlugOrSku(identifier, patch);
         if (updated) {
           const hasUrls = Boolean(obj.data.main_image_url || obj.data.gallery_image_urls?.length);
+          const imageUrlCount = countImageUrlsInProductData(
+            obj.data as Parameters<typeof countImageUrlsInProductData>[0],
+          );
+          const budgetExceeded =
+            hasUrls &&
+            execOpts.imageUrlBudgetRemaining !== undefined &&
+            execOpts.imageUrlBudgetRemaining < imageUrlCount;
           if (hasUrls && execOpts.skipProductImageUrls) {
             warnings.push(
               "Imagens por URL omitidas (envelope skipProductImageUrls). Produto actualizado sem alterar imagens.",
+            );
+          } else if (budgetExceeded) {
+            warnings.push(
+              `Imagens por URL adiadas para próximo chunk (budget ${execOpts.imageUrlBudgetRemaining}/${imageUrlCount}).`,
             );
           } else if (hasUrls && ctx.media) {
             const w = await applyProductImagesFromUrls(
@@ -993,6 +1052,12 @@ async function createIngestionObject(
               obj.data as Parameters<typeof applyProductImagesFromUrls>[3],
             );
             warnings.push(...w);
+            if (execOpts.imageUrlBudgetRemaining !== undefined) {
+              execOpts.imageUrlBudgetRemaining = Math.max(
+                0,
+                execOpts.imageUrlBudgetRemaining - imageUrlCount,
+              );
+            }
           }
           return { id: updated.id, outcome: "updated", warnings };
         }
@@ -1009,9 +1074,20 @@ async function createIngestionObject(
       );
       const product = await ctx.productService.create(input);
       const hasUrls = Boolean(obj.data.main_image_url || obj.data.gallery_image_urls?.length);
+      const imageUrlCount = countImageUrlsInProductData(
+        obj.data as Parameters<typeof countImageUrlsInProductData>[0],
+      );
+      const budgetExceeded =
+        hasUrls &&
+        execOpts.imageUrlBudgetRemaining !== undefined &&
+        execOpts.imageUrlBudgetRemaining < imageUrlCount;
       if (hasUrls && execOpts.skipProductImageUrls) {
         warnings.push(
           "Imagens por URL omitidas (envelope skipProductImageUrls). Produto criado sem imagens.",
+        );
+      } else if (budgetExceeded) {
+        warnings.push(
+          `Imagens por URL adiadas para próximo chunk (budget ${execOpts.imageUrlBudgetRemaining}/${imageUrlCount}).`,
         );
       } else if (hasUrls && !ctx.media) {
         if (obj.data.main_image_url) warnings.push("Imagem principal (URL): R2 indisponível.");
@@ -1027,6 +1103,12 @@ async function createIngestionObject(
           obj.data as Parameters<typeof applyProductImagesFromUrls>[3],
         );
         warnings.push(...w);
+        if (execOpts.imageUrlBudgetRemaining !== undefined) {
+          execOpts.imageUrlBudgetRemaining = Math.max(
+            0,
+            execOpts.imageUrlBudgetRemaining - imageUrlCount,
+          );
+        }
       }
       return { id: product.id, outcome: "created", warnings };
     }
@@ -1169,7 +1251,8 @@ export function createIngestionService(db: AppDb, storage: StorageProvider | und
     validateIngestionPayload,
 
     async dryRunIngestion(payload: IngestionPayload): Promise<DryRunIngestionResult> {
-      const validation = validateIngestionPayload(payload);
+      const normalizedPayload = normalizeIngestionPayload(payload);
+      const validation = validateIngestionPayload(normalizedPayload);
       if (!validation.valid) {
         return {
           dryRun: true,
@@ -1183,7 +1266,7 @@ export function createIngestionService(db: AppDb, storage: StorageProvider | und
         };
       }
 
-      const sortedObjects = sortByDependency(payload.objects);
+      const sortedObjects = sortByDependency(normalizedPayload.objects);
       const refMap: Record<string, string> = {};
       const skuToId = new Map<string, string>();
       const items: DryRunItemResult[] = [];
@@ -1193,7 +1276,7 @@ export function createIngestionService(db: AppDb, storage: StorageProvider | und
       let failed = 0;
 
       const originalIndexMap = new Map<IngestionObject, number>(
-        payload.objects.map((obj, i) => [obj, i]),
+        normalizedPayload.objects.map((obj, i) => [obj, i]),
       );
 
       for (const obj of sortedObjects) {
@@ -1253,7 +1336,8 @@ export function createIngestionService(db: AppDb, storage: StorageProvider | und
         onProgress?: (p: { processed: number; total: number }) => void | Promise<void>;
       },
     ): Promise<IngestionResult> {
-      const validation = validateIngestionPayload(payload);
+      const normalizedPayload = normalizeIngestionPayload(payload);
+      const validation = validateIngestionPayload(normalizedPayload);
       if (!validation.valid) {
         throw new ValidationError(
           "Payload de ingestão inválido",
@@ -1261,7 +1345,7 @@ export function createIngestionService(db: AppDb, storage: StorageProvider | und
         );
       }
 
-      const sortedObjects = sortByDependency(payload.objects);
+      const sortedObjects = sortByDependency(normalizedPayload.objects);
       const refMap: Record<string, string> = {};
       const items: IngestionItemResult[] = [];
       const execOpts: IngestionObjectExecOpts = {
@@ -1269,7 +1353,7 @@ export function createIngestionService(db: AppDb, storage: StorageProvider | und
       };
 
       const originalIndexMap = new Map<IngestionObject, number>(
-        payload.objects.map((obj, i) => [obj, i]),
+        normalizedPayload.objects.map((obj, i) => [obj, i]),
       );
 
       const totalObjects = sortedObjects.length;
@@ -1322,7 +1406,7 @@ export function createIngestionService(db: AppDb, storage: StorageProvider | und
           entityType: "ingestion",
           entityId: "execute",
           metadataJson: JSON.stringify({
-            total: payload.objects.length,
+            total: normalizedPayload.objects.length,
             created,
             updated,
             skipped,
@@ -1335,13 +1419,21 @@ export function createIngestionService(db: AppDb, storage: StorageProvider | und
       } catch (e) {
         logger.error("ingestion audit log failed after execute", {
           error: String(e),
-          total: payload.objects.length,
+          total: normalizedPayload.objects.length,
           created,
           failed,
         });
       }
 
-      return { total: payload.objects.length, created, updated, skipped, failed, items, refMap };
+      return {
+        total: normalizedPayload.objects.length,
+        created,
+        updated,
+        skipped,
+        failed,
+        items,
+        refMap,
+      };
     },
 
     /**
@@ -1357,19 +1449,22 @@ export function createIngestionService(db: AppDb, storage: StorageProvider | und
         onProgress?: (p: { processed: number; total: number }) => void | Promise<void>;
         /** Quando true, o payload já foi validado no 1.º chunk; poupa CPU nas mensagens seguintes. */
         assumePayloadSemanticallyValid?: boolean;
+        /** Orçamento de URLs de imagens por execução de chunk (evita subrequests excessivos). */
+        maxImageUrlsPerRun?: number;
       },
     ): Promise<
       | { done: true; result: IngestionResult }
       | { done: false; state: IngestionChunkState; processedSoFar: number; total: number }
     > {
+      const normalizedPayload = normalizeIngestionPayload(payload);
       const validation = options?.assumePayloadSemanticallyValid
         ? ({
             valid: true,
             errors: [],
             warnings: [],
-            summary: ingestionPayloadSummaryOnly(payload),
+            summary: ingestionPayloadSummaryOnly(normalizedPayload),
           } satisfies ValidationResult)
-        : validateIngestionPayload(payload);
+        : validateIngestionPayload(normalizedPayload);
       if (!validation.valid) {
         throw new ValidationError(
           "Payload de ingestão inválido",
@@ -1377,7 +1472,7 @@ export function createIngestionService(db: AppDb, storage: StorageProvider | und
         );
       }
 
-      const sortedObjects = sortByDependency(payload.objects);
+      const sortedObjects = sortByDependency(normalizedPayload.objects);
       const totalSorted = sortedObjects.length;
       const chunk = Math.max(1, Math.floor(chunkSize));
 
@@ -1413,7 +1508,7 @@ export function createIngestionService(db: AppDb, storage: StorageProvider | und
             entityType: "ingestion",
             entityId: "execute",
             metadataJson: JSON.stringify({
-              total: payload.objects.length,
+              total: normalizedPayload.objects.length,
               created: s.created,
               updated: s.updated,
               skipped: s.skipped,
@@ -1427,7 +1522,7 @@ export function createIngestionService(db: AppDb, storage: StorageProvider | und
         } catch (e) {
           logger.error("ingestion audit log failed after chunked execute", {
             error: String(e),
-            total: payload.objects.length,
+            total: normalizedPayload.objects.length,
             created: s.created,
             failed: s.failed,
           });
@@ -1452,10 +1547,14 @@ export function createIngestionService(db: AppDb, storage: StorageProvider | und
 
       const endIdx = Math.min(s.cursor + chunk, totalSorted);
       const originalIndexMap = new Map<IngestionObject, number>(
-        payload.objects.map((obj, i) => [obj, i]),
+        normalizedPayload.objects.map((obj, i) => [obj, i]),
       );
       const execOpts: IngestionObjectExecOpts = {
         skipProductImageUrls: payload.skipProductImageUrls === true,
+        imageUrlBudgetRemaining:
+          options?.maxImageUrlsPerRun !== undefined
+            ? Math.max(0, Math.floor(options.maxImageUrlsPerRun))
+            : undefined,
       };
       const counts = {
         created: s.created,
