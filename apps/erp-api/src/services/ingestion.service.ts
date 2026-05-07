@@ -1160,9 +1160,6 @@ async function createIngestionObject(
               mainImageUrl: obj.data.main_image_url,
               galleryImageUrls: [...(obj.data.gallery_image_urls ?? [])],
             });
-            warnings.push(
-              `Imagens por URL enfileiradas para processamento automático (budget ${execOpts.imageUrlBudgetRemaining}/${imageUrlCount}).`,
-            );
           } else if (hasUrls && ctx.media) {
             const w = await applyProductImagesFromUrls(
               ctx.media,
@@ -1210,9 +1207,6 @@ async function createIngestionObject(
           mainImageUrl: obj.data.main_image_url,
           galleryImageUrls: [...(obj.data.gallery_image_urls ?? [])],
         });
-        warnings.push(
-          `Imagens por URL enfileiradas para processamento automático (budget ${execOpts.imageUrlBudgetRemaining}/${imageUrlCount}).`,
-        );
       } else if (hasUrls && !ctx.media) {
         if (obj.data.main_image_url) warnings.push("Imagem principal (URL): R2 indisponível.");
         (obj.data.gallery_image_urls ?? []).forEach((_, i) =>
