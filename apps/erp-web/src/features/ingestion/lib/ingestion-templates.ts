@@ -246,4 +246,36 @@ export const INGESTION_TEMPLATES: IngestionTemplate[] = [
       ],
     },
   },
+  {
+    id: "composition_set_replace_by_parent_sku",
+    label: "Substituir composição (SKU do pai)",
+    description:
+      "Remove linhas no escopo (replaceTypes) e grava novas linhas numa operação atómica. Ajuste parentProductSku e childProductSku para produtos existentes na base.",
+    payload: {
+      version: "1.0",
+      mode: "create",
+      objects: [
+        {
+          type: "product_composition_set",
+          action: "replace",
+          client_ref: "composition-set-example",
+          data: {
+            parentProductSku: "pf-00001",
+            replaceTypes: ["bom", "packaging"],
+            items: [
+              {
+                childProductSku: "CMP-EXEMPLO-001",
+                quantity: 1,
+                quantityUnit: "m",
+                compositionType: "bom",
+                required: true,
+                isDefault: true,
+                notes: "Componente após substituição.",
+              },
+            ],
+          },
+        },
+      ],
+    },
+  },
 ];

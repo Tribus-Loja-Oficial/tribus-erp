@@ -22,6 +22,7 @@ export type IngestionObjectTypeId =
   | "product"
   | "product_variant"
   | "product_composition"
+  | "product_composition_set"
   | "inventory_movement"
   | "order"
   | "purchase_order"
@@ -66,6 +67,7 @@ export const INGESTION_TYPE_LABELS_UI: Record<IngestionObjectTypeId, string> = {
   product: "Produto",
   product_variant: "Variante",
   product_composition: "Composição (BOM/embalagem)",
+  product_composition_set: "Substituição de composição",
   inventory_movement: "Movimento de stock",
   order: "Pedido",
   purchase_order: "Ordem de compra",
@@ -255,6 +257,67 @@ export const INGESTION_TYPE_REFERENCES: IngestionTypeReference[] = [
         requirement: "required",
         valueType: "enum",
         enumValues: ["packaging", "bom", "kit", "bundle", "accessory", "included"],
+      },
+      {
+        key: "packagingChannel",
+        requirement: "conditional",
+        condition: "se compositionType = packaging",
+        valueType: "online | presential",
+      },
+    ],
+  },
+  {
+    type: "product_composition_set",
+    summary:
+      'Substitui linhas de composição existentes (action obrigatória "replace"). Arquiva o escopo definido por replaceTypes e packagingChannel opcional; insere items num único batch. Pai: exactamente um de parentProductId, parentProductRef, parentProductSku, parentProductSlug.',
+    envelope: [
+      { key: "type", requirement: "required", hint: "literal product_composition_set" },
+      { key: "action", requirement: "required", hint: 'deve ser "replace"' },
+      { key: "client_ref", requirement: "optional", hint: "único no payload" },
+      { key: "data", requirement: "required", hint: "replaceTypes, items, identificador do pai" },
+    ],
+    dataFields: [
+      {
+        key: "parentProductId",
+        requirement: "conditional",
+        condition: "exactamente um identificador do pai",
+        valueType: "string (ID na base)",
+      },
+      {
+        key: "parentProductRef",
+        requirement: "conditional",
+        condition: "exactamente um identificador do pai",
+        valueType: "string (client_ref de product no payload)",
+      },
+      {
+        key: "parentProductSku",
+        requirement: "conditional",
+        condition: "exactamente um identificador do pai",
+        valueType: "string",
+      },
+      {
+        key: "parentProductSlug",
+        requirement: "conditional",
+        condition: "exactamente um identificador do pai",
+        valueType: "string (slug ou SKU na base)",
+      },
+      {
+        key: "replaceTypes",
+        requirement: "required",
+        valueType: "array não vazio",
+        enumValues: ["packaging", "bom", "kit", "bundle", "accessory", "included"],
+      },
+      {
+        key: "packagingChannel",
+        requirement: "optional",
+        valueType: "online | presential",
+        hint: "só com replaceTypes incluindo packaging; restringe o arquivo a esse canal",
+      },
+      {
+        key: "items",
+        requirement: "required",
+        valueType:
+          "array (quantity, compositionType, childProductRef|childProductId|childSku|childProductSku, …)",
       },
     ],
   },

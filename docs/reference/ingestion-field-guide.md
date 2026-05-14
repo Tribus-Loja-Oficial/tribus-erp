@@ -30,6 +30,8 @@ Campo opcional no envelope de cada objecto (ao lado de `type` e `client_ref`). C
 
 **Tipos sem suporte a upsert** (`stock_location`, `party`, `customer`, `supplier`, `product_variant`, `product_composition`, `inventory_movement`, `order`, `purchase_order`): o campo `action` é aceite pela validação mas ignorado em execução (comporta-se como `skip`).
 
+**`product_composition_set`:** exige **`action`: `"replace"`** no envelope. Substitui composição existente (arquiva linhas no escopo e insere `items`); não usa o mesmo modelo de `action` opcional acima.
+
 **Resultado no campo `status` de cada item:**
 
 | Status    | Significado                                            |
@@ -134,6 +136,16 @@ Valores: `purchase` | `sale` | `return` | `adjustment` | `production_in` | `prod
 - Não confundir com **`productType`** do produto filho (`raw_material`, `packaging`, …).
 - Tipo **embalagem** no sentido de negócio: use **`compositionType`: `packaging`** e preencha **`packagingChannel`**: `online` ou `presential` (regra do `refineProductComposition`).
 
+## `product_composition_set` — substituição em lote
+
+- **`type`:** `product_composition_set`; **`action`:** obrigatoriamente **`"replace"`**.
+- **Pai (exactamente um):** `parentProductId`, `parentProductRef`, `parentProductSku` ou `parentProductSlug`.
+- **`replaceTypes`:** subconjunto não vazio de `packaging` \| `bom` \| `kit` \| `bundle` \| `accessory` \| `included` — apenas linhas activas com esses tipos são arquivadas antes de inserir as novas.
+- **`packagingChannel`** (opcional): só permitido se `replaceTypes` incluir `packaging`; restringe o arquivo às linhas de embalagem desse canal (`online` \| `presential`).
+- **`items`:** linhas a criar (mesmas regras de `product_composition` por linha: filho via `childProductRef`, `childProductId`, `childSku` ou `childProductSku`; `packagingChannel` obrigatório em linhas `packaging`).
+- **Duplicados no mesmo `items`:** mesma chave natural (tipo + identificação do filho + canal) falha na validação semântica.
+- **`product_composition`** continua a servir para **acrescentar** uma linha; **`product_composition_set`** serve para **corrigir/repor** um conjunto sem duplicar nem apagar manualmente.
+
 ## `unitOfMeasure` (produto)
 
 Enum no backend: `unit` | `pair` | `meter` | `gram` | `kg` | `liter` | `package`.
@@ -186,6 +198,7 @@ Ficheiros em **`docs/examples/ingestion/`** (cada um validado em teste contra `i
 7. `07-full-tribus-product-example.json`
 8. `08-upsert-update-existing.json`
 9. `09-product-cost-snapshot-with-component-lines.json`
+10. `10-product-composition-set-replace.json`
 
 ## Mensagens de erro com “hint”
 

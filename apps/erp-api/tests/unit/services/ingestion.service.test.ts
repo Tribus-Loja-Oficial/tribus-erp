@@ -277,4 +277,37 @@ describe("validateIngestionPayload", () => {
     expect(result.valid).toBe(false);
     expect(result.errors.some((e) => e.field === "data.items[0].variantId")).toBe(true);
   });
+
+  it("flags duplicate natural keys in product_composition_set items", () => {
+    const result = validateIngestionPayload(
+      payloadWithObjects([
+        {
+          type: "product_composition_set",
+          action: "replace",
+          data: {
+            parentProductSku: "PARENT",
+            replaceTypes: ["bom"],
+            items: [
+              {
+                childProductSku: "CHILD",
+                quantity: 1,
+                compositionType: "bom",
+                required: true,
+                isDefault: true,
+              },
+              {
+                childProductSku: "CHILD",
+                quantity: 2,
+                compositionType: "bom",
+                required: true,
+                isDefault: true,
+              },
+            ],
+          },
+        },
+      ]),
+    );
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.field?.includes("items"))).toBe(true);
+  });
 });

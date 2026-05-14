@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import {
   validateIngestionAction,
   revalidateAfterIngestionAction,
+  type IngestionCompositionSetSummary,
   type IngestionDryRunResponse,
   type IngestionExecuteResponse,
   type IngestionValidationResponse,
@@ -69,6 +70,39 @@ function parseJsonSafe(text: string): { ok: boolean; error: string | null } {
   } catch (e) {
     return { ok: false, error: e instanceof SyntaxError ? e.message : "JSON inválido" };
   }
+}
+
+function payloadHasCompositionSetReplace(text: string): boolean {
+  try {
+    const o = JSON.parse(text) as { objects?: Array<{ type?: string }> };
+    return (
+      Array.isArray(o.objects) &&
+      o.objects.some((x) => x && typeof x === "object" && x.type === "product_composition_set")
+    );
+  } catch {
+    return false;
+  }
+}
+
+function CompositionSetOutcomeLines({ cs }: { cs: IngestionCompositionSetSummary }) {
+  const label = cs.parentSku ?? cs.parentSlug ?? cs.parentProductId;
+  return (
+    <>
+      <span className="mt-1 block text-[10px] text-zinc-600">
+        Produto <span className="font-mono">{label}</span>: removidas {cs.removedCount} linha(s),
+        criadas {cs.createdCount} linha(s).
+      </span>
+      {cs.itemErrors && cs.itemErrors.length > 0 ? (
+        <ul className="mt-1 list-inside space-y-0.5 text-[10px] text-red-800">
+          {cs.itemErrors.map((ie) => (
+            <li key={ie.index}>
+              items[{ie.index}]: {ie.message}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </>
+  );
 }
 
 function ValidationPanel({ result }: { result: IngestionValidationResponse["data"] }) {
@@ -184,11 +218,24 @@ function DryRunPanel({ result }: { result: IngestionDryRunResponse["data"] }) {
             ) : null}
             <span className="block text-[10px] tracking-wide text-zinc-500 uppercase">
               {item.plannedStatus === "created" && "Seria criado"}
-              {item.plannedStatus === "updated" && "Seria atualizado"}
+              {item.plannedStatus === "updated" &&
+                (item.type === "product_composition_set"
+                  ? "Substituiria composição"
+                  : "Seria atualizado")}
               {item.plannedStatus === "skipped" && "Seria ignorado (já existe)"}
               {item.plannedStatus === "failed" && "Falharia"}
             </span>
-            {item.detail ? <span className="block text-red-800">{item.detail}</span> : null}
+            {item.detail ? (
+              <span
+                className={cn(
+                  "block",
+                  item.plannedStatus === "failed" ? "text-red-800" : "text-zinc-700",
+                )}
+              >
+                {item.detail}
+              </span>
+            ) : null}
+            {item.compositionSet ? <CompositionSetOutcomeLines cs={item.compositionSet} /> : null}
           </li>
         ))}
       </ul>
@@ -271,7 +318,10 @@ function ResultPanel({ result }: { result: IngestionExecuteResponse["data"] }) {
     result.created === 0 && (result.updated ?? 0) === 0 && (result.skipped ?? 0) === 0;
   const [showSuccessItems, setShowSuccessItems] = useState(false);
   const issueItems = result.items.filter(
-    (item) => item.status === "failed" || item.warnings?.length,
+    (item) =>
+      item.status === "failed" ||
+      (item.warnings && item.warnings.length > 0) ||
+      Boolean(item.compositionSet?.itemErrors?.length),
   );
   const successItems = result.items.filter(
     (item) => item.status !== "failed" && (!item.warnings || item.warnings.length === 0),
@@ -337,6 +387,9 @@ function ResultPanel({ result }: { result: IngestionExecuteResponse["data"] }) {
                 {item.status === "failed" && (
                   <span className="block text-red-800">{item.error}</span>
                 )}
+                {item.compositionSet ? (
+                  <CompositionSetOutcomeLines cs={item.compositionSet} />
+                ) : null}
                 {item.warnings?.map((w, j) => (
                   <div key={j} className="text-amber-800">
                     {w}
@@ -380,11 +433,18 @@ function ResultPanel({ result }: { result: IngestionExecuteResponse["data"] }) {
                   <span className="block font-mono text-emerald-800">ID: {item.id}</span>
                 )}
                 {item.status === "updated" && (
-                  <span className="block font-mono text-blue-800">Atualizado ID: {item.id}</span>
+                  <span className="block font-mono text-blue-800">
+                    {item.type === "product_composition_set"
+                      ? `Composição substituída no produto ${item.id}`
+                      : `Atualizado ID: ${item.id}`}
+                  </span>
                 )}
                 {item.status === "skipped" && (
                   <span className="block text-zinc-500">Já existe (ID: {item.id})</span>
                 )}
+                {item.compositionSet ? (
+                  <CompositionSetOutcomeLines cs={item.compositionSet} />
+                ) : null}
               </li>
             ))}
           </ul>
@@ -703,6 +763,20 @@ export function IngestionModal({ open, onOpenChange }: IngestionModalProps) {
                 {step === "validated" && validation && (
                   <div className="flex min-h-0 flex-col gap-0">
                     <ValidationPanel result={validation} />
+                    {validation.valid && payloadHasCompositionSetReplace(jsonText) ? (
+                      <div className="mt-3 flex gap-2 rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-2.5">
+                        <AlertCircle className="h-4 w-4 shrink-0 text-amber-700" />
+                        <p className="text-[11px] leading-snug text-amber-950">
+                          Este payload inclui{" "}
+                          <span className="font-mono text-[10px]">product_composition_set</span>: na
+                          execução ou dry-run, as linhas de composição existentes no{" "}
+                          <strong>escopo</strong> (tipos em{" "}
+                          <span className="font-mono">replaceTypes</span>
+                          {", "}e canal de embalagem se aplicável) serão{" "}
+                          <strong>arquivadas e substituídas</strong>, não apenas acrescentadas.
+                        </p>
+                      </div>
+                    ) : null}
                     {dryRunResult && <DryRunPanel result={dryRunResult} />}
                     {activeJobId ? (
                       <AsyncIngestionJobPanel

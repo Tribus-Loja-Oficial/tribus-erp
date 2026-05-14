@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   INGESTION_MAX_OBJECTS,
   ingestionPayloadSchema,
+  productCompositionSetIngestionDataSchema,
   productIngestionDataSchema,
 } from "../../../src/schemas/ingestion.schemas.js";
 
@@ -51,6 +52,58 @@ describe("ingestionPayloadSchema", () => {
     expect(INGESTION_MAX_OBJECTS).toBe(50_000);
     const oversize = Array.from({ length: INGESTION_MAX_OBJECTS + 1 }, () => null);
     expect(z.array(z.any()).max(INGESTION_MAX_OBJECTS).safeParse(oversize).success).toBe(false);
+  });
+});
+
+describe("product_composition_set (Zod)", () => {
+  it("accepts replace payload with parentProductSku and childProductSku", () => {
+    const result = ingestionPayloadSchema.safeParse({
+      version: "1.0",
+      mode: "create",
+      objects: [
+        {
+          type: "product_composition_set",
+          action: "replace",
+          client_ref: "set-1",
+          data: {
+            parentProductSku: "pf-00001",
+            replaceTypes: ["bom", "packaging"],
+            items: [
+              {
+                childProductSku: "CMP-FIO",
+                quantity: 1,
+                quantityUnit: "m",
+                compositionType: "bom",
+                required: true,
+                isDefault: true,
+                notes: "Fio principal.",
+              },
+            ],
+          },
+        },
+      ],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects packagingChannel when replaceTypes omits packaging", () => {
+    const r = productCompositionSetIngestionDataSchema.safeParse({
+      parentProductSku: "P1",
+      replaceTypes: ["bom"],
+      packagingChannel: "online",
+      items: [],
+    });
+    expect(r.success).toBe(false);
+  });
+
+  it("rejects two parent identifiers at once", () => {
+    const r = productCompositionSetIngestionDataSchema.safeParse({
+      parentProductSku: "A",
+      parentProductSlug: "b",
+      replaceTypes: ["bom"],
+      items: [],
+    });
+    expect(r.success).toBe(false);
   });
 });
 

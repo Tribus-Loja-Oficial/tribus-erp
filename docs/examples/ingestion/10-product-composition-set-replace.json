@@ -1,0 +1,26 @@
+{
+  "version": "1.0",
+  "mode": "create",
+  "objects": [
+    {
+      "type": "product_composition_set",
+      "action": "replace",
+      "client_ref": "composition-set-pulseira-faisca-pf-00001",
+      "data": {
+        "parentProductSku": "pf-00001",
+        "replaceTypes": ["bom", "packaging"],
+        "items": [
+          {
+            "childProductSku": "CMP-FIO-DE-MALHA-KIKI-150-M",
+            "quantity": 1,
+            "quantityUnit": "m",
+            "compositionType": "bom",
+            "required": true,
+            "isDefault": true,
+            "notes": "Fio principal da Pulseira Faísca."
+          }
+        ]
+      }
+    }
+  ]
+}

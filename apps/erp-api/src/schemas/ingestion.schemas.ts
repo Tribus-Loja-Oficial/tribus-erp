@@ -7,6 +7,8 @@ import {
   productCompositionDataWithoutChildSchema,
   refineProductComposition,
   productTypeSchema,
+  compositionTypeSchema,
+  packagingChannelSchema,
 } from "./product.schemas.js";
 import { createPartySchema } from "./party.schemas.js";
 import { createCustomerWithPartySchema, createSupplierWithPartySchema } from "./people.schemas.js";
@@ -43,6 +45,7 @@ const httpsImageUrl = z
  * Tipos sem suporte a upsert (stock_location, party, customer, supplier,
  * product_variant, product_composition, inventory_movement, order,
  * purchase_order): o campo é aceite mas ignorado (comporta-se como skip).
+ * `product_composition_set` usa `action: "replace"` (obrigatório), não `ingestionActionField`.
  *
  * Para a variante skip/default, todos os campos obrigatórios do tipo devem
  * estar presentes em `data` (schema completo de criação).
@@ -180,6 +183,70 @@ export const productCompositionIngestionDataSchema = productCompositionDataWitho
       } as Parameters<typeof refineProductComposition>[0],
       ctx,
     );
+  });
+
+/** Linha dentro de `product_composition_set` (filho por ref, id ou SKU). */
+export const productCompositionSetItemIngestionSchema = productCompositionDataWithoutChildSchema
+  .extend({
+    childProductRef: z.string().min(1).max(200).optional(),
+    childProductId: z.string().min(1).optional(),
+    childSku: z.string().min(1).max(100).optional(),
+    childProductSku: z.string().min(1).max(100).optional(),
+  })
+  .strict()
+  .refine(
+    (d) =>
+      Boolean(d.childProductRef?.trim()) ||
+      Boolean(d.childProductId?.trim()) ||
+      Boolean(d.childSku?.trim()) ||
+      Boolean(d.childProductSku?.trim()),
+    {
+      message:
+        "Indique childProductRef, childProductId, childSku ou childProductSku (SKU existente ou ref no payload).",
+      path: ["childProductRef"],
+    },
+  )
+  .superRefine((d, ctx) => {
+    refineProductComposition(
+      {
+        ...d,
+        childProductId: "_placeholder",
+      } as Parameters<typeof refineProductComposition>[0],
+      ctx,
+    );
+  });
+
+/** Substituição em lote da composição de um produto existente (arquivar escopo + inserir linhas). */
+export const productCompositionSetIngestionDataSchema = z
+  .object({
+    parentProductId: z.string().min(1).optional(),
+    parentProductRef: z.string().min(1).max(200).optional(),
+    parentProductSku: z.string().min(1).max(100).optional(),
+    parentProductSlug: z.string().min(1).max(200).optional(),
+    replaceTypes: z.array(compositionTypeSchema).min(1),
+    packagingChannel: packagingChannelSchema.optional(),
+    items: z.array(productCompositionSetItemIngestionSchema).max(500).default([]),
+  })
+  .strict()
+  .refine(
+    (d) => {
+      const keys = [
+        d.parentProductId?.trim(),
+        d.parentProductRef?.trim(),
+        d.parentProductSku?.trim(),
+        d.parentProductSlug?.trim(),
+      ].filter(Boolean);
+      return keys.length === 1;
+    },
+    {
+      message:
+        "Indique exactamente um identificador do produto pai: parentProductId, parentProductRef, parentProductSku ou parentProductSlug.",
+      path: ["parentProductRef"],
+    },
+  )
+  .refine((d) => !d.packagingChannel || d.replaceTypes.includes("packaging"), {
+    message: 'packagingChannel só é permitido quando replaceTypes inclui "packaging".',
+    path: ["packagingChannel"],
   });
 
 /** --- Movimento de stock: refs opcionais em alternativa a IDs --- */
@@ -485,6 +552,12 @@ export const ingestionObjectSchema = z.union([
     data: productCompositionIngestionDataSchema,
   }),
   z.object({
+    type: z.literal("product_composition_set"),
+    action: z.literal("replace"),
+    client_ref: clientRefField,
+    data: productCompositionSetIngestionDataSchema,
+  }),
+  z.object({
     type: z.literal("inventory_movement"),
     action: ingestionActionField,
     client_ref: clientRefField,
@@ -559,6 +632,7 @@ export const INGESTION_TYPE_LABELS: Record<IngestionObjectType, string> = {
   product: "Produto",
   product_variant: "Variante de produto",
   product_composition: "Composição (BOM/embalagem)",
+  product_composition_set: "Substituição de composição (BOM/embalagem)",
   inventory_movement: "Movimento de stock",
   order: "Pedido",
   purchase_order: "Ordem de compra",
@@ -579,6 +653,7 @@ export const INGESTION_TYPE_ORDER: Record<IngestionObjectType, number> = {
   product: 6,
   product_variant: 7,
   product_composition: 8,
+  product_composition_set: 8,
   inventory_movement: 9,
   order: 10,
   purchase_order: 11,

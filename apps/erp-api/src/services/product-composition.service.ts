@@ -2,7 +2,11 @@ import type { AppDb } from "../db/client.js";
 import { generateId } from "../utils/id.js";
 import { NotFoundError, ConflictError, ValidationError } from "../errors/app-error.js";
 import { createProductRepository } from "../repositories/product.repository.js";
-import { createProductCompositionRepository } from "../repositories/product-composition.repository.js";
+import {
+  createProductCompositionRepository,
+  activeCompositionScopeWhere,
+} from "../repositories/product-composition.repository.js";
+import { productCompositions } from "../db/schema/index.js";
 import { createProductCostSnapshotService } from "./product-cost-snapshot.service.js";
 import { lineCostCentsFromComposition } from "../domain/product-cost.js";
 import type {
@@ -173,6 +177,99 @@ export function createProductCompositionService(db: AppDb) {
         trigger: "composition_archive",
         compositionId,
       });
+    },
+
+    /**
+     * Arquiva linhas activas no escopo (`replaceTypes` + filtro opcional de canal de embalagem)
+     * e insere as novas linhas num único `db.batch` (D1), depois um snapshot de custo.
+     */
+    async replaceCompositionScope(params: {
+      parentProductId: string;
+      replaceTypes: readonly ("packaging" | "bom" | "kit" | "bundle" | "accessory" | "included")[];
+      packagingChannel?: "online" | "presential";
+      lines: CreateProductCompositionInput[];
+    }): Promise<{ removedCount: number; createdCount: number }> {
+      const parent = await productsRepo.findById(params.parentProductId);
+      if (!parent) throw new NotFoundError("Product", params.parentProductId);
+
+      const ts = now();
+      const newRows: (typeof productCompositions.$inferInsert)[] = [];
+
+      for (const input of params.lines) {
+        const child = await productsRepo.findById(input.childProductId);
+        if (!child) throw new NotFoundError("Product", input.childProductId);
+
+        validateCompositionRules({
+          parentProductId: params.parentProductId,
+          childProductId: input.childProductId,
+          compositionType: input.compositionType,
+          packagingChannel: input.packagingChannel,
+          quantity: input.quantity,
+        });
+
+        const packagingChannelRow =
+          input.compositionType === "packaging" ? input.packagingChannel! : null;
+
+        const { unitCostCents, totalCostCents } = lineCostCentsFromComposition(
+          input.quantity,
+          child,
+        );
+
+        newRows.push({
+          id: generateId(),
+          parentProductId: params.parentProductId,
+          parentVariantId: null,
+          childProductId: input.childProductId,
+          childVariantId: null,
+          quantity: input.quantity,
+          quantityUnit: input.quantityUnit ?? null,
+          compositionType: input.compositionType,
+          packagingChannel: packagingChannelRow,
+          unitCostSnapshotCents: unitCostCents,
+          totalCostSnapshotCents: totalCostCents,
+          required: input.required,
+          isDefault: input.isDefault,
+          notes: input.notes ?? null,
+          createdAt: ts,
+          updatedAt: ts,
+          archivedAt: null,
+        });
+      }
+
+      const removedCount = await compositionsRepo.countActiveInScope(
+        params.parentProductId,
+        params.replaceTypes,
+        params.packagingChannel,
+      );
+
+      const scopeWhere = activeCompositionScopeWhere(
+        params.parentProductId,
+        params.replaceTypes,
+        params.packagingChannel,
+      );
+
+      const batchSteps = [
+        db.update(productCompositions).set({ archivedAt: ts, updatedAt: ts }).where(scopeWhere),
+        ...newRows.map((row) => db.insert(productCompositions).values(row)),
+      ];
+
+      try {
+        await db.batch(batchSteps as never);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (msg.includes("UNIQUE") || msg.toLowerCase().includes("unique")) {
+          throw new ConflictError(
+            "Já existe composição equivalente para este produto (verifique duplicados ou embalagem no mesmo canal).",
+          );
+        }
+        throw e;
+      }
+
+      await snapshotService.createFromCurrentBom(params.parentProductId, "pricing_review", {
+        trigger: "composition_bulk_replace",
+      });
+
+      return { removedCount, createdCount: newRows.length };
     },
   };
 }

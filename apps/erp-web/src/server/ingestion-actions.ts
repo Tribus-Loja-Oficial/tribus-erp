@@ -12,6 +12,16 @@ export type IngestionValidationIssue = {
   message: string;
 };
 
+/** Resumo de `product_composition_set` nas respostas de dry-run / execução. */
+export type IngestionCompositionSetSummary = {
+  parentProductId: string;
+  parentSku?: string;
+  parentSlug?: string;
+  removedCount: number;
+  createdCount: number;
+  itemErrors?: Array<{ index: number; message: string }>;
+};
+
 export type IngestionValidationResponse = {
   data: {
     valid: boolean;
@@ -29,6 +39,7 @@ export type IngestionItemResult = {
   id?: string;
   error?: string;
   warnings?: string[];
+  compositionSet?: IngestionCompositionSetSummary;
 };
 
 export type IngestionExecuteResponse = {
@@ -49,6 +60,7 @@ export type IngestionDryRunItem = {
   clientRef?: string;
   plannedStatus: "created" | "updated" | "skipped" | "failed";
   detail?: string;
+  compositionSet?: IngestionCompositionSetSummary;
 };
 
 export type IngestionDryRunResponse = {
