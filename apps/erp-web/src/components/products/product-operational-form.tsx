@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { Info } from "lucide-react";
+import { ChevronDown, ChevronRight, Info } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { formatCurrency, formatDateTime } from "@/lib/utils";
+import { cn, formatCurrency, formatDateTime } from "@/lib/utils";
 import {
   addProductCompositionAction,
   createProductOperationalAction,
@@ -242,11 +242,33 @@ function productCostSourceLabel(src: string | null | undefined): string {
   return map[s] ?? s;
 }
 
+function productTypeLabel(t: string | null | undefined): string {
+  const m: Record<string, string> = {
+    finished_product: "Produto final",
+    raw_material: "Matéria-prima",
+    packaging: "Embalagem",
+    consumable: "Consumível",
+    kit: "Kit",
+    bundle: "Bundle",
+    service: "Serviço",
+  };
+  return (t && m[t]) || t || "—";
+}
+
+function packagingChannelLabel(ch: string | null | undefined): string {
+  if (ch === "online") return "Online";
+  if (ch === "presential") return "Presencial";
+  return "—";
+}
+
 const COMPOSITION_COST_BASE_HEADER_TOOLTIP =
   "Custo normalizado do componente na unidade usada nesta linha, como R$/m, R$/cm, R$/g, R$/folha ou R$/unidade. Pode vir de custo médio de compras, custo proporcional cadastrado ou custo legado.";
 
 const COMPOSITION_COST_ON_PRODUCT_HEADER_TOOLTIP =
   "Valor deste componente em uma unidade do produto final: uso por peça × custo base.";
+
+const COMPOSITION_LEGACY_COST_TOOLTIP =
+  "Custo legado. Este valor veio do cadastro/importação. Registre compras para formar custo médio real.";
 
 function formatCompositionQtyPt(quantity: number): string {
   if (!Number.isFinite(quantity)) return String(quantity);
@@ -299,9 +321,11 @@ function CompositionColumnHelp({ title }: { title: string }) {
 }
 
 const compositionTableTh =
-  "whitespace-nowrap px-3 py-2.5 align-middle text-xs font-semibold text-zinc-600";
+  "whitespace-nowrap px-3 py-2 align-middle text-xs font-semibold text-zinc-600";
 const compositionTableThNumeric = `${compositionTableTh} text-right`;
-const compositionTableTdNumeric = "px-3 py-2 text-right whitespace-nowrap tabular-nums";
+const compositionTableTd = "px-3 py-1.5 align-middle text-sm text-zinc-700";
+const compositionTableTdNumeric =
+  "px-3 py-1.5 text-right align-middle text-sm whitespace-nowrap tabular-nums text-zinc-800";
 
 function CompositionCalculatedUsageCostHeaderLabel({ className }: { className?: string }) {
   return (
@@ -320,6 +344,280 @@ function CompositionCostHeader({ label, tooltip }: { label: ReactNode; tooltip: 
         <CompositionColumnHelp title={tooltip} />
       </span>
     </th>
+  );
+}
+
+function compositionCostSourceDetail(row: CompositionRow): string {
+  const parts = [
+    compositionCostBasisLabel(row.childUnitCostBasis),
+    productCostSourceLabel(row.childCostSource),
+  ];
+  if (row.childLegacyCostWarning) parts.push(COMPOSITION_LEGACY_COST_TOOLTIP);
+  return parts.filter((p) => p && p !== "—").join(" · ");
+}
+
+function compositionCostSourceChip(row: CompositionRow): {
+  label: string;
+  warn: boolean;
+  title: string;
+} {
+  if (row.childLegacyCostWarning) {
+    return {
+      label: "Legado ⚠",
+      warn: true,
+      title: compositionCostSourceDetail(row),
+    };
+  }
+  switch (row.childUnitCostBasis) {
+    case "average":
+      return { label: "Médio", warn: false, title: compositionCostSourceDetail(row) };
+    case "consumption_unit":
+      return { label: "Cadastro", warn: false, title: compositionCostSourceDetail(row) };
+    case "legacy_cost_price":
+      return {
+        label: "Legado",
+        warn: true,
+        title: compositionCostSourceDetail(row),
+      };
+    default: {
+      const src = productCostSourceLabel(row.childCostSource);
+      return {
+        label: src === "Desconhecido" ? "—" : src,
+        warn: false,
+        title: compositionCostSourceDetail(row),
+      };
+    }
+  }
+}
+
+function CompositionComponentCell({ row }: { row: CompositionRow }) {
+  const name = String(row.childName ?? row.childProductId ?? "—");
+  const sku = row.childSku?.trim();
+  return (
+    <td className={compositionTableTd}>
+      <div className="max-w-[14rem] min-w-0 sm:max-w-[18rem]">
+        <div className="truncate font-medium text-zinc-900" title={name}>
+          {name}
+        </div>
+        {sku ? (
+          <div
+            className="mt-0.5 truncate font-mono text-[11px] leading-tight text-zinc-500"
+            title={sku}
+          >
+            {sku}
+          </div>
+        ) : null}
+      </div>
+    </td>
+  );
+}
+
+function CompositionCostSourceCell({ row }: { row: CompositionRow }) {
+  const chip = compositionCostSourceChip(row);
+  if (chip.label === "—") {
+    return (
+      <td className={compositionTableTd}>
+        <span className="text-zinc-400">—</span>
+      </td>
+    );
+  }
+  return (
+    <td className={compositionTableTd}>
+      <span
+        className={cn(
+          "inline-flex cursor-help items-center rounded-full border px-2 py-0.5 text-[11px] leading-tight font-medium whitespace-nowrap",
+          chip.warn
+            ? "border-amber-200 bg-amber-50 text-amber-950"
+            : "border-zinc-200 bg-zinc-100 text-zinc-700",
+        )}
+        title={chip.title}
+      >
+        {chip.label}
+      </span>
+    </td>
+  );
+}
+
+function compositionRowHasExpandableDetails(row: CompositionRow): boolean {
+  return Boolean(
+    row.notes?.trim() ||
+    row.childCostUpdatedAt ||
+    row.childLatestReceiptId ||
+    row.childUnitCostBasis ||
+    row.childCostSource,
+  );
+}
+
+function CompositionDisplayRows({
+  row,
+  kind,
+  colSpan,
+  showNotes,
+  expanded,
+  onToggleExpand,
+  onEdit,
+  onRemove,
+}: {
+  row: CompositionRow;
+  kind: "bom" | "packaging";
+  colSpan: number;
+  showNotes: boolean;
+  expanded: boolean;
+  onToggleExpand: () => void;
+  onEdit: () => void;
+  onRemove: () => void;
+}) {
+  const canExpand = compositionRowHasExpandableDetails(row);
+  const notes = row.notes?.trim();
+  const updatedLabel = row.childCostUpdatedAt
+    ? formatDateTime(String(row.childCostUpdatedAt))
+    : null;
+
+  return (
+    <>
+      <tr className="border-b border-zinc-100 hover:bg-zinc-50/50">
+        <CompositionComponentCell row={row} />
+        <td className={`${compositionTableTd} whitespace-nowrap`}>
+          {kind === "bom"
+            ? productTypeLabel(row.childProductType)
+            : packagingChannelLabel(row.packagingChannel)}
+        </td>
+        <td className={compositionTableTdNumeric}>
+          {compositionCostBaseLabel(row.childUnitCostCents, row.quantityUnit)}
+        </td>
+        <td className={compositionTableTdNumeric}>
+          {compositionUsagePerPieceLabel(row.quantity, row.quantityUnit)}
+        </td>
+        <td className={`${compositionTableTdNumeric} font-medium text-zinc-900`}>
+          {formatCurrency(row.lineCostCents ?? 0)}
+        </td>
+        <CompositionCostSourceCell row={row} />
+        <td
+          className={`${compositionTableTd} text-xs whitespace-nowrap text-zinc-600 tabular-nums`}
+        >
+          {updatedLabel ? (
+            <span title={updatedLabel}>{updatedLabel}</span>
+          ) : (
+            <span className="text-zinc-400">—</span>
+          )}
+        </td>
+        <td className={`${compositionTableTd} text-xs whitespace-nowrap`}>
+          {row.childLatestReceiptId ? (
+            <Link
+              href={`/purchases/receipts/${row.childLatestReceiptId}`}
+              className="text-sky-700 underline hover:text-sky-900"
+              title="Ver última compra/entrada"
+            >
+              Entrada
+            </Link>
+          ) : (
+            <span className="text-zinc-400">—</span>
+          )}
+        </td>
+        {showNotes ? (
+          <td className={`${compositionTableTd} max-w-[5.5rem] text-xs`}>
+            {notes ? (
+              <span className="block truncate text-zinc-600" title={notes}>
+                {notes}
+              </span>
+            ) : (
+              <span className="text-zinc-400">—</span>
+            )}
+          </td>
+        ) : null}
+        <td className={`${compositionTableTd} w-0 text-right whitespace-nowrap`}>
+          <div className="inline-flex items-center gap-1.5">
+            {canExpand ? (
+              <button
+                type="button"
+                onClick={onToggleExpand}
+                className="rounded p-0.5 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-800"
+                title={expanded ? "Ocultar detalhes" : "Ver detalhes"}
+                aria-expanded={expanded}
+              >
+                {expanded ? (
+                  <ChevronDown className="h-4 w-4" aria-hidden />
+                ) : (
+                  <ChevronRight className="h-4 w-4" aria-hidden />
+                )}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={onEdit}
+              className="text-xs text-zinc-600 underline hover:text-zinc-900"
+            >
+              Editar
+            </button>
+            <button
+              type="button"
+              onClick={onRemove}
+              className="text-xs text-red-600 hover:underline"
+            >
+              Remover
+            </button>
+          </div>
+        </td>
+      </tr>
+      {expanded && canExpand ? (
+        <tr className="border-b border-zinc-100 bg-zinc-50/70">
+          <td colSpan={colSpan} className="px-3 py-2 text-xs text-zinc-600">
+            <dl className="grid gap-x-4 gap-y-1.5 sm:grid-cols-2 lg:grid-cols-3">
+              <div>
+                <dt className="font-medium text-zinc-500">Critério de custo</dt>
+                <dd>{compositionCostBasisLabel(row.childUnitCostBasis)}</dd>
+              </div>
+              <div>
+                <dt className="font-medium text-zinc-500">Origem no cadastro</dt>
+                <dd>{productCostSourceLabel(row.childCostSource)}</dd>
+              </div>
+              {row.childLegacyCostWarning ? (
+                <div className="sm:col-span-2 lg:col-span-3">
+                  <dt className="font-medium text-amber-800">Custo legado</dt>
+                  <dd className="text-amber-950">{COMPOSITION_LEGACY_COST_TOOLTIP}</dd>
+                </div>
+              ) : null}
+              {updatedLabel ? (
+                <div>
+                  <dt className="font-medium text-zinc-500">Atualizado em</dt>
+                  <dd className="tabular-nums">{updatedLabel}</dd>
+                </div>
+              ) : null}
+              {row.childLatestReceiptId ? (
+                <div>
+                  <dt className="font-medium text-zinc-500">Última compra/entrada</dt>
+                  <dd>
+                    <Link
+                      href={`/purchases/receipts/${row.childLatestReceiptId}`}
+                      className="text-sky-700 underline hover:text-sky-900"
+                    >
+                      Abrir entrada
+                    </Link>
+                  </dd>
+                </div>
+              ) : null}
+              {notes ? (
+                <div className="sm:col-span-2">
+                  <dt className="font-medium text-zinc-500">Notas</dt>
+                  <dd className="text-zinc-700">{notes}</dd>
+                </div>
+              ) : null}
+            </dl>
+          </td>
+        </tr>
+      ) : null}
+    </>
+  );
+}
+
+function CompositionLegacyCostBanner({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-snug text-amber-950">
+      {count === 1 ? "1 componente usa custo legado." : `${count} componentes usam custo legado.`}{" "}
+      Passe o cursor sobre o chip «Legado» na coluna Fonte do custo para ver o detalhe. Registre
+      compras para atualizar o custo médio dos materiais.
+    </p>
   );
 }
 
@@ -609,6 +907,18 @@ export function ProductOperationalForm({
   const [editCompRequired, setEditCompRequired] = useState(true);
   const [editCompDefault, setEditCompDefault] = useState(true);
   const [editCompNotes, setEditCompNotes] = useState("");
+  const [expandedCompositionIds, setExpandedCompositionIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+
+  const toggleCompositionExpand = (id: string) => {
+    setExpandedCompositionIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const saleCents = useMemo(() => inputToCents(salePrice), [salePrice]);
   const costCents = useMemo(() => inputToCents(costPrice), [costPrice]);
@@ -629,6 +939,14 @@ export function ProductOperationalForm({
   const packagingRows = useMemo(
     () => initialCompositions.filter((r) => r.compositionType === "packaging"),
     [initialCompositions],
+  );
+  const bomLegacyCostCount = useMemo(
+    () => bomRows.filter((r) => r.childLegacyCostWarning).length,
+    [bomRows],
+  );
+  const packagingLegacyCostCount = useMemo(
+    () => packagingRows.filter((r) => r.childLegacyCostWarning).length,
+    [packagingRows],
   );
   const snapshotSources = useMemo(
     () => [...new Set(initialCostSnapshots.map((s) => s.source))].sort(),
@@ -656,25 +974,6 @@ export function ProductOperationalForm({
     router.replace(`/products/${productId}${qs ? `?${qs}` : ""}`);
     router.refresh();
   };
-
-  function productTypeLabel(t: string | null | undefined): string {
-    const m: Record<string, string> = {
-      finished_product: "Produto final",
-      raw_material: "Matéria-prima",
-      packaging: "Embalagem",
-      consumable: "Consumível",
-      kit: "Kit",
-      bundle: "Bundle",
-      service: "Serviço",
-    };
-    return (t && m[t]) || t || "—";
-  }
-
-  function packagingChannelLabel(ch: string | null | undefined): string {
-    if (ch === "online") return "Online";
-    if (ch === "presential") return "Presencial";
-    return "—";
-  }
 
   function buildPayload(): Record<string, unknown> {
     const galleryLines = parseGalleryFileIdLines(galleryFileIdsText);
@@ -1677,14 +1976,16 @@ export function ProductOperationalForm({
                 )}
                 {mode === "edit" && productId && (
                   <>
-                    <p className="text-xs text-zinc-600">
-                      Custos são calculados no servidor a partir dos cadastros dos componentes,
-                      custo proporcional (matéria-prima) e perfil de produção.
+                    <p className="text-xs leading-relaxed text-zinc-600">
+                      A composição define a receita técnica do produto. Os custos são calculados a
+                      partir do custo atual dos componentes. Compras e entradas atualizam o custo
+                      médio dos materiais.
                     </p>
                     <div className="space-y-2">
                       <h3 className="text-sm font-semibold text-zinc-900">
                         1. Materiais de produção (BOM)
                       </h3>
+                      <CompositionLegacyCostBanner count={bomLegacyCostCount} />
                       <div className="overflow-x-auto rounded-lg border border-zinc-200">
                         <table className="w-full min-w-[56rem] text-left text-sm">
                           <colgroup>
@@ -1707,7 +2008,7 @@ export function ProductOperationalForm({
                                 label="Custo base"
                                 tooltip={COMPOSITION_COST_BASE_HEADER_TOOLTIP}
                               />
-                              <th className={compositionTableTh}>Uso por peça</th>
+                              <th className={compositionTableThNumeric}>Uso por peça</th>
                               <CompositionCostHeader
                                 label={<CompositionCalculatedUsageCostHeaderLabel />}
                                 tooltip={COMPOSITION_COST_ON_PRODUCT_HEADER_TOOLTIP}
@@ -1716,7 +2017,7 @@ export function ProductOperationalForm({
                               <th className={compositionTableTh}>Atualizado em</th>
                               <th className={compositionTableTh}>Última compra/entrada</th>
                               <th className={compositionTableTh}>Notas</th>
-                              <th className={`${compositionTableTh} w-0`} />
+                              <th className={`${compositionTableTh} w-0`} aria-label="Ações" />
                             </tr>
                           </thead>
                           <tbody>
@@ -1848,81 +2149,17 @@ export function ProductOperationalForm({
                                     </td>
                                   </tr>
                                 ) : (
-                                  <tr key={row.id} className="border-b border-zinc-100">
-                                    <td className="px-3 py-2">
-                                      <div className="font-medium text-zinc-900">
-                                        {row.childName ?? row.childProductId}
-                                      </div>
-                                      <div className="font-mono text-xs text-zinc-500">
-                                        {row.childSku}
-                                      </div>
-                                    </td>
-                                    <td className="px-3 py-2 whitespace-nowrap text-zinc-700">
-                                      {productTypeLabel(row.childProductType)}
-                                    </td>
-                                    <td className={`${compositionTableTdNumeric} text-zinc-800`}>
-                                      {compositionCostBaseLabel(
-                                        row.childUnitCostCents,
-                                        row.quantityUnit,
-                                      )}
-                                    </td>
-                                    <td className="px-3 py-2 whitespace-nowrap text-zinc-800 tabular-nums">
-                                      {compositionUsagePerPieceLabel(
-                                        row.quantity,
-                                        row.quantityUnit,
-                                      )}
-                                    </td>
-                                    <td className={`${compositionTableTdNumeric} font-medium`}>
-                                      {formatCurrency(row.lineCostCents ?? 0)}
-                                    </td>
-                                    <td className="px-3 py-2 align-top text-xs text-zinc-700">
-                                      <div>{compositionCostBasisLabel(row.childUnitCostBasis)}</div>
-                                      <div className="mt-0.5 text-zinc-500">
-                                        {productCostSourceLabel(row.childCostSource)}
-                                      </div>
-                                      {row.childLegacyCostWarning ? (
-                                        <div className="mt-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-950">
-                                          Custo legado — registre compras para média real
-                                        </div>
-                                      ) : null}
-                                    </td>
-                                    <td className="px-3 py-2 align-top text-xs text-zinc-600 tabular-nums">
-                                      {row.childCostUpdatedAt
-                                        ? formatDateTime(String(row.childCostUpdatedAt))
-                                        : "—"}
-                                    </td>
-                                    <td className="px-3 py-2 align-top text-xs">
-                                      {row.childLatestReceiptId ? (
-                                        <Link
-                                          href={`/purchases/receipts/${row.childLatestReceiptId}`}
-                                          className="text-sky-700 underline hover:text-sky-900"
-                                        >
-                                          Última entrada
-                                        </Link>
-                                      ) : (
-                                        <span className="text-zinc-500">—</span>
-                                      )}
-                                    </td>
-                                    <td className="max-w-[140px] truncate px-3 py-2 text-xs text-zinc-600">
-                                      {row.notes ?? "—"}
-                                    </td>
-                                    <td className="space-x-2 px-3 py-2 text-right whitespace-nowrap">
-                                      <button
-                                        type="button"
-                                        onClick={() => startEditComposition(row)}
-                                        className="text-xs text-zinc-600 underline hover:text-zinc-900"
-                                      >
-                                        Editar
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => removeComposition(row.id)}
-                                        className="text-xs text-red-600 hover:underline"
-                                      >
-                                        Remover
-                                      </button>
-                                    </td>
-                                  </tr>
+                                  <CompositionDisplayRows
+                                    key={row.id}
+                                    row={row}
+                                    kind="bom"
+                                    colSpan={10}
+                                    showNotes
+                                    expanded={expandedCompositionIds.has(row.id)}
+                                    onToggleExpand={() => toggleCompositionExpand(row.id)}
+                                    onEdit={() => startEditComposition(row)}
+                                    onRemove={() => removeComposition(row.id)}
+                                  />
                                 ),
                               )
                             )}
@@ -1933,6 +2170,7 @@ export function ProductOperationalForm({
 
                     <div className="space-y-2 pt-4">
                       <h3 className="text-sm font-semibold text-zinc-900">2. Embalagem</h3>
+                      <CompositionLegacyCostBanner count={packagingLegacyCostCount} />
                       <div className="overflow-x-auto rounded-lg border border-zinc-200">
                         <table className="w-full min-w-[52rem] text-left text-sm">
                           <colgroup>
@@ -1954,7 +2192,7 @@ export function ProductOperationalForm({
                                 label="Custo base"
                                 tooltip={COMPOSITION_COST_BASE_HEADER_TOOLTIP}
                               />
-                              <th className={compositionTableTh}>Uso por peça</th>
+                              <th className={compositionTableThNumeric}>Uso por peça</th>
                               <CompositionCostHeader
                                 label={<CompositionCalculatedUsageCostHeaderLabel />}
                                 tooltip={COMPOSITION_COST_ON_PRODUCT_HEADER_TOOLTIP}
@@ -1962,7 +2200,7 @@ export function ProductOperationalForm({
                               <th className={compositionTableTh}>Fonte do custo</th>
                               <th className={compositionTableTh}>Atualizado em</th>
                               <th className={compositionTableTh}>Última compra/entrada</th>
-                              <th className={`${compositionTableTh} w-0`} />
+                              <th className={`${compositionTableTh} w-0`} aria-label="Ações" />
                             </tr>
                           </thead>
                           <tbody>
@@ -2037,78 +2275,17 @@ export function ProductOperationalForm({
                                     </td>
                                   </tr>
                                 ) : (
-                                  <tr key={row.id} className="border-b border-zinc-100">
-                                    <td className="px-3 py-2">
-                                      <div className="font-medium text-zinc-900">
-                                        {row.childName ?? row.childProductId}
-                                      </div>
-                                      <div className="font-mono text-xs text-zinc-500">
-                                        {row.childSku}
-                                      </div>
-                                    </td>
-                                    <td className="px-3 py-2 whitespace-nowrap text-zinc-700">
-                                      {packagingChannelLabel(row.packagingChannel)}
-                                    </td>
-                                    <td className={`${compositionTableTdNumeric} text-zinc-800`}>
-                                      {compositionCostBaseLabel(
-                                        row.childUnitCostCents,
-                                        row.quantityUnit,
-                                      )}
-                                    </td>
-                                    <td className="px-3 py-2 whitespace-nowrap text-zinc-800 tabular-nums">
-                                      {compositionUsagePerPieceLabel(
-                                        row.quantity,
-                                        row.quantityUnit,
-                                      )}
-                                    </td>
-                                    <td className={`${compositionTableTdNumeric} font-medium`}>
-                                      {formatCurrency(row.lineCostCents ?? 0)}
-                                    </td>
-                                    <td className="px-3 py-2 align-top text-xs text-zinc-700">
-                                      <div>{compositionCostBasisLabel(row.childUnitCostBasis)}</div>
-                                      <div className="mt-0.5 text-zinc-500">
-                                        {productCostSourceLabel(row.childCostSource)}
-                                      </div>
-                                      {row.childLegacyCostWarning ? (
-                                        <div className="mt-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-950">
-                                          Custo legado — registre compras para média real
-                                        </div>
-                                      ) : null}
-                                    </td>
-                                    <td className="px-3 py-2 align-top text-xs text-zinc-600 tabular-nums">
-                                      {row.childCostUpdatedAt
-                                        ? formatDateTime(String(row.childCostUpdatedAt))
-                                        : "—"}
-                                    </td>
-                                    <td className="px-3 py-2 align-top text-xs">
-                                      {row.childLatestReceiptId ? (
-                                        <Link
-                                          href={`/purchases/receipts/${row.childLatestReceiptId}`}
-                                          className="text-sky-700 underline hover:text-sky-900"
-                                        >
-                                          Última entrada
-                                        </Link>
-                                      ) : (
-                                        <span className="text-zinc-500">—</span>
-                                      )}
-                                    </td>
-                                    <td className="space-x-2 px-3 py-2 text-right whitespace-nowrap">
-                                      <button
-                                        type="button"
-                                        onClick={() => startEditComposition(row)}
-                                        className="text-xs text-zinc-600 underline hover:text-zinc-900"
-                                      >
-                                        Editar
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => removeComposition(row.id)}
-                                        className="text-xs text-red-600 hover:underline"
-                                      >
-                                        Remover
-                                      </button>
-                                    </td>
-                                  </tr>
+                                  <CompositionDisplayRows
+                                    key={row.id}
+                                    row={row}
+                                    kind="packaging"
+                                    colSpan={9}
+                                    showNotes={false}
+                                    expanded={expandedCompositionIds.has(row.id)}
+                                    onToggleExpand={() => toggleCompositionExpand(row.id)}
+                                    onEdit={() => startEditComposition(row)}
+                                    onRemove={() => removeComposition(row.id)}
+                                  />
                                 ),
                               )
                             )}
