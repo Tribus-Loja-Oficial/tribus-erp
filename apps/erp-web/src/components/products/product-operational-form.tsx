@@ -298,6 +298,22 @@ function CompositionColumnHelp({ title }: { title: string }) {
   );
 }
 
+const compositionTableTh =
+  "whitespace-nowrap px-3 py-2.5 align-middle text-xs font-semibold text-zinc-600";
+const compositionTableThNumeric = `${compositionTableTh} text-right`;
+const compositionTableTdNumeric = "px-3 py-2 text-right whitespace-nowrap tabular-nums";
+
+function CompositionCostHeader({ label, tooltip }: { label: string; tooltip: string }) {
+  return (
+    <th className={compositionTableThNumeric}>
+      <span className="inline-flex items-center justify-end gap-1 whitespace-nowrap">
+        {label}
+        <CompositionColumnHelp title={tooltip} />
+      </span>
+    </th>
+  );
+}
+
 const MOVEMENT_TYPE_LABELS: Record<string, string> = {
   purchase: "Compra / entrada",
   sale: "Venda",
@@ -1661,33 +1677,37 @@ export function ProductOperationalForm({
                         1. Materiais de produção (BOM)
                       </h3>
                       <div className="overflow-x-auto rounded-lg border border-zinc-200">
-                        <table className="min-w-full text-left text-sm">
-                          <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold text-zinc-600">
+                        <table className="w-full min-w-[62rem] text-left text-sm">
+                          <colgroup>
+                            <col className="w-[min(22rem,28%)]" />
+                            <col className="w-[9.5rem]" />
+                            <col className="w-[10.5rem]" />
+                            <col className="w-[6.5rem]" />
+                            <col className="w-[15rem]" />
+                            <col />
+                            <col className="w-[7.5rem]" />
+                            <col className="w-[9rem]" />
+                            <col className="w-[5.5rem]" />
+                            <col className="w-[4.5rem]" />
+                          </colgroup>
+                          <thead className="border-b border-zinc-200 bg-zinc-50">
                             <tr>
-                              <th className="px-3 py-2">Componente</th>
-                              <th className="px-3 py-2">Tipo do componente</th>
-                              <th className="px-3 py-2">Uso por peça</th>
-                              <th className="px-3 py-2 text-right">
-                                <span className="inline-flex w-full items-center justify-end gap-1">
-                                  Custo base
-                                  <CompositionColumnHelp
-                                    title={COMPOSITION_COST_BASE_HEADER_TOOLTIP}
-                                  />
-                                </span>
-                              </th>
-                              <th className="px-3 py-2 text-right">
-                                <span className="inline-flex w-full items-center justify-end gap-1">
-                                  Custo na peça
-                                  <CompositionColumnHelp
-                                    title={COMPOSITION_COST_ON_PRODUCT_HEADER_TOOLTIP}
-                                  />
-                                </span>
-                              </th>
-                              <th className="px-3 py-2">Fonte do custo</th>
-                              <th className="px-3 py-2">Atualizado em</th>
-                              <th className="px-3 py-2">Última compra/entrada</th>
-                              <th className="px-3 py-2">Notas</th>
-                              <th className="px-3 py-2" />
+                              <th className={compositionTableTh}>Componente</th>
+                              <th className={compositionTableTh}>Tipo do componente</th>
+                              <CompositionCostHeader
+                                label="Custo base"
+                                tooltip={COMPOSITION_COST_BASE_HEADER_TOOLTIP}
+                              />
+                              <th className={compositionTableTh}>Uso por peça</th>
+                              <CompositionCostHeader
+                                label="Custo calculado de uso por peça"
+                                tooltip={COMPOSITION_COST_ON_PRODUCT_HEADER_TOOLTIP}
+                              />
+                              <th className={compositionTableTh}>Fonte do custo</th>
+                              <th className={compositionTableTh}>Atualizado em</th>
+                              <th className={compositionTableTh}>Última compra/entrada</th>
+                              <th className={compositionTableTh}>Notas</th>
+                              <th className={`${compositionTableTh} w-0`} />
                             </tr>
                           </thead>
                           <tbody>
@@ -1828,22 +1848,22 @@ export function ProductOperationalForm({
                                         {row.childSku}
                                       </div>
                                     </td>
-                                    <td className="px-3 py-2 text-zinc-700">
+                                    <td className="px-3 py-2 whitespace-nowrap text-zinc-700">
                                       {productTypeLabel(row.childProductType)}
                                     </td>
-                                    <td className="px-3 py-2 text-zinc-800 tabular-nums">
-                                      {compositionUsagePerPieceLabel(
-                                        row.quantity,
-                                        row.quantityUnit,
-                                      )}
-                                    </td>
-                                    <td className="px-3 py-2 text-right text-zinc-800 tabular-nums">
+                                    <td className={`${compositionTableTdNumeric} text-zinc-800`}>
                                       {compositionCostBaseLabel(
                                         row.childUnitCostCents,
                                         row.quantityUnit,
                                       )}
                                     </td>
-                                    <td className="px-3 py-2 text-right tabular-nums">
+                                    <td className="px-3 py-2 whitespace-nowrap text-zinc-800 tabular-nums">
+                                      {compositionUsagePerPieceLabel(
+                                        row.quantity,
+                                        row.quantityUnit,
+                                      )}
+                                    </td>
+                                    <td className={`${compositionTableTdNumeric} font-medium`}>
                                       {formatCurrency(row.lineCostCents ?? 0)}
                                     </td>
                                     <td className="px-3 py-2 align-top text-xs text-zinc-700">
@@ -1905,32 +1925,35 @@ export function ProductOperationalForm({
                     <div className="space-y-2 pt-4">
                       <h3 className="text-sm font-semibold text-zinc-900">2. Embalagem</h3>
                       <div className="overflow-x-auto rounded-lg border border-zinc-200">
-                        <table className="min-w-full text-left text-sm">
-                          <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold text-zinc-600">
+                        <table className="w-full min-w-[58rem] text-left text-sm">
+                          <colgroup>
+                            <col className="w-[min(22rem,30%)]" />
+                            <col className="w-[6rem]" />
+                            <col className="w-[10.5rem]" />
+                            <col className="w-[6.5rem]" />
+                            <col className="w-[15rem]" />
+                            <col />
+                            <col className="w-[7.5rem]" />
+                            <col className="w-[9rem]" />
+                            <col className="w-[4.5rem]" />
+                          </colgroup>
+                          <thead className="border-b border-zinc-200 bg-zinc-50">
                             <tr>
-                              <th className="px-3 py-2">Componente</th>
-                              <th className="px-3 py-2">Canal</th>
-                              <th className="px-3 py-2">Uso por peça</th>
-                              <th className="px-3 py-2 text-right">
-                                <span className="inline-flex w-full items-center justify-end gap-1">
-                                  Custo base
-                                  <CompositionColumnHelp
-                                    title={COMPOSITION_COST_BASE_HEADER_TOOLTIP}
-                                  />
-                                </span>
-                              </th>
-                              <th className="px-3 py-2 text-right">
-                                <span className="inline-flex w-full items-center justify-end gap-1">
-                                  Custo na peça
-                                  <CompositionColumnHelp
-                                    title={COMPOSITION_COST_ON_PRODUCT_HEADER_TOOLTIP}
-                                  />
-                                </span>
-                              </th>
-                              <th className="px-3 py-2">Fonte do custo</th>
-                              <th className="px-3 py-2">Atualizado em</th>
-                              <th className="px-3 py-2">Última compra/entrada</th>
-                              <th className="px-3 py-2" />
+                              <th className={compositionTableTh}>Componente</th>
+                              <th className={compositionTableTh}>Canal</th>
+                              <CompositionCostHeader
+                                label="Custo base"
+                                tooltip={COMPOSITION_COST_BASE_HEADER_TOOLTIP}
+                              />
+                              <th className={compositionTableTh}>Uso por peça</th>
+                              <CompositionCostHeader
+                                label="Custo calculado de uso por peça"
+                                tooltip={COMPOSITION_COST_ON_PRODUCT_HEADER_TOOLTIP}
+                              />
+                              <th className={compositionTableTh}>Fonte do custo</th>
+                              <th className={compositionTableTh}>Atualizado em</th>
+                              <th className={compositionTableTh}>Última compra/entrada</th>
+                              <th className={`${compositionTableTh} w-0`} />
                             </tr>
                           </thead>
                           <tbody>
@@ -2014,22 +2037,22 @@ export function ProductOperationalForm({
                                         {row.childSku}
                                       </div>
                                     </td>
-                                    <td className="px-3 py-2 text-zinc-700">
+                                    <td className="px-3 py-2 whitespace-nowrap text-zinc-700">
                                       {packagingChannelLabel(row.packagingChannel)}
                                     </td>
-                                    <td className="px-3 py-2 text-zinc-800 tabular-nums">
-                                      {compositionUsagePerPieceLabel(
-                                        row.quantity,
-                                        row.quantityUnit,
-                                      )}
-                                    </td>
-                                    <td className="px-3 py-2 text-right text-zinc-800 tabular-nums">
+                                    <td className={`${compositionTableTdNumeric} text-zinc-800`}>
                                       {compositionCostBaseLabel(
                                         row.childUnitCostCents,
                                         row.quantityUnit,
                                       )}
                                     </td>
-                                    <td className="px-3 py-2 text-right tabular-nums">
+                                    <td className="px-3 py-2 whitespace-nowrap text-zinc-800 tabular-nums">
+                                      {compositionUsagePerPieceLabel(
+                                        row.quantity,
+                                        row.quantityUnit,
+                                      )}
+                                    </td>
+                                    <td className={`${compositionTableTdNumeric} font-medium`}>
                                       {formatCurrency(row.lineCostCents ?? 0)}
                                     </td>
                                     <td className="px-3 py-2 align-top text-xs text-zinc-700">
@@ -2696,31 +2719,43 @@ export function ProductOperationalForm({
                             </div>
                             {expanded && lines.length > 0 ? (
                               <div className="mt-2 overflow-x-auto rounded border border-zinc-200 bg-white">
-                                <table className="min-w-full text-left text-[11px]">
-                                  <thead className="border-b border-zinc-200 bg-zinc-50 text-zinc-600">
+                                <table className="w-full min-w-[48rem] text-left text-[11px]">
+                                  <thead className="border-b border-zinc-200 bg-zinc-50">
                                     <tr>
-                                      <th className="px-2 py-1.5">Componente</th>
-                                      <th className="px-2 py-1.5">Tipo do componente</th>
-                                      <th className="px-2 py-1.5">Uso por peça</th>
-                                      <th className="px-2 py-1.5">Canal</th>
-                                      <th className="px-2 py-1.5">Critério</th>
-                                      <th className="px-2 py-1.5 text-right">
-                                        <span className="inline-flex w-full items-center justify-end gap-0.5">
+                                      <th className="px-2 py-1.5 font-semibold whitespace-nowrap text-zinc-600">
+                                        Componente
+                                      </th>
+                                      <th className="px-2 py-1.5 font-semibold whitespace-nowrap text-zinc-600">
+                                        Tipo do componente
+                                      </th>
+                                      <th className="px-2 py-1.5 text-right font-semibold whitespace-nowrap text-zinc-600">
+                                        <span className="inline-flex items-center justify-end gap-0.5 whitespace-nowrap">
                                           Custo base
                                           <CompositionColumnHelp
                                             title={COMPOSITION_COST_BASE_HEADER_TOOLTIP}
                                           />
                                         </span>
                                       </th>
-                                      <th className="px-2 py-1.5 text-right">
-                                        <span className="inline-flex w-full items-center justify-end gap-0.5">
-                                          Custo na peça
+                                      <th className="px-2 py-1.5 font-semibold whitespace-nowrap text-zinc-600">
+                                        Uso por peça
+                                      </th>
+                                      <th className="px-2 py-1.5 font-semibold whitespace-nowrap text-zinc-600">
+                                        Canal
+                                      </th>
+                                      <th className="px-2 py-1.5 font-semibold whitespace-nowrap text-zinc-600">
+                                        Critério
+                                      </th>
+                                      <th className="px-2 py-1.5 text-right font-semibold whitespace-nowrap text-zinc-600">
+                                        <span className="inline-flex items-center justify-end gap-0.5 whitespace-nowrap">
+                                          Custo calculado de uso por peça
                                           <CompositionColumnHelp
                                             title={COMPOSITION_COST_ON_PRODUCT_HEADER_TOOLTIP}
                                           />
                                         </span>
                                       </th>
-                                      <th className="px-2 py-1.5">Fonte do custo</th>
+                                      <th className="px-2 py-1.5 font-semibold whitespace-nowrap text-zinc-600">
+                                        Fonte do custo
+                                      </th>
                                     </tr>
                                   </thead>
                                   <tbody>
@@ -2750,7 +2785,15 @@ export function ProductOperationalForm({
                                         <td className="px-2 py-1.5 align-top">
                                           {line.compositionType ?? "—"}
                                         </td>
-                                        <td className="px-2 py-1.5 align-top text-zinc-800 tabular-nums">
+                                        <td className="px-2 py-1.5 text-right align-top whitespace-nowrap text-zinc-800 tabular-nums">
+                                          {line.unitCost != null
+                                            ? compositionCostBaseLabel(
+                                                line.unitCost,
+                                                line.quantityUnit,
+                                              )
+                                            : "—"}
+                                        </td>
+                                        <td className="px-2 py-1.5 align-top whitespace-nowrap text-zinc-800 tabular-nums">
                                           {line.quantity != null
                                             ? compositionUsagePerPieceLabel(
                                                 line.quantity,
@@ -2766,15 +2809,7 @@ export function ProductOperationalForm({
                                         <td className="px-2 py-1.5 align-top">
                                           {compositionCostBasisLabel(line.unitCostBasis)}
                                         </td>
-                                        <td className="px-2 py-1.5 text-right align-top text-zinc-800 tabular-nums">
-                                          {line.unitCost != null
-                                            ? compositionCostBaseLabel(
-                                                line.unitCost,
-                                                line.quantityUnit,
-                                              )
-                                            : "—"}
-                                        </td>
-                                        <td className="px-2 py-1.5 text-right align-top font-medium tabular-nums">
+                                        <td className="px-2 py-1.5 text-right align-top font-medium whitespace-nowrap tabular-nums">
                                           {line.lineTotalCents != null
                                             ? formatCurrency(line.lineTotalCents)
                                             : "—"}
