@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Info } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
 import {
   addProductCompositionAction,
@@ -303,10 +303,19 @@ const compositionTableTh =
 const compositionTableThNumeric = `${compositionTableTh} text-right`;
 const compositionTableTdNumeric = "px-3 py-2 text-right whitespace-nowrap tabular-nums";
 
-function CompositionCostHeader({ label, tooltip }: { label: string; tooltip: string }) {
+function CompositionCalculatedUsageCostHeaderLabel({ className }: { className?: string }) {
+  return (
+    <span className={`inline-flex flex-col items-end text-right leading-snug ${className ?? ""}`}>
+      <span>Custo calculado</span>
+      <span>de uso por peça</span>
+    </span>
+  );
+}
+
+function CompositionCostHeader({ label, tooltip }: { label: ReactNode; tooltip: string }) {
   return (
     <th className={compositionTableThNumeric}>
-      <span className="inline-flex items-center justify-end gap-1 whitespace-nowrap">
+      <span className="inline-flex items-center justify-end gap-1">
         {label}
         <CompositionColumnHelp title={tooltip} />
       </span>
@@ -1677,13 +1686,13 @@ export function ProductOperationalForm({
                         1. Materiais de produção (BOM)
                       </h3>
                       <div className="overflow-x-auto rounded-lg border border-zinc-200">
-                        <table className="w-full min-w-[62rem] text-left text-sm">
+                        <table className="w-full min-w-[56rem] text-left text-sm">
                           <colgroup>
                             <col className="w-[min(22rem,28%)]" />
                             <col className="w-[9.5rem]" />
                             <col className="w-[10.5rem]" />
                             <col className="w-[6.5rem]" />
-                            <col className="w-[15rem]" />
+                            <col className="w-[9rem]" />
                             <col />
                             <col className="w-[7.5rem]" />
                             <col className="w-[9rem]" />
@@ -1700,7 +1709,7 @@ export function ProductOperationalForm({
                               />
                               <th className={compositionTableTh}>Uso por peça</th>
                               <CompositionCostHeader
-                                label="Custo calculado de uso por peça"
+                                label={<CompositionCalculatedUsageCostHeaderLabel />}
                                 tooltip={COMPOSITION_COST_ON_PRODUCT_HEADER_TOOLTIP}
                               />
                               <th className={compositionTableTh}>Fonte do custo</th>
@@ -1925,13 +1934,13 @@ export function ProductOperationalForm({
                     <div className="space-y-2 pt-4">
                       <h3 className="text-sm font-semibold text-zinc-900">2. Embalagem</h3>
                       <div className="overflow-x-auto rounded-lg border border-zinc-200">
-                        <table className="w-full min-w-[58rem] text-left text-sm">
+                        <table className="w-full min-w-[52rem] text-left text-sm">
                           <colgroup>
                             <col className="w-[min(22rem,30%)]" />
                             <col className="w-[6rem]" />
                             <col className="w-[10.5rem]" />
                             <col className="w-[6.5rem]" />
-                            <col className="w-[15rem]" />
+                            <col className="w-[9rem]" />
                             <col />
                             <col className="w-[7.5rem]" />
                             <col className="w-[9rem]" />
@@ -1947,7 +1956,7 @@ export function ProductOperationalForm({
                               />
                               <th className={compositionTableTh}>Uso por peça</th>
                               <CompositionCostHeader
-                                label="Custo calculado de uso por peça"
+                                label={<CompositionCalculatedUsageCostHeaderLabel />}
                                 tooltip={COMPOSITION_COST_ON_PRODUCT_HEADER_TOOLTIP}
                               />
                               <th className={compositionTableTh}>Fonte do custo</th>
@@ -2745,9 +2754,9 @@ export function ProductOperationalForm({
                                       <th className="px-2 py-1.5 font-semibold whitespace-nowrap text-zinc-600">
                                         Critério
                                       </th>
-                                      <th className="px-2 py-1.5 text-right font-semibold whitespace-nowrap text-zinc-600">
-                                        <span className="inline-flex items-center justify-end gap-0.5 whitespace-nowrap">
-                                          Custo calculado de uso por peça
+                                      <th className="px-2 py-1.5 text-right font-semibold text-zinc-600">
+                                        <span className="inline-flex items-center justify-end gap-0.5">
+                                          <CompositionCalculatedUsageCostHeaderLabel />
                                           <CompositionColumnHelp
                                             title={COMPOSITION_COST_ON_PRODUCT_HEADER_TOOLTIP}
                                           />
