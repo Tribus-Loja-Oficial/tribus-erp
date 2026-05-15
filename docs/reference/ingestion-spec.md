@@ -42,23 +42,23 @@ Contrato espelhado no **tribus-hub**: envelope `version` / `mode` / `objects`, `
 
 ## Tipos suportados (`type`)
 
-| `type`                    | Descrição breve                                                                                                                                       |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `stock_location`          | Local de armazém (`POST /inventory/locations`).                                                                                                       |
-| `category`                | Categoria de produto.                                                                                                                                 |
-| `collection`              | Coleção.                                                                                                                                              |
-| `party`                   | Party base (sem perfil cliente/fornecedor).                                                                                                           |
-| `customer`                | Party + cliente.                                                                                                                                      |
-| `supplier`                | Party + fornecedor.                                                                                                                                   |
-| `product`                 | Produto; `productKind`; `categoryRef` / `collectionRef`; URLs de imagem.                                                                              |
-| `product_variant`         | Variante; `productRef` → `product` variable; `client_ref` recomendado para `variantRef`.                                                              |
-| `product_composition`     | BOM/embalagem; `parentProductRef`; `childProductRef` ou `childSku`.                                                                                   |
-| `product_composition_set` | Substituição em lote: `action` `"replace"`; um identificador do pai (`parentProductId` / `Ref` / `Sku` / `Slug`); `replaceTypes`; `items`.            |
-| `inventory_movement`      | Movimento; `productRef`/`productId`, `locationRef`/`locationId`; `variantRef`/`variantId` se pai variable no lote.                                    |
-| `order`                   | Pedido; `customerRef`/`customerId`; itens com `productRef` opcional; `variantRef`/`variantId` se produto variable no lote.                            |
-| `purchase_order`          | OC; `supplierRef`/`supplierId`; linhas com `productRef` opcional.                                                                                     |
-| `purchase_receipt`        | Entrada de compra (com ou sem OC); cria entrada de estoque, valuation e atualiza custo médio.                                                         |
-| `product_cost_snapshot`   | Snapshot histórico de custo do produto acabado; opcionalmente `componentCosts[]` (gravado em `component_costs_json`). Ver `ingestion-field-guide.md`. |
+| `type`                    | Descrição breve                                                                                                                                                |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `stock_location`          | Local de armazém (`POST /inventory/locations`).                                                                                                                |
+| `category`                | Categoria de produto.                                                                                                                                          |
+| `collection`              | Coleção.                                                                                                                                                       |
+| `party`                   | Party base (sem perfil cliente/fornecedor).                                                                                                                    |
+| `customer`                | Party + cliente.                                                                                                                                               |
+| `supplier`                | Party + fornecedor.                                                                                                                                            |
+| `product`                 | Produto; `productKind`; `categoryRef` / `collectionRef`; URLs de imagem.                                                                                       |
+| `product_variant`         | Variante; `productRef` → `product` variable; `client_ref` recomendado para `variantRef`.                                                                       |
+| `product_composition`     | Linha da **receita técnica** (BOM ou embalagem): `parentProductRef`; componente (`childProductRef` ou `childSku`); `quantity` + `quantityUnit` (uso por peça). |
+| `product_composition_set` | Substituição em lote da receita: `action` `"replace"`; um identificador do produto pai; `replaceTypes`; `items` (linhas de componente).                        |
+| `inventory_movement`      | Movimento; `productRef`/`productId`, `locationRef`/`locationId`; `variantRef`/`variantId` se pai variable no lote.                                             |
+| `order`                   | Pedido; `customerRef`/`customerId`; itens com `productRef` opcional; `variantRef`/`variantId` se produto variable no lote.                                     |
+| `purchase_order`          | OC; `supplierRef`/`supplierId`; linhas com `productRef` opcional.                                                                                              |
+| `purchase_receipt`        | Entrada de compra (com ou sem OC); cria entrada de estoque, valuation e atualiza custo médio.                                                                  |
+| `product_cost_snapshot`   | Snapshot histórico de custo do produto acabado; opcionalmente `componentCosts[]` (gravado em `component_costs_json`). Ver `ingestion-field-guide.md`.          |
 
 ## Ordem de execução (`TYPE_ORDER`)
 

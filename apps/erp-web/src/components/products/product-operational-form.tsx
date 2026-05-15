@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Info } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
@@ -239,6 +240,62 @@ function productCostSourceLabel(src: string | null | undefined): string {
     unknown: "Desconhecido",
   };
   return map[s] ?? s;
+}
+
+const COMPOSITION_COST_BASE_HEADER_TOOLTIP =
+  "Custo normalizado do componente na unidade usada nesta linha, como R$/m, R$/cm, R$/g, R$/folha ou R$/unidade. Pode vir de custo médio de compras, custo proporcional cadastrado ou custo legado.";
+
+const COMPOSITION_COST_ON_PRODUCT_HEADER_TOOLTIP =
+  "Valor deste componente em uma unidade do produto final: uso por peça × custo base.";
+
+function formatCompositionQtyPt(quantity: number): string {
+  if (!Number.isFinite(quantity)) return String(quantity);
+  return new Intl.NumberFormat("pt-BR", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 8,
+  }).format(quantity);
+}
+
+/** Unidade após “/” no custo base (sempre singular, ex.: unidade, não unidades). */
+function compositionRateUnitSuffix(quantityUnit: string | null | undefined): string {
+  const raw = quantityUnit?.trim();
+  if (!raw) return "unidade";
+  const uLower = raw.toLowerCase();
+  if (uLower === "unidades") return "unidade";
+  return raw;
+}
+
+function compositionUsagePerPieceLabel(
+  quantity: number,
+  quantityUnit: string | null | undefined,
+): string {
+  const qStr = formatCompositionQtyPt(quantity);
+  const absQ = Math.abs(quantity);
+  const raw = quantityUnit?.trim();
+  if (!raw) {
+    return `${qStr} ${absQ === 1 ? "unidade" : "unidades"}`;
+  }
+  const uLower = raw.toLowerCase();
+  if (uLower === "unidade" || uLower === "unidades") {
+    return `${qStr} ${absQ === 1 ? "unidade" : "unidades"}`;
+  }
+  return `${qStr} ${raw}`;
+}
+
+function compositionCostBaseLabel(
+  unitCostCents: number | null | undefined,
+  quantityUnit: string | null | undefined,
+): string {
+  return `${formatCurrency(unitCostCents ?? 0)} / ${compositionRateUnitSuffix(quantityUnit)}`;
+}
+
+function CompositionColumnHelp({ title }: { title: string }) {
+  return (
+    <span className="inline-flex cursor-help text-zinc-400" title={title}>
+      <Info className="h-3.5 w-3.5 shrink-0" aria-hidden />
+      <span className="sr-only">{title}</span>
+    </span>
+  );
 }
 
 const MOVEMENT_TYPE_LABELS: Record<string, string> = {
@@ -1607,23 +1664,36 @@ export function ProductOperationalForm({
                         <table className="min-w-full text-left text-sm">
                           <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold text-zinc-600">
                             <tr>
-                              <th className="px-3 py-2">Produto</th>
-                              <th className="px-3 py-2">Tipo</th>
-                              <th className="px-3 py-2 text-right">Qtd</th>
-                              <th className="px-3 py-2">Unid.</th>
-                              <th className="px-3 py-2 text-right">Custo unit.</th>
-                              <th className="px-3 py-2 text-right">Custo calc.</th>
-                              <th className="px-3 py-2">Origem do custo</th>
-                              <th className="px-3 py-2">Atualizado</th>
-                              <th className="px-3 py-2">Entrada</th>
-                              <th className="px-3 py-2">Obs.</th>
+                              <th className="px-3 py-2">Componente</th>
+                              <th className="px-3 py-2">Tipo do componente</th>
+                              <th className="px-3 py-2">Uso por peça</th>
+                              <th className="px-3 py-2 text-right">
+                                <span className="inline-flex w-full items-center justify-end gap-1">
+                                  Custo base
+                                  <CompositionColumnHelp
+                                    title={COMPOSITION_COST_BASE_HEADER_TOOLTIP}
+                                  />
+                                </span>
+                              </th>
+                              <th className="px-3 py-2 text-right">
+                                <span className="inline-flex w-full items-center justify-end gap-1">
+                                  Custo na peça
+                                  <CompositionColumnHelp
+                                    title={COMPOSITION_COST_ON_PRODUCT_HEADER_TOOLTIP}
+                                  />
+                                </span>
+                              </th>
+                              <th className="px-3 py-2">Fonte do custo</th>
+                              <th className="px-3 py-2">Atualizado em</th>
+                              <th className="px-3 py-2">Última compra/entrada</th>
+                              <th className="px-3 py-2">Notas</th>
                               <th className="px-3 py-2" />
                             </tr>
                           </thead>
                           <tbody>
                             {bomRows.length === 0 ? (
                               <tr>
-                                <td colSpan={11} className="px-3 py-4 text-center text-zinc-500">
+                                <td colSpan={10} className="px-3 py-4 text-center text-zinc-500">
                                   Nenhum material na BOM.
                                 </td>
                               </tr>
@@ -1631,7 +1701,7 @@ export function ProductOperationalForm({
                               bomRows.map((row) =>
                                 editCompId === row.id ? (
                                   <tr key={row.id} className="border-b border-zinc-100 bg-zinc-50">
-                                    <td colSpan={11} className="px-3 py-4">
+                                    <td colSpan={10} className="px-3 py-4">
                                       <p className="mb-3 text-xs font-semibold text-zinc-700">
                                         Editar linha (BOM)
                                       </p>
@@ -1647,7 +1717,7 @@ export function ProductOperationalForm({
                                         </div>
                                         <div>
                                           <label className="mb-1 block text-xs text-zinc-600">
-                                            Tipo
+                                            Tipo do componente
                                           </label>
                                           <select
                                             value={editCompType}
@@ -1761,14 +1831,17 @@ export function ProductOperationalForm({
                                     <td className="px-3 py-2 text-zinc-700">
                                       {productTypeLabel(row.childProductType)}
                                     </td>
-                                    <td className="px-3 py-2 text-right tabular-nums">
-                                      {row.quantity}
+                                    <td className="px-3 py-2 text-zinc-800 tabular-nums">
+                                      {compositionUsagePerPieceLabel(
+                                        row.quantity,
+                                        row.quantityUnit,
+                                      )}
                                     </td>
-                                    <td className="px-3 py-2 text-zinc-600">
-                                      {row.quantityUnit ?? "—"}
-                                    </td>
-                                    <td className="px-3 py-2 text-right tabular-nums">
-                                      {formatCurrency(row.childUnitCostCents ?? 0)}
+                                    <td className="px-3 py-2 text-right text-zinc-800 tabular-nums">
+                                      {compositionCostBaseLabel(
+                                        row.childUnitCostCents,
+                                        row.quantityUnit,
+                                      )}
                                     </td>
                                     <td className="px-3 py-2 text-right tabular-nums">
                                       {formatCurrency(row.lineCostCents ?? 0)}
@@ -1835,14 +1908,28 @@ export function ProductOperationalForm({
                         <table className="min-w-full text-left text-sm">
                           <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold text-zinc-600">
                             <tr>
-                              <th className="px-3 py-2">Produto</th>
+                              <th className="px-3 py-2">Componente</th>
                               <th className="px-3 py-2">Canal</th>
-                              <th className="px-3 py-2 text-right">Qtd</th>
-                              <th className="px-3 py-2 text-right">Custo unit.</th>
-                              <th className="px-3 py-2 text-right">Custo calc.</th>
-                              <th className="px-3 py-2">Origem do custo</th>
-                              <th className="px-3 py-2">Atualizado</th>
-                              <th className="px-3 py-2">Entrada</th>
+                              <th className="px-3 py-2">Uso por peça</th>
+                              <th className="px-3 py-2 text-right">
+                                <span className="inline-flex w-full items-center justify-end gap-1">
+                                  Custo base
+                                  <CompositionColumnHelp
+                                    title={COMPOSITION_COST_BASE_HEADER_TOOLTIP}
+                                  />
+                                </span>
+                              </th>
+                              <th className="px-3 py-2 text-right">
+                                <span className="inline-flex w-full items-center justify-end gap-1">
+                                  Custo na peça
+                                  <CompositionColumnHelp
+                                    title={COMPOSITION_COST_ON_PRODUCT_HEADER_TOOLTIP}
+                                  />
+                                </span>
+                              </th>
+                              <th className="px-3 py-2">Fonte do custo</th>
+                              <th className="px-3 py-2">Atualizado em</th>
+                              <th className="px-3 py-2">Última compra/entrada</th>
                               <th className="px-3 py-2" />
                             </tr>
                           </thead>
@@ -1930,11 +2017,17 @@ export function ProductOperationalForm({
                                     <td className="px-3 py-2 text-zinc-700">
                                       {packagingChannelLabel(row.packagingChannel)}
                                     </td>
-                                    <td className="px-3 py-2 text-right tabular-nums">
-                                      {row.quantity}
+                                    <td className="px-3 py-2 text-zinc-800 tabular-nums">
+                                      {compositionUsagePerPieceLabel(
+                                        row.quantity,
+                                        row.quantityUnit,
+                                      )}
                                     </td>
-                                    <td className="px-3 py-2 text-right tabular-nums">
-                                      {formatCurrency(row.childUnitCostCents ?? 0)}
+                                    <td className="px-3 py-2 text-right text-zinc-800 tabular-nums">
+                                      {compositionCostBaseLabel(
+                                        row.childUnitCostCents,
+                                        row.quantityUnit,
+                                      )}
                                     </td>
                                     <td className="px-3 py-2 text-right tabular-nums">
                                       {formatCurrency(row.lineCostCents ?? 0)}
@@ -2047,8 +2140,8 @@ export function ProductOperationalForm({
                             <thead className="bg-zinc-50 text-xs text-zinc-600 uppercase">
                               <tr>
                                 <th className="px-2 py-1">Componente</th>
-                                <th className="px-2 py-1">Tipo</th>
-                                <th className="px-2 py-1 text-right">Qtd</th>
+                                <th className="px-2 py-1">Tipo do componente</th>
+                                <th className="px-2 py-1">Uso por peça</th>
                                 <th className="px-2 py-1" />
                               </tr>
                             </thead>
@@ -2065,7 +2158,12 @@ export function ProductOperationalForm({
                                       {row.childName ?? row.childProductId}
                                     </td>
                                     <td className="px-2 py-1">{row.compositionType}</td>
-                                    <td className="px-2 py-1 text-right">{row.quantity}</td>
+                                    <td className="px-2 py-1">
+                                      {compositionUsagePerPieceLabel(
+                                        row.quantity,
+                                        row.quantityUnit,
+                                      )}
+                                    </td>
                                     <td className="px-2 py-1 text-right">
                                       <button
                                         type="button"
@@ -2102,7 +2200,9 @@ export function ProductOperationalForm({
                           />
                         </div>
                         <div>
-                          <label className="mb-1 block text-xs text-zinc-600">Tipo</label>
+                          <label className="mb-1 block text-xs text-zinc-600">
+                            Tipo do componente
+                          </label>
                           <select
                             value={compType}
                             onChange={(e) => {
@@ -2600,14 +2700,27 @@ export function ProductOperationalForm({
                                   <thead className="border-b border-zinc-200 bg-zinc-50 text-zinc-600">
                                     <tr>
                                       <th className="px-2 py-1.5">Componente</th>
-                                      <th className="px-2 py-1.5">Tipo</th>
-                                      <th className="px-2 py-1.5 text-right">Qtd</th>
-                                      <th className="px-2 py-1.5">Unid.</th>
+                                      <th className="px-2 py-1.5">Tipo do componente</th>
+                                      <th className="px-2 py-1.5">Uso por peça</th>
                                       <th className="px-2 py-1.5">Canal</th>
-                                      <th className="px-2 py-1.5">Base custo</th>
-                                      <th className="px-2 py-1.5 text-right">Custo unit.</th>
-                                      <th className="px-2 py-1.5 text-right">Linha</th>
-                                      <th className="px-2 py-1.5">Origem cadastro</th>
+                                      <th className="px-2 py-1.5">Critério</th>
+                                      <th className="px-2 py-1.5 text-right">
+                                        <span className="inline-flex w-full items-center justify-end gap-0.5">
+                                          Custo base
+                                          <CompositionColumnHelp
+                                            title={COMPOSITION_COST_BASE_HEADER_TOOLTIP}
+                                          />
+                                        </span>
+                                      </th>
+                                      <th className="px-2 py-1.5 text-right">
+                                        <span className="inline-flex w-full items-center justify-end gap-0.5">
+                                          Custo na peça
+                                          <CompositionColumnHelp
+                                            title={COMPOSITION_COST_ON_PRODUCT_HEADER_TOOLTIP}
+                                          />
+                                        </span>
+                                      </th>
+                                      <th className="px-2 py-1.5">Fonte do custo</th>
                                     </tr>
                                   </thead>
                                   <tbody>
@@ -2637,11 +2750,13 @@ export function ProductOperationalForm({
                                         <td className="px-2 py-1.5 align-top">
                                           {line.compositionType ?? "—"}
                                         </td>
-                                        <td className="px-2 py-1.5 text-right align-top tabular-nums">
-                                          {line.quantity ?? "—"}
-                                        </td>
-                                        <td className="px-2 py-1.5 align-top text-zinc-600">
-                                          {line.quantityUnit ?? "—"}
+                                        <td className="px-2 py-1.5 align-top text-zinc-800 tabular-nums">
+                                          {line.quantity != null
+                                            ? compositionUsagePerPieceLabel(
+                                                line.quantity,
+                                                line.quantityUnit,
+                                              )
+                                            : "—"}
                                         </td>
                                         <td className="px-2 py-1.5 align-top text-zinc-600">
                                           {line.packagingChannel
@@ -2651,9 +2766,12 @@ export function ProductOperationalForm({
                                         <td className="px-2 py-1.5 align-top">
                                           {compositionCostBasisLabel(line.unitCostBasis)}
                                         </td>
-                                        <td className="px-2 py-1.5 text-right align-top tabular-nums">
+                                        <td className="px-2 py-1.5 text-right align-top text-zinc-800 tabular-nums">
                                           {line.unitCost != null
-                                            ? formatCurrency(line.unitCost)
+                                            ? compositionCostBaseLabel(
+                                                line.unitCost,
+                                                line.quantityUnit,
+                                              )
                                             : "—"}
                                         </td>
                                         <td className="px-2 py-1.5 text-right align-top font-medium tabular-nums">

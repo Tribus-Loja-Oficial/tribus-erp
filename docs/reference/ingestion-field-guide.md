@@ -130,19 +130,22 @@ Valores: `purchase` | `sale` | `return` | `adjustment` | `production_in` | `prod
 - **Carga inicial / import de stock legado:** use sempre **`adjustment`**, nunca `initial_stock` (não suportado).
 - `notes` pode descrever a origem (ex.: “Import WooCommerce”).
 
-## `product_composition` — `compositionType` vs `productType`
+## `product_composition` — receita técnica, componente e uso por peça
 
-- **`compositionType`** (linha de composição): `packaging` | `bom` | `kit` | `bundle` | `accessory` | `included`.
-- Não confundir com **`productType`** do produto filho (`raw_material`, `packaging`, …).
+Na interface do ERP, a composição aparece como **receita técnica** do produto final: cada linha é um **componente** (matéria-prima, embalagem, etc.). O **uso por peça** é a quantidade consumida por unidade do produto pai, correspondendo no JSON a **`quantity`** (número) + **`quantityUnit`** (texto livre até 80 caracteres, ex.: `cm`, `g`, `folha`, `unidade`).
+
+- **`compositionType`** (linha de composição): `packaging` | `bom` | `kit` | `bundle` | `accessory` | `included` (**tipo do componente** na linha, no sentido de papel na receita).
+- Não confundir com **`productType`** do produto que entra como componente (`raw_material`, `packaging`, …).
 - Tipo **embalagem** no sentido de negócio: use **`compositionType`: `packaging`** e preencha **`packagingChannel`**: `online` ou `presential` (regra do `refineProductComposition`).
+- **`notes`:** opcional; corresponde à coluna **Notas** na UI.
 
 ## `product_composition_set` — substituição em lote
 
 - **`type`:** `product_composition_set`; **`action`:** obrigatoriamente **`"replace"`**.
-- **Pai (exactamente um):** `parentProductId`, `parentProductRef`, `parentProductSku` ou `parentProductSlug`.
+- **Produto pai (exactamente um):** `parentProductId`, `parentProductRef`, `parentProductSku` ou `parentProductSlug`.
 - **`replaceTypes`:** subconjunto não vazio de `packaging` \| `bom` \| `kit` \| `bundle` \| `accessory` \| `included` — apenas linhas activas com esses tipos são arquivadas antes de inserir as novas.
 - **`packagingChannel`** (opcional): só permitido se `replaceTypes` incluir `packaging`; restringe o arquivo às linhas de embalagem desse canal (`online` \| `presential`).
-- **`items`:** linhas a criar (mesmas regras de `product_composition` por linha: filho via `childProductRef`, `childProductId`, `childSku` ou `childProductSku`; `packagingChannel` obrigatório em linhas `packaging`).
+- **`items`:** linhas de **componentes** a criar (mesmas regras que `product_composition` por linha: identificação do filho via `childProductRef`, `childProductId`, `childSku` ou `childProductSku`; **`quantity`** + **`quantityUnit`** para o **uso por peça**; `packagingChannel` obrigatório em linhas `packaging`).
 - **Duplicados no mesmo `items`:** mesma chave natural (tipo + identificação do filho + canal) falha na validação semântica.
 - **`product_composition`** continua a servir para **acrescentar** uma linha; **`product_composition_set`** serve para **corrigir/repor** um conjunto sem duplicar nem apagar manualmente.
 
@@ -150,7 +153,7 @@ Valores: `purchase` | `sale` | `return` | `adjustment` | `production_in` | `prod
 
 Enum no backend: `unit` | `pair` | `meter` | `gram` | `kg` | `liter` | `package`.
 
-Sistemas externos com `"m"`, `"g"`: mapear para **`meter`** / **`gram`**, ou documentar a unidade em **`metadata`** e usar `quantityUnit` em composição (string livre até 80 chars) para a unidade da **quantidade** da linha.
+Sistemas externos com `"m"`, `"g"`: mapear para **`meter`** / **`gram`** no `unitOfMeasure` do **produto**, ou documentar a unidade em **`metadata`** e usar **`quantityUnit`** na linha de composição (string livre até 80 chars) como unidade do **uso por peça** (`quantity` + `quantityUnit`).
 
 ## `productKind` simple vs variable
 
@@ -176,7 +179,7 @@ Definição de eixos de variação no **pai** não tem campo `attributes` de cat
 
 - **`productId` ou `productRef`** (no mesmo payload): obrigatório um dos dois.
 - **`totalCostCents`** deve ser exactamente **`materialCostCents` + `packagingCostCents` + `laborCostCents`**.
-- **`componentCosts`** (opcional): array de linhas gravadas em `component_costs_json`, no mesmo formato que os snapshots gerados pela BOM (custos de **composição** apenas).
+- **`componentCosts`** (opcional): array de linhas gravadas em `component_costs_json`, no mesmo formato que os snapshots gerados pela receita/BOM (custos de **composição** apenas). Os rótulos na UI (custo base, custo na peça, etc.) referem-se a campos derivados na visualização; na ingestão de snapshot usam-se os nomes técnicos do schema (`unitCost`, `lineTotalCents`, …).
   - Se presente e não vazio: a **soma** de **`lineTotalCents`** de todas as linhas deve ser **`materialCostCents` + `packagingCostCents`** (mão de obra entra só nos totais agregados, não nas linhas).
   - Cada linha é um objecto **estrito** (sem chaves extra): ver enum de **`unitCostBasis`** (`average` \| `consumption_unit` \| `legacy_cost_price`) e **`packagingChannel`** (`online` \| `presential`) quando `compositionType` for embalagem.
 - Exemplo completo para copy-paste: ficheiro **`docs/examples/ingestion/09-product-cost-snapshot-with-component-lines.json`** e o artefacto único **`ingestion-payload.schema.json`** (`x-official-examples` + schema + este guia em `x-documentation-markdown`).

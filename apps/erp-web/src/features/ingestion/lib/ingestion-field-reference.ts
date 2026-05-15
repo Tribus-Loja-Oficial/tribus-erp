@@ -66,8 +66,8 @@ export const INGESTION_TYPE_LABELS_UI: Record<IngestionObjectTypeId, string> = {
   supplier: "Fornecedor",
   product: "Produto",
   product_variant: "Variante",
-  product_composition: "Composição (BOM/embalagem)",
-  product_composition_set: "Substituição de composição",
+  product_composition: "Receita / composição (BOM ou embalagem)",
+  product_composition_set: "Substituição da receita (BOM/embalagem)",
   inventory_movement: "Movimento de stock",
   order: "Pedido",
   purchase_order: "Ordem de compra",
@@ -235,7 +235,8 @@ export const INGESTION_TYPE_REFERENCES: IngestionTypeReference[] = [
   },
   {
     type: "product_composition",
-    summary: "Linha BOM/embalagem; parentProductRef; childProductRef ou childSku.",
+    summary:
+      "Linha da receita técnica (BOM ou embalagem): produto pai (`parentProductRef`); **componente** filho (`childProductRef` ou `childSku`). `quantity` + `quantityUnit` = **uso por peça** na UI (ex.: 6 e cm → «6 cm»).",
     envelope: envCommon,
     dataFields: [
       { key: "parentProductRef", requirement: "required", valueType: "string" },
@@ -244,19 +245,33 @@ export const INGESTION_TYPE_REFERENCES: IngestionTypeReference[] = [
         requirement: "conditional",
         condition: "ou childSku",
         valueType: "string",
+        hint: "client_ref do componente no mesmo payload",
       },
       {
         key: "childSku",
         requirement: "conditional",
         condition: "ou childProductRef",
         valueType: "string",
+        hint: "SKU do componente já existente (ou criado no lote)",
       },
-      { key: "quantity", requirement: "required", valueType: "number > 0" },
+      {
+        key: "quantity",
+        requirement: "required",
+        valueType: "number > 0",
+        hint: "parte numérica do uso por peça (junto com quantityUnit)",
+      },
+      {
+        key: "quantityUnit",
+        requirement: "optional",
+        valueType: "string ≤ 80",
+        hint: "unidade do uso (m, cm, g, folha, unidade, …); na UI junta-se a quantity",
+      },
       {
         key: "compositionType",
         requirement: "required",
         valueType: "enum",
         enumValues: ["packaging", "bom", "kit", "bundle", "accessory", "included"],
+        hint: "tipo da linha na composição (não confundir com productType do componente)",
       },
       {
         key: "packagingChannel",
@@ -264,12 +279,30 @@ export const INGESTION_TYPE_REFERENCES: IngestionTypeReference[] = [
         condition: "se compositionType = packaging",
         valueType: "online | presential",
       },
+      {
+        key: "required",
+        requirement: "optional",
+        valueType: "boolean",
+        default: "true",
+      },
+      {
+        key: "isDefault",
+        requirement: "optional",
+        valueType: "boolean",
+        default: "true",
+      },
+      {
+        key: "notes",
+        requirement: "optional",
+        valueType: "string ≤ 1000",
+        hint: "notas da linha (coluna Notas na UI)",
+      },
     ],
   },
   {
     type: "product_composition_set",
     summary:
-      'Substitui linhas de composição existentes (action obrigatória "replace"). Arquiva o escopo definido por replaceTypes e packagingChannel opcional; insere items num único batch. Pai: exactamente um de parentProductId, parentProductRef, parentProductSku, parentProductSlug.',
+      'Substitui linhas da receita (BOM/embalagem): `action` obrigatória `"replace"`. Arquiva o escopo (`replaceTypes`, `packagingChannel` opcional) e insere `items` num único batch. Pai: exactamente um de parentProductId, parentProductRef, parentProductSku, parentProductSlug. Cada item: mesmo contrato de linha que `product_composition` (componente + quantity/quantityUnit = uso por peça).',
     envelope: [
       { key: "type", requirement: "required", hint: "literal product_composition_set" },
       { key: "action", requirement: "required", hint: 'deve ser "replace"' },
@@ -317,7 +350,7 @@ export const INGESTION_TYPE_REFERENCES: IngestionTypeReference[] = [
         key: "items",
         requirement: "required",
         valueType:
-          "array (quantity, compositionType, childProductRef|childProductId|childSku|childProductSku, …)",
+          "array de linhas (componente via childProductRef|childProductId|childSku|childProductSku; quantity + quantityUnit opcional = uso por peça; compositionType; …)",
       },
     ],
   },
