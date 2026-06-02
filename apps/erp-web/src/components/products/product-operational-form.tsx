@@ -652,17 +652,7 @@ function parseGalleryFileIdsFromProduct(raw: unknown): string {
 const MAX_PRODUCT_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_GALLERY_IMAGE_SLOTS = 100;
 
-const PRODUCT_FILE_ID_RE = /^file_[a-f0-9]{32}$/i;
-
-function isPreviewableProductFileId(raw: string): boolean {
-  return PRODUCT_FILE_ID_RE.test(raw.trim());
-}
-
-function productFilePreviewSrc(fileId: string): string {
-  return `/api/product-files/${encodeURIComponent(fileId.trim())}`;
-}
-
-/** Mesma lógica para textarea da galeria, preview e payload (incl. `\r\n` do Windows). */
+import { isPreviewableProductFileId, productFilePreviewSrc } from "@/lib/product-file-preview";
 function parseGalleryFileIdLines(text: string): string[] {
   return text
     .split(/[\r\n,]+/)

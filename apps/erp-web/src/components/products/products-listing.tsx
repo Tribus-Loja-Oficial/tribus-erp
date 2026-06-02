@@ -5,7 +5,9 @@ import { Fragment } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { ImageIcon } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { isPreviewableProductFileId, productFilePreviewSrc } from "@/lib/product-file-preview";
 import {
   DEFAULT_PRODUCT_LIST_LIMIT,
   parseProductListSearchParams,
@@ -46,6 +48,7 @@ export interface ProductListRow {
   availableForEvents: boolean;
   archivedAt?: string | null;
   updatedAt?: string | null;
+  mainImageFileId?: string | null;
 }
 
 const PRODUCT_TYPES: { value: string; label: string }[] = [
@@ -123,6 +126,36 @@ function listPriceLabel(p: ProductListRow): string {
     return `a partir de ${formatCurrency(vmin)}`;
   }
   return formatCurrency(vmin);
+}
+
+function ProductListMainImage({
+  mainImageFileId,
+  name,
+}: {
+  mainImageFileId?: string | null;
+  name: string;
+}) {
+  if (!isPreviewableProductFileId(mainImageFileId)) {
+    return (
+      <div
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-dashed border-zinc-200 bg-zinc-50 text-zinc-400"
+        title="Sem imagem principal"
+      >
+        <ImageIcon className="h-4 w-4" aria-hidden />
+        <span className="sr-only">Sem imagem principal</span>
+      </div>
+    );
+  }
+  return (
+    <img
+      src={productFilePreviewSrc(mainImageFileId!)}
+      alt=""
+      title={`Imagem principal: ${name}`}
+      className="h-10 w-10 shrink-0 rounded-md border border-zinc-200 bg-zinc-100 object-cover"
+      loading="lazy"
+      decoding="async"
+    />
+  );
 }
 
 function sortIndicator(qp: ProductListQuery, field: string): "" | "↑" | "↓" {
@@ -587,6 +620,9 @@ export function ProductsListing({
                 />
               </th>
               <th className="w-10 px-2 py-3" aria-label="Edição rápida" />
+              <th className="w-12 px-2 py-3 text-xs font-semibold tracking-wide text-zinc-500">
+                Imagem
+              </th>
               {SORTABLE.map((col) => (
                 <Fragment key={col.field}>
                   <th className="px-3 py-3">
@@ -619,7 +655,7 @@ export function ProductsListing({
           <tbody>
             {products.length === 0 ? (
               <tr>
-                <td colSpan={13} className="px-4 py-12 text-center text-zinc-600">
+                <td colSpan={14} className="px-4 py-12 text-center text-zinc-600">
                   <p className="font-medium text-zinc-800">Nenhum produto encontrado.</p>
                   <p className="mt-1 text-sm">Ajuste os filtros ou cadastre um novo produto.</p>
                   <div className="mt-4 flex justify-center gap-3">
@@ -684,6 +720,15 @@ export function ProductsListing({
                           />
                         </svg>
                       </button>
+                    </td>
+                    <td className="px-2 py-2 align-middle">
+                      <Link
+                        href={`/products/${p.id}`}
+                        className="inline-block rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+                        title={`Ver ${p.name}`}
+                      >
+                        <ProductListMainImage mainImageFileId={p.mainImageFileId} name={p.name} />
+                      </Link>
                     </td>
                     <td className="px-3 py-3 font-mono text-xs text-zinc-700 tabular-nums">
                       {p.externalRef ?? "—"}
