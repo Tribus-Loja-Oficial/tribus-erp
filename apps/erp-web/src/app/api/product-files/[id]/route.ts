@@ -33,7 +33,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     status: 200,
     headers: {
       "Content-Type": contentType,
-      "Cache-Control": "private, max-age=300",
+      "Cache-Control": "private, max-age=3600, stale-while-revalidate=86400",
     },
   });
 }

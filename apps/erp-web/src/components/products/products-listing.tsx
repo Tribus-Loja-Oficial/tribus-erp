@@ -5,9 +5,8 @@ import { Fragment } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
-import { ImageIcon } from "lucide-react";
+import { ProductListMainImage } from "@/components/products/product-list-main-image";
 import { formatCurrency } from "@/lib/utils";
-import { isPreviewableProductFileId, productFilePreviewSrc } from "@/lib/product-file-preview";
 import {
   DEFAULT_PRODUCT_LIST_LIMIT,
   parseProductListSearchParams,
@@ -126,36 +125,6 @@ function listPriceLabel(p: ProductListRow): string {
     return `a partir de ${formatCurrency(vmin)}`;
   }
   return formatCurrency(vmin);
-}
-
-function ProductListMainImage({
-  mainImageFileId,
-  name,
-}: {
-  mainImageFileId?: string | null;
-  name: string;
-}) {
-  if (!isPreviewableProductFileId(mainImageFileId)) {
-    return (
-      <div
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-dashed border-zinc-200 bg-zinc-50 text-zinc-400"
-        title="Sem imagem principal"
-      >
-        <ImageIcon className="h-4 w-4" aria-hidden />
-        <span className="sr-only">Sem imagem principal</span>
-      </div>
-    );
-  }
-  return (
-    <img
-      src={productFilePreviewSrc(mainImageFileId!)}
-      alt=""
-      title={`Imagem principal: ${name}`}
-      className="h-10 w-10 shrink-0 rounded-md border border-zinc-200 bg-zinc-100 object-cover"
-      loading="lazy"
-      decoding="async"
-    />
-  );
 }
 
 function sortIndicator(qp: ProductListQuery, field: string): "" | "↑" | "↓" {
@@ -620,7 +589,7 @@ export function ProductsListing({
                 />
               </th>
               <th className="w-10 px-2 py-3" aria-label="Edição rápida" />
-              <th className="w-12 px-2 py-3 text-xs font-semibold tracking-wide text-zinc-500">
+              <th className="w-[4.5rem] px-2 py-3 text-xs font-semibold tracking-wide text-zinc-500">
                 Imagem
               </th>
               {SORTABLE.map((col) => (
@@ -727,7 +696,11 @@ export function ProductsListing({
                         className="inline-block rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
                         title={`Ver ${p.name}`}
                       >
-                        <ProductListMainImage mainImageFileId={p.mainImageFileId} name={p.name} />
+                        <ProductListMainImage
+                          key={p.mainImageFileId ?? `empty-${p.id}`}
+                          mainImageFileId={p.mainImageFileId}
+                          name={p.name}
+                        />
                       </Link>
                     </td>
                     <td className="px-3 py-3 font-mono text-xs text-zinc-700 tabular-nums">
