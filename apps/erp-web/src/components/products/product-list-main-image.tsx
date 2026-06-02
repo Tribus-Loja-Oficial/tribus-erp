@@ -1,11 +1,11 @@
 "use client";
 
-import { ImageIcon } from "lucide-react";
+import { ImageIcon, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { isPreviewableProductFileId, productFilePreviewSrc } from "@/lib/product-file-preview";
 
-const PREVIEW_CLASS = "h-14 w-14";
+const PREVIEW_CLASS = "h-[70px] w-[70px]";
 
 function EmptyImagePlaceholder({ title }: { title: string }) {
   return (
@@ -52,19 +52,23 @@ export function ProductListMainImage({
     >
       <div
         className={cn(
-          "absolute inset-0 bg-gradient-to-br from-zinc-100 to-zinc-200 transition-opacity duration-300",
+          "absolute inset-0 flex items-center justify-center bg-gradient-to-br from-zinc-100 to-zinc-200 transition-opacity duration-300",
           loaded ? "pointer-events-none opacity-0" : "opacity-100",
         )}
-        aria-hidden
+        role="status"
+        aria-live="polite"
+        aria-label="A carregar imagem"
       >
-        <div className="absolute inset-0 animate-pulse bg-zinc-200/80" />
+        <div className="absolute inset-0 animate-pulse bg-zinc-200/60" aria-hidden />
+        <Loader2 className="relative h-6 w-6 animate-spin text-zinc-400" aria-hidden />
+        <span className="sr-only">A carregar imagem</span>
       </div>
       <img
         key={src}
         src={src}
         alt=""
-        width={56}
-        height={56}
+        width={70}
+        height={70}
         className={cn(
           PREVIEW_CLASS,
           "relative object-cover transition-opacity duration-300 ease-out",

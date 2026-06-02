@@ -589,7 +589,7 @@ export function ProductsListing({
                 />
               </th>
               <th className="w-10 px-2 py-3" aria-label="Edição rápida" />
-              <th className="w-[4.5rem] px-2 py-3 text-xs font-semibold tracking-wide text-zinc-500">
+              <th className="w-[5.5rem] px-2 py-3 text-xs font-semibold tracking-wide text-zinc-500">
                 Imagem
               </th>
               {SORTABLE.map((col) => (
