@@ -12,7 +12,6 @@ import {
   calculateLaborCostCents,
   childCostUnitBasisForProduct,
   compositionLineUsesLegacyCostRisk,
-  deriveCostPerConsumptionUnitCents,
   lineCostCentsFromComposition,
 } from "../domain/product-cost.js";
 import { createInventoryRepository } from "../repositories/inventory.repository.js";
@@ -117,17 +116,6 @@ export function createProductService(db: AppDb) {
         lengthCm: input.lengthCm ?? null,
         widthCm: input.widthCm ?? null,
         heightCm: input.heightCm ?? null,
-        purchaseUnit: input.purchaseUnit ?? null,
-        purchaseQuantity: input.purchaseQuantity ?? null,
-        consumptionUnit: input.consumptionUnit ?? null,
-        acquisitionCostCents: input.acquisitionCostCents ?? null,
-        costPerConsumptionUnitCents:
-          input.costPerConsumptionUnitCents ??
-          deriveCostPerConsumptionUnitCents({
-            acquisitionCostCents: input.acquisitionCostCents ?? null,
-            purchaseQuantity: input.purchaseQuantity ?? null,
-          }) ??
-          null,
         producedInternally: input.producedInternally ?? false,
         averageProductionTimeMinutes: input.averageProductionTimeMinutes ?? null,
         sellable,
@@ -412,21 +400,6 @@ export function createProductService(db: AppDb) {
       if (imagesJson !== undefined) patch.imagesJson = JSON.stringify(imagesJson);
       patch.producedInternally = nextProduced;
       patch.averageProductionTimeMinutes = nextAvg ?? null;
-
-      const acq = patch.acquisitionCostCents ?? existing.acquisitionCostCents;
-      const pq = patch.purchaseQuantity ?? existing.purchaseQuantity;
-      if (
-        patch.costPerConsumptionUnitCents === undefined &&
-        acq != null &&
-        pq != null &&
-        (patch.acquisitionCostCents !== undefined || patch.purchaseQuantity !== undefined)
-      ) {
-        const derived = deriveCostPerConsumptionUnitCents({
-          acquisitionCostCents: acq as number,
-          purchaseQuantity: pq as number,
-        });
-        if (derived != null) patch.costPerConsumptionUnitCents = derived;
-      }
 
       const filtered = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
 

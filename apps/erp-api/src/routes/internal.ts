@@ -15,6 +15,7 @@ import {
   ingestionPayloadSchema,
 } from "../schemas/ingestion.schemas.js";
 import { createIngestionService, validateIngestionPayload } from "../services/ingestion.service.js";
+import { createPurchaseService } from "../services/purchase.service.js";
 import { generateId } from "../utils/id.js";
 import { createAuditRepository } from "../repositories/audit.repository.js";
 import { createIngestionJobRepository } from "../repositories/ingestion-job.repository.js";
@@ -394,6 +395,20 @@ internal.post("/auth/verify", async (c) => {
       { user: { id: user.id, email: user.email, name: user.name, role: user.role } },
       200,
     );
+  } catch (err) {
+    const { message, code, status } = toApiError(err);
+    return c.json({ message, code }, status);
+  }
+});
+
+internal.post("/costs/recalculate-averages", async (c) => {
+  try {
+    const config = getEnv(c.env);
+    verifyInternalToken(c.req.header("Authorization"), config.erpInternalSecret);
+    const db = createDb(config.db);
+    const purchaseService = createPurchaseService(db);
+    const result = await purchaseService.recalculateAllProductAverageCosts();
+    return c.json({ data: result }, 200);
   } catch (err) {
     const { message, code, status } = toApiError(err);
     return c.json({ message, code }, status);

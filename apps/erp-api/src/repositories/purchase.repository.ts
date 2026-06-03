@@ -1,4 +1,4 @@
-import { eq, desc, and, inArray } from "drizzle-orm";
+import { eq, desc, and, inArray, isNotNull } from "drizzle-orm";
 import type { AppDb } from "../db/client.js";
 import {
   purchaseOrders,
@@ -130,6 +130,15 @@ export function createPurchaseRepository(db: AppDb) {
         .where(eq(purchaseReceiptItems.productId, productId))
         .orderBy(desc(purchaseReceipts.receivedAt), desc(purchaseReceiptItems.createdAt))
         .limit(limit);
+    },
+
+    /** IDs de produtos que já têm pelo menos uma linha em recebimento de compra. */
+    async findProductIdsWithReceiptItems(): Promise<string[]> {
+      const rows = await db
+        .selectDistinct({ productId: purchaseReceiptItems.productId })
+        .from(purchaseReceiptItems)
+        .where(isNotNull(purchaseReceiptItems.productId));
+      return rows.map((r) => r.productId).filter((id): id is string => Boolean(id));
     },
 
     /** Primeira entrada (mais recente) por produto, para link na composição. */

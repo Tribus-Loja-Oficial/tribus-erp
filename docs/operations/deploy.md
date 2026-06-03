@@ -130,6 +130,17 @@ Bindings D1 e R2 configurados em `wrangler.toml`:
 
 A ingestão em segundo plano usa uma **Queue** e a tabela D1 **`ingestion_jobs`** (migrações `0012_ingestion_jobs.sql` e `0013_ingestion_jobs_chunk_state.sql` para `chunk_state_json` entre chunks). A evolução de compras/custo médio adiciona a migration `0014_purchase_receipts_costing.sql` (`purchase_receipts`, `purchase_receipt_items`, `inventory_valuation_events`, `product_cost_snapshots` e novos campos de custo em `products`). Sem fila configurada, `POST /internal/ingestion/jobs` responde **503** (`QUEUE_UNAVAILABLE`) e a UI mostra erro claro.
 
+### Recalcular custo médio (2 últimas compras)
+
+Após deploy que altera a fórmula do custo médio, executar uma vez:
+
+```bash
+curl -X POST "https://<erp-api-host>/internal/costs/recalculate-averages" \
+  -H "Authorization: Bearer <ERP_INTERNAL_SECRET>"
+```
+
+Ver também [`docs/reference/product-average-cost.md`](../reference/product-average-cost.md).
+
 1. Criar a fila (nome alinhado ao `wrangler.toml`, ex. `tribus-erp-ingestion-queue`):
 
    ```bash

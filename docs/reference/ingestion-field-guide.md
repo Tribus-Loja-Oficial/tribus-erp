@@ -181,7 +181,7 @@ Definição de eixos de variação no **pai** não tem campo `attributes` de cat
 - **`totalCostCents`** deve ser exactamente **`materialCostCents` + `packagingCostCents` + `laborCostCents`**.
 - **`componentCosts`** (opcional): array de linhas gravadas em `component_costs_json`, no mesmo formato que os snapshots gerados pela receita/BOM (custos de **composição** apenas). Os rótulos na UI (custo base, custo calculado de uso por peça, etc.) referem-se a campos derivados na visualização; na ingestão de snapshot usam-se os nomes técnicos do schema (`unitCost`, `lineTotalCents`, …).
   - Se presente e não vazio: a **soma** de **`lineTotalCents`** de todas as linhas deve ser **`materialCostCents` + `packagingCostCents`** (mão de obra entra só nos totais agregados, não nas linhas).
-  - Cada linha é um objecto **estrito** (sem chaves extra): ver enum de **`unitCostBasis`** (`average` \| `consumption_unit` \| `legacy_cost_price`) e **`packagingChannel`** (`online` \| `presential`) quando `compositionType` for embalagem.
+  - Cada linha é um objecto **estrito** (sem chaves extra): ver enum de **`unitCostBasis`** (`average` \| `legacy_cost_price`) e **`packagingChannel`** (`online` \| `presential`) quando `compositionType` for embalagem. O valor legado `consumption_unit` não é mais aceite.
 - Exemplo completo para copy-paste: ficheiro **`docs/examples/ingestion/09-product-cost-snapshot-with-component-lines.json`** e o artefacto único **`ingestion-payload.schema.json`** (`x-official-examples` + schema + este guia em `x-documentation-markdown`).
 
 ## `purchase_receipt` — datas

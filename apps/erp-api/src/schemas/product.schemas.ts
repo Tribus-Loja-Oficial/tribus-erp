@@ -78,12 +78,6 @@ export const createProductSchema = z.object({
   /** Custo de mão de obra por hora (centavos); persiste em product_production_profiles. */
   laborCostPerHourCents: z.number().int().min(0).nullish(),
   productionProfileNotes: z.string().max(2000).nullish(),
-  purchaseUnit: z.string().max(80).nullish(),
-  purchaseQuantity: z.number().positive().nullish(),
-  consumptionUnit: z.string().max(80).nullish(),
-  acquisitionCostCents: z.number().int().min(0).nullish(),
-  /** Cents por unidade de consumo (ex.: por cm); pode ser fraccionário. */
-  costPerConsumptionUnitCents: z.number().min(0).nullish(),
   sellable: z.boolean().optional(),
   availableForEcommerce: z.boolean().optional(),
   availableForPos: z.boolean().optional(),

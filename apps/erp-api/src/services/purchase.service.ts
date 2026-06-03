@@ -14,6 +14,7 @@ import type {
   ListPurchaseOrdersParams,
   ListPurchaseReceiptsParams,
 } from "../schemas/purchase.schemas.js";
+import { averageCostFromReceiptItemRows } from "../domain/product-average-cost.js";
 
 export function createPurchaseService(db: AppDb) {
   const purchaseRepo = createPurchaseRepository(db);
@@ -21,6 +22,65 @@ export function createPurchaseService(db: AppDb) {
   const productsRepo = createProductRepository(db);
   const snapshotService = createProductCostSnapshotService(db);
   const now = () => new Date().toISOString();
+
+  async function recalculateProductAverageCostFromReceipts(
+    productId: string,
+    opts?: { valuationReceiptId?: string; issueDate?: string },
+  ) {
+    const joinRows = await purchaseRepo.findReceiptItemsForProduct(productId, 200);
+    const itemRows = joinRows.map(({ item, receipt }) => ({
+      receiptId: receipt.id,
+      receivedAt: receipt.receivedAt,
+      totalCostCents: item.totalCostCents,
+      stockQuantity: item.stockQuantity,
+      stockUnit: item.stockUnit,
+    }));
+
+    const computed = averageCostFromReceiptItemRows(itemRows, 2);
+    const currentProduct = await productsRepo.findById(productId);
+    if (!currentProduct) return null;
+
+    const latestRow = joinRows[0];
+    const lastUnitCost = latestRow
+      ? latestRow.item.unitCostDecimal
+      : (currentProduct.lastPurchaseCostDecimal ?? null);
+
+    const patch: Parameters<typeof productsRepo.update>[1] = {
+      lastPurchaseCostDecimal: lastUnitCost,
+      lastPurchaseDate:
+        opts?.issueDate ?? latestRow?.receipt.issueDate ?? currentProduct.lastPurchaseDate,
+      costUpdatedAt: now(),
+    };
+
+    if (computed) {
+      patch.averageCostDecimal = computed.averageCostDecimal;
+      patch.averageCostUnit = computed.averageCostUnit;
+      patch.costSource = "purchase_average";
+    }
+
+    await productsRepo.update(productId, patch);
+
+    if (opts?.valuationReceiptId && computed) {
+      const averageCostBefore = currentProduct.averageCostDecimal ?? 0;
+      await purchaseRepo.insertValuationEvent({
+        id: generateId(),
+        productId,
+        sourceType: "purchase_receipt",
+        sourceId: opts.valuationReceiptId,
+        quantityBefore: currentProduct.currentStock,
+        valueBeforeCents: Math.round(currentProduct.currentStock * averageCostBefore),
+        quantityIn: 0,
+        valueInCents: 0,
+        quantityAfter: currentProduct.currentStock,
+        valueAfterCents: Math.round(currentProduct.currentStock * computed.averageCostDecimal),
+        averageCostBeforeDecimal: averageCostBefore,
+        averageCostAfterDecimal: computed.averageCostDecimal,
+        createdAt: now(),
+      });
+    }
+
+    return computed;
+  }
 
   return {
     async create(input: CreatePurchaseOrderInput, actorId?: string) {
@@ -272,42 +332,13 @@ export function createPurchaseService(db: AppDb) {
           metadataJson: JSON.stringify(item.metadata ?? {}),
           createdAt: now(),
         });
+      }
 
-        const currentProduct = await productsRepo.findById(productId);
-        if (currentProduct) {
-          const quantityAfter = currentProduct.currentStock;
-          const quantityBefore = Math.max(0, quantityAfter - item.stockQuantity);
-          const averageCostBefore = currentProduct.averageCostDecimal ?? 0;
-          const valueBefore = Math.round(quantityBefore * averageCostBefore);
-          const valueIn = Math.round(totalCostCents);
-          const valueAfter = valueBefore + valueIn;
-          const averageCostAfter = quantityAfter > 0 ? valueAfter / quantityAfter : unitCostDecimal;
-
-          await productsRepo.update(productId, {
-            averageCostDecimal: averageCostAfter,
-            averageCostUnit: item.stockUnit,
-            lastPurchaseCostDecimal: unitCostDecimal,
-            lastPurchaseDate: input.issueDate,
-            costSource: "purchase_average",
-            costUpdatedAt: now(),
-          });
-
-          await purchaseRepo.insertValuationEvent({
-            id: generateId(),
-            productId,
-            sourceType: "purchase_receipt",
-            sourceId: receipt.id,
-            quantityBefore,
-            valueBeforeCents: valueBefore,
-            quantityIn: item.stockQuantity,
-            valueInCents: valueIn,
-            quantityAfter,
-            valueAfterCents: valueAfter,
-            averageCostBeforeDecimal: averageCostBefore,
-            averageCostAfterDecimal: averageCostAfter,
-            createdAt: now(),
-          });
-        }
+      for (const productId of impactedComponents) {
+        await recalculateProductAverageCostFromReceipts(productId, {
+          valuationReceiptId: receipt.id,
+          issueDate: input.issueDate,
+        });
       }
 
       for (const childProductId of impactedComponents) {
@@ -334,6 +365,17 @@ export function createPurchaseService(db: AppDb) {
       });
 
       return receipt;
+    },
+
+    /** Recalcula averageCostDecimal de todos os produtos com histórico de recebimento (backfill / deploy). */
+    async recalculateAllProductAverageCosts(): Promise<{ updated: number }> {
+      const productIds = await purchaseRepo.findProductIdsWithReceiptItems();
+      let updated = 0;
+      for (const productId of productIds) {
+        const result = await recalculateProductAverageCostFromReceipts(productId);
+        if (result) updated += 1;
+      }
+      return { updated };
     },
   };
 }

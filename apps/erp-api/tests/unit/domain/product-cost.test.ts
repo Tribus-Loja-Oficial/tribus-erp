@@ -1,8 +1,12 @@
 import { describe, it, expect } from "vitest";
 import {
+  aggregatePurchaseRowsByReceipt,
   buildProductCostBreakdownCents,
   calculateEstimatedProductCost,
   calculateLaborCostCents,
+  childCostUnitBasisForProduct,
+  childUnitCostCentsForCompositionLine,
+  computeAverageCostFromLastPurchases,
   lineCostCentsFromComposition,
 } from "../../../src/domain/product-cost.js";
 import type { Product } from "../../../src/db/schema/index.js";
@@ -47,16 +51,138 @@ describe("calculateLaborCostCents", () => {
   });
 });
 
+describe("computeAverageCostFromLastPurchases", () => {
+  it("returns null with no receipts", () => {
+    expect(computeAverageCostFromLastPurchases([])).toBeNull();
+  });
+
+  it("uses single receipt unit cost", () => {
+    const out = computeAverageCostFromLastPurchases([
+      {
+        receiptId: "r1",
+        receivedAt: "2025-01-02T00:00:00.000Z",
+        totalCostCents: 1000,
+        stockQuantity: 100,
+        stockUnit: "g",
+      },
+    ]);
+    expect(out).toEqual({
+      averageCostDecimal: 10,
+      averageCostUnit: "g",
+      receiptCount: 1,
+    });
+  });
+
+  it("weights two receipts by quantity (100g@10 + 1000g@80)", () => {
+    const out = computeAverageCostFromLastPurchases([
+      {
+        receiptId: "r2",
+        receivedAt: "2025-02-01T00:00:00.000Z",
+        totalCostCents: 8000,
+        stockQuantity: 1000,
+        stockUnit: "g",
+      },
+      {
+        receiptId: "r1",
+        receivedAt: "2025-01-01T00:00:00.000Z",
+        totalCostCents: 1000,
+        stockQuantity: 100,
+        stockUnit: "g",
+      },
+    ]);
+    expect(out?.averageCostDecimal).toBeCloseTo(9000 / 1100, 8);
+    expect(out?.averageCostUnit).toBe("g");
+    expect(out?.receiptCount).toBe(2);
+  });
+
+  it("ignores receipts beyond the last two", () => {
+    const out = computeAverageCostFromLastPurchases(
+      [
+        {
+          receiptId: "r3",
+          receivedAt: "2025-03-01T00:00:00.000Z",
+          totalCostCents: 500,
+          stockQuantity: 50,
+          stockUnit: "g",
+        },
+        {
+          receiptId: "r2",
+          receivedAt: "2025-02-01T00:00:00.000Z",
+          totalCostCents: 200,
+          stockQuantity: 20,
+          stockUnit: "g",
+        },
+        {
+          receiptId: "r1",
+          receivedAt: "2025-01-01T00:00:00.000Z",
+          totalCostCents: 9999,
+          stockQuantity: 999,
+          stockUnit: "g",
+        },
+      ],
+      2,
+    );
+    expect(out?.receiptCount).toBe(2);
+    expect(out?.averageCostDecimal).toBeCloseTo(700 / 70, 8);
+  });
+});
+
+describe("aggregatePurchaseRowsByReceipt", () => {
+  it("sums multiple lines on the same receipt", () => {
+    const agg = aggregatePurchaseRowsByReceipt([
+      {
+        receiptId: "r1",
+        receivedAt: "2025-01-01T00:00:00.000Z",
+        totalCostCents: 300,
+        stockQuantity: 30,
+        stockUnit: "cm",
+      },
+      {
+        receiptId: "r1",
+        receivedAt: "2025-01-01T00:00:00.000Z",
+        totalCostCents: 200,
+        stockQuantity: 20,
+        stockUnit: "cm",
+      },
+    ]);
+    expect(agg).toHaveLength(1);
+    expect(agg[0]?.totalCostCents).toBe(500);
+    expect(agg[0]?.stockQuantity).toBe(50);
+  });
+});
+
+describe("childUnitCostCentsForCompositionLine", () => {
+  it("prefers averageCostDecimal over costPriceCents", () => {
+    const child = {
+      averageCostDecimal: 4.5,
+      costPriceCents: 999,
+      costPerConsumptionUnitCents: 1,
+    } as Product;
+    expect(childUnitCostCentsForCompositionLine(child)).toBe(4.5);
+    expect(childCostUnitBasisForProduct(child)).toBe("average");
+  });
+
+  it("falls back to costPriceCents when no average", () => {
+    const child = {
+      averageCostDecimal: null,
+      costPriceCents: 120,
+      costPerConsumptionUnitCents: 4.5,
+    } as Product;
+    expect(childUnitCostCentsForCompositionLine(child)).toBe(120);
+    expect(childCostUnitBasisForProduct(child)).toBe("legacy_cost_price");
+  });
+});
+
 describe("buildProductCostBreakdownCents", () => {
   const childA = {
+    averageCostDecimal: 4.5,
     costPriceCents: 100,
-    costPerConsumptionUnitCents: 4.5,
     productType: "raw_material",
   } as Product;
 
   const childB = {
+    averageCostDecimal: null,
     costPriceCents: 50,
-    costPerConsumptionUnitCents: null,
     productType: "packaging",
   } as Product;
 
@@ -89,10 +215,10 @@ describe("buildProductCostBreakdownCents", () => {
 });
 
 describe("lineCostCentsFromComposition", () => {
-  it("uses cost per consumption when set", () => {
+  it("uses average cost when set", () => {
     const child = {
+      averageCostDecimal: 4.5,
       costPriceCents: 999,
-      costPerConsumptionUnitCents: 4.5,
     } as Product;
     const line = lineCostCentsFromComposition(10, child);
     expect(line.unitCostCents).toBe(4.5);

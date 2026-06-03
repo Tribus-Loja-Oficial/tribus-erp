@@ -73,15 +73,11 @@ export function calculateEstimatedProductCost(
   };
 }
 
-/** Custo unitário do componente na linha de composição (cents por unidade de quantidade informada na composição). */
+/** Custo unitário do componente na linha de composição (mesma unidade que averageCostDecimal / quantidade na BOM). */
 export function childUnitCostCentsForCompositionLine(child: Product): number {
   const averageCost = child.averageCostDecimal;
   if (averageCost != null && Number.isFinite(averageCost) && averageCost >= 0) {
     return averageCost;
-  }
-  const perConsumption = child.costPerConsumptionUnitCents;
-  if (perConsumption != null && Number.isFinite(perConsumption) && perConsumption >= 0) {
-    return perConsumption;
   }
   return Math.max(0, child.costPriceCents);
 }
@@ -147,28 +143,76 @@ export function buildProductCostBreakdownCents(
   };
 }
 
-/** Deriva custo por unidade de consumo a partir da compra (acquisition / purchaseQuantity), em cents. */
-export function deriveCostPerConsumptionUnitCents(product: {
-  acquisitionCostCents: number | null;
-  purchaseQuantity: number | null;
-}): number | null {
-  const acq = product.acquisitionCostCents;
-  const pq = product.purchaseQuantity;
-  if (acq == null || pq == null || pq <= 0 || acq < 0) return null;
-  return acq / pq;
+/** Agregado por recebimento de compra (uma “compra” = um purchase_receipt). */
+export type PurchaseReceiptCostAggregate = {
+  receiptId: string;
+  receivedAt: string;
+  totalCostCents: number;
+  stockQuantity: number;
+  stockUnit: string;
+};
+
+export type PurchaseReceiptItemCostRow = {
+  receiptId: string;
+  receivedAt: string;
+  totalCostCents: number;
+  stockQuantity: number;
+  stockUnit: string;
+};
+
+/** Agrupa linhas de purchase_receipt_items por recebimento. */
+export function aggregatePurchaseRowsByReceipt(
+  rows: PurchaseReceiptItemCostRow[],
+): PurchaseReceiptCostAggregate[] {
+  const byReceipt = new Map<string, PurchaseReceiptCostAggregate>();
+  for (const row of rows) {
+    const existing = byReceipt.get(row.receiptId);
+    if (!existing) {
+      byReceipt.set(row.receiptId, { ...row });
+      continue;
+    }
+    existing.totalCostCents += row.totalCostCents;
+    existing.stockQuantity += row.stockQuantity;
+  }
+  return [...byReceipt.values()].sort((a, b) => b.receivedAt.localeCompare(a.receivedAt));
+}
+
+/**
+ * Custo médio = soma dos custos ÷ soma das quantidades nas N compras (recebimentos) mais recentes.
+ * Unidade de referência = unidade de estoque do recebimento mais recente.
+ */
+export function computeAverageCostFromLastPurchases(
+  receiptAggregates: PurchaseReceiptCostAggregate[],
+  maxReceipts = 2,
+): { averageCostDecimal: number; averageCostUnit: string; receiptCount: number } | null {
+  const sorted = [...receiptAggregates].sort((a, b) => b.receivedAt.localeCompare(a.receivedAt));
+  const selected = sorted.slice(0, maxReceipts);
+  if (selected.length === 0) return null;
+
+  let sumCost = 0;
+  let sumQty = 0;
+  for (const r of selected) {
+    if (r.stockQuantity > 0 && r.totalCostCents >= 0) {
+      sumCost += r.totalCostCents;
+      sumQty += r.stockQuantity;
+    }
+  }
+  if (sumQty <= 0) return null;
+
+  return {
+    averageCostDecimal: sumCost / sumQty,
+    averageCostUnit: selected[0]!.stockUnit,
+    receiptCount: selected.length,
+  };
 }
 
 /** Qual campo do cadastro do componente alimenta o custo unitário na linha de composição. */
-export type ChildCostUnitBasis = "average" | "consumption_unit" | "legacy_cost_price";
+export type ChildCostUnitBasis = "average" | "legacy_cost_price";
 
 export function childCostUnitBasisForProduct(child: Product): ChildCostUnitBasis {
   const averageCost = child.averageCostDecimal;
   if (averageCost != null && Number.isFinite(averageCost) && averageCost >= 0) {
     return "average";
-  }
-  const perConsumption = child.costPerConsumptionUnitCents;
-  if (perConsumption != null && Number.isFinite(perConsumption) && perConsumption >= 0) {
-    return "consumption_unit";
   }
   return "legacy_cost_price";
 }

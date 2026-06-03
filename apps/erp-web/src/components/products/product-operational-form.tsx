@@ -44,7 +44,7 @@ export interface CompositionRow {
   childCostSource?: string | null;
   childCostUpdatedAt?: string | null;
   childLastPurchaseDate?: string | null;
-  childUnitCostBasis?: "average" | "consumption_unit" | "legacy_cost_price";
+  childUnitCostBasis?: "average" | "legacy_cost_price";
   childLegacyCostWarning?: boolean;
   childAverageCostUnit?: string | null;
   childLatestReceiptId?: string | null;
@@ -213,15 +213,6 @@ function inputToCents(raw: string): number {
   return Math.round(n * 100);
 }
 
-/** Centavos com decimais (ex.: custo por cm). */
-function inputToFractionalCents(raw: string): number | undefined {
-  const t = raw.trim();
-  if (!t) return undefined;
-  const n = Number(t.replace(",", "."));
-  if (!Number.isFinite(n) || n < 0) return undefined;
-  return n * 100;
-}
-
 function pctMargin(saleCents: number, totalCostCents: number | null | undefined): number | null {
   if (saleCents <= 0 || totalCostCents == null) return null;
   return ((saleCents - totalCostCents) / saleCents) * 100;
@@ -235,9 +226,7 @@ function markup(saleCents: number, totalCostCents: number): number | null {
 function compositionCostBasisLabel(basis: string | undefined): string {
   switch (basis) {
     case "average":
-      return "Custo médio ponderado";
-    case "consumption_unit":
-      return "Custo proporcional (cadastro)";
+      return "Custo médio (2 últimas compras)";
     case "legacy_cost_price":
       return "Preço de custo (legado)";
     default:
@@ -276,7 +265,7 @@ function packagingChannelLabel(ch: string | null | undefined): string {
 }
 
 const COMPOSITION_COST_BASE_HEADER_TOOLTIP =
-  "Custo normalizado do componente na unidade usada nesta linha, como R$/m, R$/cm, R$/g, R$/folha ou R$/unidade. Pode vir de custo médio de compras, custo proporcional cadastrado ou custo legado.";
+  "Custo normalizado do componente na unidade usada nesta linha, como R$/m, R$/cm, R$/g ou R$/unidade. Vem do custo médio das 2 últimas compras (ponderado por quantidade) ou do custo base legado do cadastro.";
 
 const COMPOSITION_COST_ON_PRODUCT_HEADER_TOOLTIP =
   "Valor deste componente em uma unidade do produto final: uso por peça × custo base.";
@@ -325,56 +314,37 @@ function compositionCostBaseLabel(
   return `${formatCurrency(unitCostCents ?? 0)} / ${compositionRateUnitSuffix(quantityUnit)}`;
 }
 
-type ProductCostUnitBasis = "average" | "consumption_unit" | "legacy_cost_price";
+type ProductCostUnitBasis = "average" | "legacy_cost_price";
 
 function productCostUnitBasisFromRecord(product: Record<string, unknown>): ProductCostUnitBasis {
   const averageCost = product.averageCostDecimal;
   if (averageCost != null && Number.isFinite(Number(averageCost)) && Number(averageCost) >= 0) {
     return "average";
   }
-  const perConsumption = product.costPerConsumptionUnitCents;
-  if (
-    perConsumption != null &&
-    Number.isFinite(Number(perConsumption)) &&
-    Number(perConsumption) >= 0
-  ) {
-    return "consumption_unit";
-  }
   return "legacy_cost_price";
 }
 
-function productCostDisplayUnit(
-  product: Record<string, unknown>,
-  basis: ProductCostUnitBasis,
-): string {
-  if (basis === "average") {
-    const avgUnit = String(product.averageCostUnit ?? "").trim();
-    if (avgUnit) return compositionRateUnitSuffix(avgUnit);
-  }
-  const consumption = String(product.consumptionUnit ?? "").trim();
-  if (consumption) return compositionRateUnitSuffix(consumption);
+function productCostDisplayUnit(product: Record<string, unknown>): string {
+  const avgUnit = String(product.averageCostUnit ?? "").trim();
+  if (avgUnit) return compositionRateUnitSuffix(avgUnit);
   return compositionRateUnitSuffix(String(product.unitOfMeasure ?? ""));
 }
 
 function productCostBaseInfoTooltip(product: Record<string, unknown>): string {
   const basis = productCostUnitBasisFromRecord(product);
-  const unit = productCostDisplayUnit(product, basis);
+  const unit = productCostDisplayUnit(product);
   const parts = [
-    `Valor referenciado por ${unit} (unidade usada na composição de produtos finais).`,
+    `Valor referenciado por ${unit} (unidade da última compra em estoque).`,
     `Critério ativo: ${compositionCostBasisLabel(basis)}.`,
     `Origem no cadastro: ${productCostSourceLabel(String(product.costSource ?? "unknown"))}.`,
   ];
   if (basis === "average" && product.averageCostDecimal != null) {
     parts.push(
-      `Custo médio ponderado (compras): R$ ${Number(product.averageCostDecimal).toFixed(4)} / ${unit}.`,
-    );
-  } else if (basis === "consumption_unit" && product.costPerConsumptionUnitCents != null) {
-    parts.push(
-      `Custo proporcional cadastrado: R$ ${(Number(product.costPerConsumptionUnitCents) / 100).toFixed(4)} / ${unit}.`,
+      `Custo médio das 2 últimas compras (ponderado por quantidade): R$ ${Number(product.averageCostDecimal).toFixed(4)} / ${unit}.`,
     );
   } else {
     parts.push(
-      "Campo «Custo base» do cadastro — registre entradas de compra para formar custo médio real.",
+      "Campo «Custo base» do cadastro — registre recebimentos de compra para calcular o custo médio.",
     );
     if (product.costSource === "legacy_ingestion") parts.push(COMPOSITION_LEGACY_COST_TOOLTIP);
   }
@@ -479,8 +449,6 @@ function compositionCostSourceChip(row: CompositionRow): {
   switch (row.childUnitCostBasis) {
     case "average":
       return { label: "Médio", warn: false, title: compositionCostSourceDetail(row) };
-    case "consumption_unit":
-      return { label: "Cadastro", warn: false, title: compositionCostSourceDetail(row) };
     case "legacy_cost_price":
       return {
         label: "Legado",
@@ -936,24 +904,6 @@ export function ProductOperationalForm({
   const [productionProfileNotes, setProductionProfileNotes] = useState(
     String(initialProduct.productionProfileNotes ?? ""),
   );
-  const [purchaseUnit, setPurchaseUnit] = useState(String(initialProduct.purchaseUnit ?? ""));
-  const [purchaseQuantity, setPurchaseQuantity] = useState(
-    initialProduct.purchaseQuantity != null ? String(initialProduct.purchaseQuantity) : "",
-  );
-  const [consumptionUnit, setConsumptionUnit] = useState(
-    String(initialProduct.consumptionUnit ?? ""),
-  );
-  const [acquisitionCost, setAcquisitionCost] = useState(
-    initialProduct.acquisitionCostCents != null
-      ? centsToInput(Number(initialProduct.acquisitionCostCents))
-      : "",
-  );
-  const [costPerConsumptionUnit, setCostPerConsumptionUnit] = useState(
-    initialProduct.costPerConsumptionUnitCents != null
-      ? (Number(initialProduct.costPerConsumptionUnitCents) / 100).toFixed(4)
-      : "",
-  );
-
   const [sellable, setSellable] = useState(
     initialProduct.sellable !== undefined ? Boolean(initialProduct.sellable) : true,
   );
@@ -1018,14 +968,7 @@ export function ProductOperationalForm({
 
   const isSupplyProduct = isSupplyChainProductType(productType);
   const visibleTabs = useMemo(() => visibleTabsForProductType(productType), [productType]);
-  const productCostBasis = useMemo(
-    () => productCostUnitBasisFromRecord(initialProduct),
-    [initialProduct],
-  );
-  const productCostUnit = useMemo(
-    () => productCostDisplayUnit(initialProduct, productCostBasis),
-    [initialProduct, productCostBasis],
-  );
+  const productCostUnit = useMemo(() => productCostDisplayUnit(initialProduct), [initialProduct]);
   const productCostBaseTooltip = useMemo(
     () => productCostBaseInfoTooltip(initialProduct),
     [initialProduct],
@@ -1134,11 +1077,6 @@ export function ProductOperationalForm({
       averageProductionTimeMinutes: nonNegativeIntFromInput(averageProductionTimeMinutes),
       laborCostPerHourCents: laborCostPerHour.trim() ? inputToCents(laborCostPerHour) : null,
       productionProfileNotes: productionProfileNotes.trim() || null,
-      purchaseUnit: purchaseUnit.trim() || null,
-      purchaseQuantity: purchaseQuantity.trim() ? Number(purchaseQuantity.replace(",", ".")) : null,
-      consumptionUnit: consumptionUnit.trim() || null,
-      acquisitionCostCents: acquisitionCost.trim() ? inputToCents(acquisitionCost) : null,
-      costPerConsumptionUnitCents: inputToFractionalCents(costPerConsumptionUnit) ?? null,
       sellable: productKind === "variable" ? false : sellable,
       availableForEcommerce,
       availableForPos,
@@ -1674,8 +1612,8 @@ export function ProductOperationalForm({
                     />
                     {isSupplyProduct ? (
                       <p className="mt-1 text-xs text-zinc-500">
-                        Na composição de produtos finais, o ERP prioriza custo médio de compras,
-                        depois custo proporcional cadastrado e, por último, este custo base.
+                        Na composição de produtos finais, o ERP usa o custo médio das 2 últimas
+                        compras (recebimentos de compra). Sem compras, usa este custo base.
                       </p>
                     ) : null}
                   </div>
@@ -1728,79 +1666,12 @@ export function ProductOperationalForm({
                       </div>
                     </>
                   ) : null}
-                  {productType === "raw_material" ? (
-                    <div className="space-y-3 rounded-lg border border-sky-200 bg-sky-50 p-4 md:col-span-2">
-                      <p className="text-xs font-semibold text-sky-950">
-                        Compra e consumo (custo proporcional na composição)
-                      </p>
-                      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                        <div>
-                          <label className="mb-1 block text-xs text-zinc-600">
-                            Unidade de compra (texto livre)
-                          </label>
-                          <input
-                            value={purchaseUnit}
-                            onChange={(e) => setPurchaseUnit(e.target.value)}
-                            className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
-                            placeholder="ex.: rolo"
-                          />
-                        </div>
-                        <div>
-                          <label className="mb-1 block text-xs text-zinc-600">
-                            Quantidade na compra
-                          </label>
-                          <input
-                            value={purchaseQuantity}
-                            onChange={(e) => setPurchaseQuantity(e.target.value)}
-                            className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
-                            placeholder="ex.: 10"
-                          />
-                        </div>
-                        <div>
-                          <label className="mb-1 block text-xs text-zinc-600">
-                            Unidade de consumo
-                          </label>
-                          <input
-                            value={consumptionUnit}
-                            onChange={(e) => setConsumptionUnit(e.target.value)}
-                            className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
-                            placeholder="ex.: cm"
-                          />
-                        </div>
-                        <div>
-                          <label className="mb-1 block text-xs text-zinc-600">
-                            Custo de aquisição (R$)
-                          </label>
-                          <input
-                            value={acquisitionCost}
-                            onChange={(e) => setAcquisitionCost(e.target.value)}
-                            className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm tabular-nums"
-                          />
-                        </div>
-                        <div className="sm:col-span-2">
-                          <label className="mb-1 block text-xs text-zinc-600">
-                            Custo por unidade de consumo (R$) — opcional se calcular pela compra
-                          </label>
-                          <input
-                            value={costPerConsumptionUnit}
-                            onChange={(e) => setCostPerConsumptionUnit(e.target.value)}
-                            className="w-full max-w-xs rounded-md border border-zinc-300 px-3 py-2 text-sm tabular-nums"
-                            placeholder="ex.: 0,045"
-                          />
-                          <p className="mt-1 text-xs text-zinc-500">
-                            Na composição, a quantidade deve estar na mesma unidade de consumo (ex.:
-                            82 cm com custo por cm).
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  ) : null}
                 </div>
                 <div className="rounded-lg border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm">
                   <p className="font-medium text-zinc-800">Custos (servidor)</p>
                   <p className="mt-1 text-xs text-zinc-600">
                     {isSupplyProduct
-                      ? "Custo médio e última compra vêm das entradas de estoque. Este insumo entra na composição de produtos finais na unidade indicada acima."
+                      ? "Custo médio = média ponderada das 2 últimas compras (recebimento de compra). Registre compras em Compras → Recebimentos."
                       : "Custo base (campo acima) é independente. Totais com composição e produção vêm da aba Composição e do perfil de produção."}
                   </p>
                   <ul className="mt-2 grid gap-1 text-xs text-zinc-600 sm:grid-cols-2">
