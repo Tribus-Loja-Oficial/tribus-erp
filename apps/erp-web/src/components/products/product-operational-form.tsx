@@ -1051,8 +1051,6 @@ export function ProductOperationalForm({
   const [compPackagingChannel, setCompPackagingChannel] = useState<"online" | "presential">(
     "online",
   );
-  const [compRequired, setCompRequired] = useState(true);
-  const [compDefault, setCompDefault] = useState(true);
   const [compNotes, setCompNotes] = useState("");
 
   const [editCompId, setEditCompId] = useState<string | null>(null);
@@ -1064,8 +1062,6 @@ export function ProductOperationalForm({
   const [editCompPackagingChannel, setEditCompPackagingChannel] = useState<"online" | "presential">(
     "online",
   );
-  const [editCompRequired, setEditCompRequired] = useState(true);
-  const [editCompDefault, setEditCompDefault] = useState(true);
   const [editCompNotes, setEditCompNotes] = useState("");
   const [expandedCompositionIds, setExpandedCompositionIds] = useState<Set<string>>(
     () => new Set(),
@@ -1338,8 +1334,8 @@ export function ProductOperationalForm({
         quantityUnit: compQtyUnit.trim() || undefined,
         compositionType: compType,
         packagingChannel: compType === "packaging" ? compPackagingChannel : undefined,
-        required: compRequired,
-        isDefault: compDefault,
+        required: true,
+        isDefault: true,
         notes: compNotes.trim() || undefined,
       };
       if (target === "line") {
@@ -1386,8 +1382,6 @@ export function ProductOperationalForm({
     setEditCompQty(String(row.quantity));
     setEditCompQtyUnit(row.quantityUnit ?? "unit");
     setEditCompPackagingChannel(row.packagingChannel === "presential" ? "presential" : "online");
-    setEditCompRequired(row.required);
-    setEditCompDefault(row.isDefault);
     setEditCompNotes(row.notes ?? "");
     setError(null);
   }
@@ -1413,8 +1407,8 @@ export function ProductOperationalForm({
         quantity: qty,
         quantityUnit: editCompQtyUnit.trim() || undefined,
         packagingChannel: editCompType === "packaging" ? editCompPackagingChannel : null,
-        required: editCompRequired,
-        isDefault: editCompDefault,
+        required: row?.required ?? true,
+        isDefault: row?.isDefault ?? true,
         notes: editCompNotes.trim() || undefined,
       };
       if (editCompScope === "line") {
@@ -2267,26 +2261,6 @@ export function ProductOperationalForm({
                                             </div>
                                           ) : null}
                                         </div>
-                                        <div className="mt-3 flex flex-wrap items-center gap-4">
-                                          <label className="flex items-center gap-2 text-sm">
-                                            <input
-                                              type="checkbox"
-                                              checked={editCompRequired}
-                                              onChange={(e) =>
-                                                setEditCompRequired(e.target.checked)
-                                              }
-                                            />
-                                            Obrigatório
-                                          </label>
-                                          <label className="flex items-center gap-2 text-sm">
-                                            <input
-                                              type="checkbox"
-                                              checked={editCompDefault}
-                                              onChange={(e) => setEditCompDefault(e.target.checked)}
-                                            />
-                                            Padrão
-                                          </label>
-                                        </div>
                                         <div className="mt-3">
                                           <label className="mb-1 block text-xs text-zinc-600">
                                             Observações
@@ -2860,24 +2834,6 @@ export function ProductOperationalForm({
                             </Select>
                           </div>
                         ) : null}
-                      </div>
-                      <div className="mt-3 flex flex-wrap items-center gap-4">
-                        <label className="flex items-center gap-2 text-sm">
-                          <input
-                            type="checkbox"
-                            checked={compRequired}
-                            onChange={(e) => setCompRequired(e.target.checked)}
-                          />
-                          Obrigatório
-                        </label>
-                        <label className="flex items-center gap-2 text-sm">
-                          <input
-                            type="checkbox"
-                            checked={compDefault}
-                            onChange={(e) => setCompDefault(e.target.checked)}
-                          />
-                          Padrão
-                        </label>
                       </div>
                       <div className="mt-3">
                         <label className="mb-1 block text-xs text-zinc-600">Observações</label>
