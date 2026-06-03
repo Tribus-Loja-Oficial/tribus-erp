@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Header } from "@/components/layout/header";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { createCustomerAction } from "@/server/actions";
+import { Select } from "@/components/ui/select";
 
 export default async function NewCustomerPage({
   searchParams,
@@ -25,89 +26,60 @@ export default async function NewCustomerPage({
           <form action={createCustomerAction} className="space-y-4">
             <div>
               <label className="mb-1 block text-sm font-medium text-zinc-700">Tipo</label>
-              <select
-                name="type"
-                className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
-              >
+              <Select name="type">
                 <option value="individual">Pessoa física</option>
                 <option value="company">Pessoa jurídica</option>
-              </select>
+              </Select>
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-zinc-700">Nome legal</label>
-              <input
-                name="legalName"
-                required
-                className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
-              />
+              <input name="legalName" required />
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-zinc-700">Nome fantasia</label>
-              <input
-                name="tradeName"
-                className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
-              />
+              <input name="tradeName" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="mb-1 block text-sm font-medium text-zinc-700">
                   Tipo documento
                 </label>
-                <select
-                  name="documentType"
-                  className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
-                >
+                <Select name="documentType">
                   <option value="cpf">CPF</option>
                   <option value="cnpj">CNPJ</option>
                   <option value="unknown">Não informado</option>
-                </select>
+                </Select>
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-zinc-700">Documento</label>
-                <input
-                  name="documentNumber"
-                  className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
-                />
+                <input name="documentNumber" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="mb-1 block text-sm font-medium text-zinc-700">E-mail</label>
-                <input
-                  name="email"
-                  type="email"
-                  className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
-                />
+                <input name="email" type="email" />
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-zinc-700">Telefone</label>
-                <input
-                  name="phone"
-                  className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
-                />
+                <input name="phone" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="mb-1 block text-sm font-medium text-zinc-700">Origem</label>
-                <select
-                  name="origin"
-                  className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
-                >
+                <Select name="origin">
                   <option value="manual">Manual</option>
                   <option value="ecommerce">E-commerce</option>
                   <option value="event">Evento</option>
                   <option value="imported">Importado</option>
-                </select>
+                </Select>
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-zinc-700">
                   ID consumidor CDS
                 </label>
-                <input
-                  name="cdsConsumerId"
-                  className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
-                />
+                <input name="cdsConsumerId" />
               </div>
             </div>
             <button

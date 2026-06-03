@@ -4,6 +4,7 @@ import { ErrorBanner } from "@/components/ui/error-banner";
 import { erpApiFetch } from "@/lib/api/erp-api-client";
 import { formatCurrency } from "@/lib/utils";
 import { createReceivableAction, receiveReceivableAction } from "@/server/actions";
+import { Select } from "@/components/ui/select";
 
 interface Receivable {
   id: string;
@@ -63,43 +64,26 @@ export default async function ReceivablesPage({
           <form action={createReceivableAction} className="grid gap-3 text-sm md:grid-cols-2">
             <div>
               <label className="mb-1 block font-medium text-zinc-700">Cliente (opcional)</label>
-              <select
-                name="customerId"
-                className="w-full rounded-md border border-zinc-300 px-3 py-2"
-              >
+              <Select name="customerId">
                 <option value="">—</option>
                 {customers.map((r) => (
                   <option key={r.customer.id} value={r.customer.id}>
                     {r.party.tradeName ?? r.party.legalName}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div>
               <label className="mb-1 block font-medium text-zinc-700">Vencimento</label>
-              <input
-                name="dueDate"
-                type="date"
-                required
-                defaultValue={today}
-                className="w-full rounded-md border border-zinc-300 px-3 py-2"
-              />
+              <input name="dueDate" type="date" required defaultValue={today} />
             </div>
             <div className="md:col-span-2">
               <label className="mb-1 block font-medium text-zinc-700">Descrição</label>
-              <input
-                name="description"
-                required
-                className="w-full rounded-md border border-zinc-300 px-3 py-2"
-              />
+              <input name="description" required />
             </div>
             <div>
               <label className="mb-1 block font-medium text-zinc-700">Valor (R$)</label>
-              <input
-                name="amount"
-                required
-                className="w-full rounded-md border border-zinc-300 px-3 py-2"
-              />
+              <input name="amount" required />
             </div>
             <div className="flex items-end">
               <button
@@ -152,7 +136,7 @@ export default async function ReceivablesPage({
                               name="amount"
                               value={(r.amountCents / 100).toFixed(2)}
                             />
-                            <select
+                            <Select
                               name="financialAccountId"
                               className="rounded border border-zinc-300 px-1 py-0.5 text-xs"
                             >
@@ -161,8 +145,8 @@ export default async function ReceivablesPage({
                                   {a.name}
                                 </option>
                               ))}
-                            </select>
-                            <select
+                            </Select>
+                            <Select
                               name="paymentMethod"
                               className="rounded border border-zinc-300 px-1 py-0.5 text-xs"
                             >
@@ -170,7 +154,7 @@ export default async function ReceivablesPage({
                               <option value="bank_transfer">TED</option>
                               <option value="cash">Dinheiro</option>
                               <option value="credit_card">Crédito</option>
-                            </select>
+                            </Select>
                             <button
                               type="submit"
                               className="rounded bg-green-600 px-2 py-0.5 text-xs text-white hover:bg-green-700"

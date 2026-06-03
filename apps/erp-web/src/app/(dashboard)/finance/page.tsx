@@ -3,6 +3,7 @@ import { ErrorBanner } from "@/components/ui/error-banner";
 import { erpApiFetch } from "@/lib/api/erp-api-client";
 import { formatCurrency } from "@/lib/utils";
 import { createFinancialEntryAction } from "@/server/actions";
+import { Select } from "@/components/ui/select";
 
 interface Dashboard {
   income: number;
@@ -100,85 +101,60 @@ export default async function FinancePage({
           >
             <div>
               <label className="mb-1 block font-medium text-zinc-700">Conta financeira</label>
-              <select
-                name="financialAccountId"
-                required
-                className="w-full rounded-md border border-zinc-300 px-3 py-2"
-                disabled={accounts.length === 0}
-              >
+              <Select name="financialAccountId" required disabled={accounts.length === 0}>
                 {accounts.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div>
               <label className="mb-1 block font-medium text-zinc-700">Tipo</label>
-              <select name="type" className="w-full rounded-md border border-zinc-300 px-3 py-2">
+              <Select name="type">
                 <option value="income">Receita</option>
                 <option value="expense">Despesa</option>
                 <option value="transfer">Transferência</option>
                 <option value="adjustment">Ajuste</option>
-              </select>
+              </Select>
             </div>
             <div>
               <label className="mb-1 block font-medium text-zinc-700">Valor (R$)</label>
-              <input
-                name="amount"
-                required
-                className="w-full rounded-md border border-zinc-300 px-3 py-2"
-              />
+              <input name="amount" required />
             </div>
             <div>
               <label className="mb-1 block font-medium text-zinc-700">Data</label>
-              <input
-                name="date"
-                type="date"
-                required
-                defaultValue={today}
-                className="w-full rounded-md border border-zinc-300 px-3 py-2"
-              />
+              <input name="date" type="date" required defaultValue={today} />
             </div>
             <div className="md:col-span-2">
               <label className="mb-1 block font-medium text-zinc-700">Descrição</label>
-              <input
-                name="description"
-                required
-                className="w-full rounded-md border border-zinc-300 px-3 py-2"
-              />
+              <input name="description" required />
             </div>
             <div>
               <label className="mb-1 block font-medium text-zinc-700">
                 Plano de contas (opcional)
               </label>
-              <select
-                name="categoryId"
-                className="w-full rounded-md border border-zinc-300 px-3 py-2"
-              >
+              <Select name="categoryId">
                 <option value="">—</option>
                 {chart.map((x) => (
                   <option key={x.id} value={x.id}>
                     {x.code} {x.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div>
               <label className="mb-1 block font-medium text-zinc-700">
                 Centro de custo (opcional)
               </label>
-              <select
-                name="costCenterId"
-                className="w-full rounded-md border border-zinc-300 px-3 py-2"
-              >
+              <Select name="costCenterId">
                 <option value="">—</option>
                 {costCenters.map((x) => (
                   <option key={x.id} value={x.id}>
                     {x.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div className="flex items-end">
               <button

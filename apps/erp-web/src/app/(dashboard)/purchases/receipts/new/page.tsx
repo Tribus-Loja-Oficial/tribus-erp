@@ -3,6 +3,7 @@ import { Header } from "@/components/layout/header";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { erpApiFetch } from "@/lib/api/erp-api-client";
 import { createPurchaseReceiptAction } from "@/server/actions";
+import { Select } from "@/components/ui/select";
 
 type RefItem = { id: string; name?: string; legalName?: string; sku?: string };
 type Location = { id: string; name: string };
@@ -46,7 +47,7 @@ export default async function NewPurchaseReceiptPage({
             required
             className="rounded-md border border-zinc-300 px-3 py-2 text-sm"
           />
-          <select
+          <Select
             name="locationId"
             required
             className="rounded-md border border-zinc-300 px-3 py-2 text-sm"
@@ -57,16 +58,16 @@ export default async function NewPurchaseReceiptPage({
                 {l.name}
               </option>
             ))}
-          </select>
-          <select name="supplierId" className="rounded-md border border-zinc-300 px-3 py-2 text-sm">
+          </Select>
+          <Select name="supplierId">
             <option value="">Fornecedor (opcional)</option>
             {suppliers.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.legalName ?? s.name ?? s.id}
               </option>
             ))}
-          </select>
-          <select
+          </Select>
+          <Select
             name="productId"
             required
             className="rounded-md border border-zinc-300 px-3 py-2 text-sm"
@@ -78,7 +79,7 @@ export default async function NewPurchaseReceiptPage({
                 {p.name ?? p.id}
               </option>
             ))}
-          </select>
+          </Select>
           <input
             name="purchaseUnit"
             placeholder="Unidade de compra (ex.: rolo)"

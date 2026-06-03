@@ -5,6 +5,7 @@ import { erpApiFetch } from "@/lib/api/erp-api-client";
 import { formatCurrency } from "@/lib/utils";
 import { updatePurchaseStatusAction, receivePurchaseOrderAction } from "@/server/actions";
 import { notFound } from "next/navigation";
+import { Select } from "@/components/ui/select";
 
 interface PurchaseItem {
   id: string;
@@ -201,17 +202,13 @@ export default async function PurchaseDetailPage({
                   <input type="hidden" name="id" value={order.id} />
                   <div>
                     <label className="mb-1 block font-medium text-zinc-700">Local de estoque</label>
-                    <select
-                      name="locationId"
-                      required
-                      className="w-full rounded-md border border-zinc-300 px-3 py-2"
-                    >
+                    <Select name="locationId" required>
                       {locations.map((l) => (
                         <option key={l.id} value={l.id}>
                           {l.name}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   </div>
                   {order.items
                     .filter((i) => i.receivedQuantity < i.quantity)

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
+import { Select } from "@/components/ui/select";
 import { formatCurrency } from "@/lib/utils";
 import {
   archiveProductVariantAction,
@@ -283,11 +284,7 @@ export function ProductVariantsPanel({
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs font-medium text-zinc-600">SKU *</label>
-              <input
-                value={sku}
-                onChange={(e) => setSku(e.target.value)}
-                className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
-              />
+              <input value={sku} onChange={(e) => setSku(e.target.value)} />
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-zinc-600">Ref</label>
@@ -303,24 +300,16 @@ export function ProductVariantsPanel({
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-zinc-600">Nome</label>
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
-              />
+              <input value={name} onChange={(e) => setName(e.target.value)} />
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-zinc-600">Status *</label>
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value)}
-                className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
-              >
+              <Select value={status} onChange={(e) => setStatus(e.target.value)}>
                 <option value="draft">Rascunho</option>
                 <option value="active">Ativo</option>
                 <option value="inactive">Inativo</option>
                 <option value="archived">Arquivado</option>
-              </select>
+              </Select>
             </div>
             <div className="md:col-span-2">
               <label className="mb-1 block text-xs font-medium text-zinc-600">Atributos</label>
@@ -373,7 +362,6 @@ export function ProductVariantsPanel({
                 value={salePrice}
                 onChange={(e) => setSalePrice(e.target.value)}
                 placeholder={centsToInput(parentSalePriceCents)}
-                className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
               />
             </div>
             <div>
@@ -384,34 +372,21 @@ export function ProductVariantsPanel({
                 value={costPrice}
                 onChange={(e) => setCostPrice(e.target.value)}
                 placeholder={centsToInput(parentCostPriceCents)}
-                className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
               />
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-zinc-600">
                 Preço promocional
               </label>
-              <input
-                value={promoPrice}
-                onChange={(e) => setPromoPrice(e.target.value)}
-                className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
-              />
+              <input value={promoPrice} onChange={(e) => setPromoPrice(e.target.value)} />
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-zinc-600">Preço evento</label>
-              <input
-                value={eventPrice}
-                onChange={(e) => setEventPrice(e.target.value)}
-                className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
-              />
+              <input value={eventPrice} onChange={(e) => setEventPrice(e.target.value)} />
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-zinc-600">Preço atacado</label>
-              <input
-                value={wholesalePrice}
-                onChange={(e) => setWholesalePrice(e.target.value)}
-                className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
-              />
+              <input value={wholesalePrice} onChange={(e) => setWholesalePrice(e.target.value)} />
             </div>
             <div className="flex items-center gap-2">
               <input
@@ -426,45 +401,25 @@ export function ProductVariantsPanel({
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-zinc-600">Estoque atual</label>
-              <input
-                value={currentStock}
-                onChange={(e) => setCurrentStock(e.target.value)}
-                className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
-              />
+              <input value={currentStock} onChange={(e) => setCurrentStock(e.target.value)} />
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-zinc-600">Estoque mínimo</label>
-              <input
-                value={minStock}
-                onChange={(e) => setMinStock(e.target.value)}
-                className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
-              />
+              <input value={minStock} onChange={(e) => setMinStock(e.target.value)} />
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-zinc-600">Estoque ideal</label>
-              <input
-                value={idealStock}
-                onChange={(e) => setIdealStock(e.target.value)}
-                className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
-              />
+              <input value={idealStock} onChange={(e) => setIdealStock(e.target.value)} />
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-zinc-600">
                 Código de barras
               </label>
-              <input
-                value={barcode}
-                onChange={(e) => setBarcode(e.target.value)}
-                className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
-              />
+              <input value={barcode} onChange={(e) => setBarcode(e.target.value)} />
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-zinc-600">Peso (g)</label>
-              <input
-                value={weightGrams}
-                onChange={(e) => setWeightGrams(e.target.value)}
-                className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
-              />
+              <input value={weightGrams} onChange={(e) => setWeightGrams(e.target.value)} />
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-zinc-600">C / L / A (cm)</label>

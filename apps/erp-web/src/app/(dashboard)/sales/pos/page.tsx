@@ -3,6 +3,7 @@ import { Header } from "@/components/layout/header";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { erpApiFetch } from "@/lib/api/erp-api-client";
 import { createPosSaleAction } from "@/server/actions";
+import { Select } from "@/components/ui/select";
 
 interface Session {
   id: string;
@@ -67,37 +68,30 @@ export default async function PosPage({
             <form action={createPosSaleAction} className="space-y-3 text-sm">
               <div>
                 <label className="mb-1 block font-medium text-zinc-700">Sessão</label>
-                <select
-                  name="cashSessionId"
-                  required
-                  className="w-full rounded-md border border-zinc-300 px-3 py-2"
-                >
+                <Select name="cashSessionId" required>
                   {openSessions.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.id.slice(0, 8)}… ({s.cashRegisterId})
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
               <div>
                 <label className="mb-1 block font-medium text-zinc-700">Cliente (opcional)</label>
-                <select
-                  name="customerId"
-                  className="w-full rounded-md border border-zinc-300 px-3 py-2"
-                >
+                <Select name="customerId">
                   <option value="">Venda direta</option>
                   {customers.map((r) => (
                     <option key={r.customer.id} value={r.customer.id}>
                       {r.party.tradeName ?? r.party.legalName}
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
               <div>
                 <label className="mb-1 block font-medium text-zinc-700">
                   Produto (opcional — baixa estoque)
                 </label>
-                <select
+                <Select
                   name="productId"
                   className="mb-2 w-full rounded-md border border-zinc-300 px-3 py-2"
                 >
@@ -107,62 +101,37 @@ export default async function PosPage({
                       {p.sku} — {p.name}
                     </option>
                   ))}
-                </select>
+                </Select>
                 <label className="mb-1 block font-medium text-zinc-700">SKU na nota</label>
-                <input
-                  name="sku"
-                  required
-                  className="w-full rounded-md border border-zinc-300 px-3 py-2"
-                />
+                <input name="sku" required />
               </div>
               <div>
                 <label className="mb-1 block font-medium text-zinc-700">Descrição</label>
-                <input
-                  name="itemName"
-                  required
-                  className="w-full rounded-md border border-zinc-300 px-3 py-2"
-                />
+                <input name="itemName" required />
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="mb-1 block font-medium text-zinc-700">Qtd</label>
-                  <input
-                    name="quantity"
-                    type="number"
-                    min={1}
-                    defaultValue={1}
-                    className="w-full rounded-md border border-zinc-300 px-3 py-2"
-                  />
+                  <input name="quantity" type="number" min={1} defaultValue={1} />
                 </div>
                 <div>
                   <label className="mb-1 block font-medium text-zinc-700">Preço (R$)</label>
-                  <input
-                    name="unitPrice"
-                    required
-                    className="w-full rounded-md border border-zinc-300 px-3 py-2"
-                  />
+                  <input name="unitPrice" required />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="mb-1 block font-medium text-zinc-700">Pagamento</label>
-                  <select
-                    name="paymentMethod"
-                    className="w-full rounded-md border border-zinc-300 px-3 py-2"
-                  >
+                  <Select name="paymentMethod">
                     <option value="cash">Dinheiro</option>
                     <option value="pix">PIX</option>
                     <option value="credit_card">Crédito</option>
                     <option value="debit_card">Débito</option>
-                  </select>
+                  </Select>
                 </div>
                 <div>
                   <label className="mb-1 block font-medium text-zinc-700">Valor pago (R$)</label>
-                  <input
-                    name="paymentAmount"
-                    required
-                    className="w-full rounded-md border border-zinc-300 px-3 py-2"
-                  />
+                  <input name="paymentAmount" required />
                 </div>
               </div>
               <button

@@ -5,6 +5,7 @@ import { erpApiFetch } from "@/lib/api/erp-api-client";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
 import { updateOrderStatusAction } from "@/server/actions";
 import { notFound } from "next/navigation";
+import { Select } from "@/components/ui/select";
 
 interface OrderItem {
   id: string;
@@ -221,17 +222,13 @@ export default async function OrderDetailPage({
                 <h2 className="mb-3 text-sm font-semibold text-zinc-800">Atualizar status</h2>
                 <form action={updateOrderStatusAction} className="space-y-2">
                   <input type="hidden" name="id" value={order.id} />
-                  <select
-                    name="status"
-                    defaultValue={order.status}
-                    className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
-                  >
+                  <Select name="status" defaultValue={order.status}>
                     {ORDER_STATUSES.map((s) => (
                       <option key={s} value={s}>
                         {STATUS_LABELS[s]}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                   <button
                     type="submit"
                     className="w-full rounded-md bg-zinc-900 py-2 text-sm font-medium text-white hover:bg-zinc-800"

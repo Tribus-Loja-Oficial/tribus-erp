@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { ProductListMainImage } from "@/components/products/product-list-main-image";
+import { Select } from "@/components/ui/select";
 import { formatCurrency } from "@/lib/utils";
 import {
   DEFAULT_PRODUCT_LIST_LIMIT,
@@ -411,7 +412,6 @@ export function ProductsListing({
             defaultValue={qp.q ?? ""}
             id="product-search-input"
             placeholder="Buscar por SKU, nome ou descrição..."
-            className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 const v = (e.target as HTMLInputElement).value.trim();
@@ -422,8 +422,7 @@ export function ProductsListing({
         </div>
         <div>
           <label className="mb-1 block text-xs font-medium text-zinc-600">Tipo</label>
-          <select
-            className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
+          <Select
             value={qp.productType ?? ""}
             onChange={(e) => replaceQuery({ productType: e.target.value || undefined, page: 1 })}
           >
@@ -432,12 +431,11 @@ export function ProductsListing({
                 {o.label}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <div>
           <label className="mb-1 block text-xs font-medium text-zinc-600">Estrutura</label>
-          <select
-            className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
+          <Select
             value={qp.productKind ?? ""}
             onChange={(e) => replaceQuery({ productKind: e.target.value || undefined, page: 1 })}
           >
@@ -446,12 +444,11 @@ export function ProductsListing({
                 {o.label}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <div>
           <label className="mb-1 block text-xs font-medium text-zinc-600">Status</label>
-          <select
-            className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
+          <Select
             value={qp.status ?? ""}
             onChange={(e) => {
               const v = e.target.value || undefined;
@@ -472,12 +469,11 @@ export function ProductsListing({
                 {o.label}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <div>
           <label className="mb-1 block text-xs font-medium text-zinc-600">Estoque</label>
-          <select
-            className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
+          <Select
             value={qp.stockFilter ?? ""}
             onChange={(e) => replaceQuery({ stockFilter: e.target.value || undefined, page: 1 })}
           >
@@ -486,12 +482,11 @@ export function ProductsListing({
                 {o.label}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <div>
           <label className="mb-1 block text-xs font-medium text-zinc-600">Canal</label>
-          <select
-            className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
+          <Select
             value={qp.channel ?? ""}
             onChange={(e) => replaceQuery({ channel: e.target.value || undefined, page: 1 })}
           >
@@ -500,7 +495,7 @@ export function ProductsListing({
                 {o.label}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <button
           type="button"
@@ -870,15 +865,15 @@ export function ProductsListing({
           <div className="flex flex-wrap items-center gap-2">
             <label className="flex items-center gap-2">
               <span>Por página</span>
-              <select
-                className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm"
+              <Select
+                compact
                 value={meta.limit}
                 onChange={(e) => replaceQuery({ limit: Number(e.target.value), page: 1 })}
               >
                 <option value={10}>10</option>
                 <option value={25}>25</option>
                 <option value={50}>50</option>
-              </select>
+              </Select>
             </label>
             <button
               type="button"

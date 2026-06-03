@@ -3,6 +3,7 @@ import { Header } from "@/components/layout/header";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { erpApiFetch } from "@/lib/api/erp-api-client";
 import { createOrderAction } from "@/server/actions";
+import { Select } from "@/components/ui/select";
 
 interface Row {
   customer: { id: string };
@@ -41,52 +42,31 @@ export default async function NewOrderPage({
           <form action={createOrderAction} className="space-y-4 text-sm">
             <div>
               <label className="mb-1 block font-medium text-zinc-700">Cliente (opcional)</label>
-              <select
-                name="customerId"
-                className="w-full rounded-md border border-zinc-300 px-3 py-2"
-              >
+              <Select name="customerId">
                 <option value="">—</option>
                 {customers.map((r) => (
                   <option key={r.customer.id} value={r.customer.id}>
                     {r.party.tradeName ?? r.party.legalName}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div>
               <label className="mb-1 block font-medium text-zinc-700">SKU</label>
-              <input
-                name="sku"
-                required
-                className="w-full rounded-md border border-zinc-300 px-3 py-2"
-              />
+              <input name="sku" required />
             </div>
             <div>
               <label className="mb-1 block font-medium text-zinc-700">Descrição do item</label>
-              <input
-                name="itemName"
-                required
-                className="w-full rounded-md border border-zinc-300 px-3 py-2"
-              />
+              <input name="itemName" required />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="mb-1 block font-medium text-zinc-700">Qtd</label>
-                <input
-                  name="quantity"
-                  type="number"
-                  min={1}
-                  defaultValue={1}
-                  className="w-full rounded-md border border-zinc-300 px-3 py-2"
-                />
+                <input name="quantity" type="number" min={1} defaultValue={1} />
               </div>
               <div>
                 <label className="mb-1 block font-medium text-zinc-700">Preço unit. (R$)</label>
-                <input
-                  name="unitPrice"
-                  required
-                  className="w-full rounded-md border border-zinc-300 px-3 py-2"
-                />
+                <input name="unitPrice" required />
               </div>
             </div>
             <button

@@ -18,6 +18,7 @@ import {
 } from "@/server/product-operational-actions";
 import type { UploadedProductMediaRow } from "@/lib/product-media-types";
 import { CompositionProductPicker } from "@/components/products/composition-product-picker";
+import { Select, formSelectClassName } from "@/components/ui/select";
 import {
   ProductVariantsPanel,
   type VariantApiRow,
@@ -420,6 +421,9 @@ function CompositionColumnHelp({ title }: { title: string }) {
   );
 }
 
+const compositionFormInputClass =
+  "w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm";
+
 function CompositionUsageUnitSelect({
   value,
   onChange,
@@ -439,10 +443,10 @@ function CompositionUsageUnitSelect({
   }, [value]);
 
   return (
-    <select
+    <Select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className={className ?? "w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"}
+      className={className ?? cn(formSelectClassName, "min-w-[11rem]")}
     >
       <option value="">— Selecione —</option>
       {options.map((u) => (
@@ -450,7 +454,7 @@ function CompositionUsageUnitSelect({
           {u.label}
         </option>
       ))}
-    </select>
+    </Select>
   );
 }
 
@@ -1582,7 +1586,7 @@ export function ProductOperationalForm({
                   <label className="mb-1 block text-xs font-medium text-zinc-600">
                     Tipo do produto *
                   </label>
-                  <select
+                  <Select
                     value={productType}
                     onChange={(e) => {
                       const v = e.target.value;
@@ -1590,14 +1594,13 @@ export function ProductOperationalForm({
                       if (v === "service") setControlsStock(false);
                       else if (v === "packaging" || v === "raw_material") setControlsStock(true);
                     }}
-                    className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
                   >
                     {PRODUCT_TYPES.map((o) => (
                       <option key={o.value} value={o.value}>
                         {o.label}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
                 <div className="rounded-lg border border-zinc-200 bg-zinc-50/90 px-4 py-3 md:col-span-2">
                   <span className="mb-2 block text-xs font-medium text-zinc-600">
@@ -1633,46 +1636,34 @@ export function ProductOperationalForm({
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-zinc-600">Status *</label>
-                  <select
-                    value={status}
-                    onChange={(e) => setStatus(e.target.value)}
-                    className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
-                  >
+                  <Select value={status} onChange={(e) => setStatus(e.target.value)}>
                     <option value="draft">Rascunho</option>
                     <option value="active">Ativo</option>
                     <option value="inactive">Inativo</option>
                     <option value="archived">Arquivado</option>
-                  </select>
+                  </Select>
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-zinc-600">Categoria</label>
-                  <select
-                    value={categoryId}
-                    onChange={(e) => setCategoryId(e.target.value)}
-                    className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
-                  >
+                  <Select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
                     <option value="">—</option>
                     {categories.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-zinc-600">Linha</label>
-                  <select
-                    value={lineId}
-                    onChange={(e) => setLineId(e.target.value)}
-                    className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
-                  >
+                  <Select value={lineId} onChange={(e) => setLineId(e.target.value)}>
                     <option value="">—</option>
                     {lines.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-zinc-600">Nicho</label>
@@ -1982,26 +1973,21 @@ export function ProductOperationalForm({
                   <label className="mb-1 block text-xs font-medium text-zinc-600">
                     Unidade de medida
                   </label>
-                  <select
-                    value={unitOfMeasure}
-                    onChange={(e) => setUnitOfMeasure(e.target.value)}
-                    className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
-                  >
+                  <Select value={unitOfMeasure} onChange={(e) => setUnitOfMeasure(e.target.value)}>
                     {UNITS.map((u) => (
                       <option key={u.value} value={u.value}>
                         {u.label}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-zinc-600">
                     Local padrão de estoque
                   </label>
-                  <select
+                  <Select
                     value={defaultStockLocationId}
                     onChange={(e) => setDefaultStockLocationId(e.target.value)}
-                    className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
                   >
                     <option value="">—</option>
                     {locations.map((l) => (
@@ -2009,7 +1995,7 @@ export function ProductOperationalForm({
                         {l.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
                 {mode === "edit" && productId ? (
                   <div className="space-y-4 md:col-span-2">
@@ -2214,8 +2200,8 @@ export function ProductOperationalForm({
                                         <p className="mb-3 text-xs font-semibold text-zinc-700">
                                           Editar linha (BOM)
                                         </p>
-                                        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-                                          <div className="lg:col-span-2">
+                                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                                          <div className="sm:col-span-2 lg:col-span-2">
                                             <CompositionProductPicker
                                               value={editCompChildId}
                                               onChange={setEditCompChildId}
@@ -2224,21 +2210,21 @@ export function ProductOperationalForm({
                                               selectedName={row.childName}
                                             />
                                           </div>
-                                          <div>
+                                          <div className="sm:col-span-2 lg:col-span-2">
                                             <label className="mb-1 block text-xs text-zinc-600">
                                               Tipo do componente
                                             </label>
-                                            <select
+                                            <Select
                                               value={editCompType}
                                               onChange={(e) => setEditCompType(e.target.value)}
-                                              className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
+                                              className={cn(formSelectClassName, "min-w-[11rem]")}
                                             >
                                               {COMPOSITION_TYPES_EDIT.map((c) => (
                                                 <option key={c.value} value={c.value}>
                                                   {c.label}
                                                 </option>
                                               ))}
-                                            </select>
+                                            </Select>
                                           </div>
                                           <div>
                                             <label className="mb-1 flex items-center gap-1 text-xs text-zinc-600">
@@ -2250,7 +2236,7 @@ export function ProductOperationalForm({
                                             <input
                                               value={editCompQty}
                                               onChange={(e) => setEditCompQty(e.target.value)}
-                                              className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
+                                              className={compositionFormInputClass}
                                             />
                                           </div>
                                           <div>
@@ -2267,18 +2253,18 @@ export function ProductOperationalForm({
                                               <label className="mb-1 block text-xs text-zinc-600">
                                                 Canal embalagem
                                               </label>
-                                              <select
+                                              <Select
                                                 value={editCompPackagingChannel}
                                                 onChange={(e) =>
                                                   setEditCompPackagingChannel(
                                                     e.target.value as "online" | "presential",
                                                   )
                                                 }
-                                                className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
+                                                className={cn(formSelectClassName, "min-w-[11rem]")}
                                               >
                                                 <option value="online">Online</option>
                                                 <option value="presential">Presencial</option>
-                                              </select>
+                                              </Select>
                                             </div>
                                           ) : null}
                                         </div>
@@ -2364,8 +2350,8 @@ export function ProductOperationalForm({
                                         <p className="mb-3 text-xs font-semibold text-zinc-700">
                                           Editar linha (BOM — produto)
                                         </p>
-                                        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-                                          <div className="lg:col-span-2">
+                                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                                          <div className="sm:col-span-2 lg:col-span-2">
                                             <CompositionProductPicker
                                               value={editCompChildId}
                                               onChange={setEditCompChildId}
@@ -2374,21 +2360,21 @@ export function ProductOperationalForm({
                                               selectedName={row.childName}
                                             />
                                           </div>
-                                          <div>
+                                          <div className="sm:col-span-2 lg:col-span-2">
                                             <label className="mb-1 block text-xs text-zinc-600">
                                               Tipo do componente
                                             </label>
-                                            <select
+                                            <Select
                                               value={editCompType}
                                               onChange={(e) => setEditCompType(e.target.value)}
-                                              className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
+                                              className={cn(formSelectClassName, "min-w-[11rem]")}
                                             >
                                               {COMPOSITION_TYPES_EDIT.map((c) => (
                                                 <option key={c.value} value={c.value}>
                                                   {c.label}
                                                 </option>
                                               ))}
-                                            </select>
+                                            </Select>
                                           </div>
                                           <div>
                                             <label className="mb-1 flex items-center gap-1 text-xs text-zinc-600">
@@ -2400,7 +2386,7 @@ export function ProductOperationalForm({
                                             <input
                                               value={editCompQty}
                                               onChange={(e) => setEditCompQty(e.target.value)}
-                                              className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
+                                              className={compositionFormInputClass}
                                             />
                                           </div>
                                           <div>
@@ -2530,18 +2516,18 @@ export function ProductOperationalForm({
                                             <label className="mb-1 block text-xs text-zinc-600">
                                               Canal *
                                             </label>
-                                            <select
+                                            <Select
                                               value={editCompPackagingChannel}
                                               onChange={(e) =>
                                                 setEditCompPackagingChannel(
                                                   e.target.value as "online" | "presential",
                                                 )
                                               }
-                                              className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
+                                              className={cn(formSelectClassName, "min-w-[11rem]")}
                                             >
                                               <option value="online">Online</option>
                                               <option value="presential">Presencial</option>
-                                            </select>
+                                            </Select>
                                           </div>
                                           <div>
                                             <label className="mb-1 flex items-center gap-1 text-xs text-zinc-600">
@@ -2553,7 +2539,7 @@ export function ProductOperationalForm({
                                             <input
                                               value={editCompQty}
                                               onChange={(e) => setEditCompQty(e.target.value)}
-                                              className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
+                                              className={compositionFormInputClass}
                                             />
                                           </div>
                                           <div>
@@ -2632,18 +2618,18 @@ export function ProductOperationalForm({
                                             <label className="mb-1 block text-xs text-zinc-600">
                                               Canal *
                                             </label>
-                                            <select
+                                            <Select
                                               value={editCompPackagingChannel}
                                               onChange={(e) =>
                                                 setEditCompPackagingChannel(
                                                   e.target.value as "online" | "presential",
                                                 )
                                               }
-                                              className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
+                                              className={cn(formSelectClassName, "min-w-[11rem]")}
                                             >
                                               <option value="online">Online</option>
                                               <option value="presential">Presencial</option>
-                                            </select>
+                                            </Select>
                                           </div>
                                           <div>
                                             <label className="mb-1 flex items-center gap-1 text-xs text-zinc-600">
@@ -2655,7 +2641,7 @@ export function ProductOperationalForm({
                                             <input
                                               value={editCompQty}
                                               onChange={(e) => setEditCompQty(e.target.value)}
-                                              className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
+                                              className={compositionFormInputClass}
                                             />
                                           </div>
                                           <div>
@@ -2813,32 +2799,32 @@ export function ProductOperationalForm({
                       <p className="mb-3 text-xs font-semibold tracking-wide text-zinc-600 uppercase">
                         Adicionar componente
                       </p>
-                      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-                        <div className="lg:col-span-2">
+                      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                        <div className="sm:col-span-2 lg:col-span-2">
                           <CompositionProductPicker
                             value={compChildId}
                             onChange={setCompChildId}
                             excludeProductId={productId}
                           />
                         </div>
-                        <div>
+                        <div className="sm:col-span-2 lg:col-span-2">
                           <label className="mb-1 block text-xs text-zinc-600">
                             Tipo do componente
                           </label>
-                          <select
+                          <Select
                             value={compType}
                             onChange={(e) => {
                               const v = e.target.value;
                               setCompType(v);
                             }}
-                            className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+                            className={cn(formSelectClassName, "min-w-[11rem]")}
                           >
                             {COMPOSITION_TYPES_ADD.map((c) => (
                               <option key={c.value} value={c.value}>
                                 {c.label}
                               </option>
                             ))}
-                          </select>
+                          </Select>
                         </div>
                         <div>
                           <label className="mb-1 flex items-center gap-1 text-xs text-zinc-600">
@@ -2863,16 +2849,16 @@ export function ProductOperationalForm({
                             <label className="mb-1 block text-xs text-zinc-600">
                               Canal embalagem *
                             </label>
-                            <select
+                            <Select
                               value={compPackagingChannel}
                               onChange={(e) =>
                                 setCompPackagingChannel(e.target.value as "online" | "presential")
                               }
-                              className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+                              className={cn(formSelectClassName, "min-w-[11rem]")}
                             >
                               <option value="online">Online</option>
                               <option value="presential">Presencial</option>
-                            </select>
+                            </Select>
                           </div>
                         ) : null}
                       </div>
@@ -2904,14 +2890,14 @@ export function ProductOperationalForm({
                       </div>
                       <div className="mt-3 flex flex-wrap items-center gap-2">
                         <label className="text-xs text-zinc-600">Destino:</label>
-                        <select
+                        <Select
+                          compact
                           value={compAddTarget}
                           onChange={(e) => setCompAddTarget(e.target.value as "line" | "product")}
-                          className="rounded-md border border-zinc-300 px-2 py-1 text-sm"
                         >
                           <option value="product">Só neste produto</option>
                           <option value="line">Na linha (todos os produtos da linha)</option>
-                        </select>
+                        </Select>
                       </div>
                       <div className="mt-4 flex flex-wrap items-center gap-2">
                         <div className="inline-flex items-center gap-1.5">
@@ -3253,7 +3239,8 @@ export function ProductOperationalForm({
                     Snapshots de custo
                   </p>
                   <div className="mb-3 grid gap-2 sm:grid-cols-4">
-                    <select
+                    <Select
+                      compact
                       value={snapshotSourceFilter}
                       onChange={(e) => {
                         updateSnapshotQuery({
@@ -3261,7 +3248,7 @@ export function ProductOperationalForm({
                           page: "1",
                         });
                       }}
-                      className="rounded-md border border-zinc-300 px-2 py-1.5 text-xs"
+                      className="text-xs"
                     >
                       <option value="all">Todas as origens</option>
                       {snapshotSources.map((src) => (
@@ -3269,7 +3256,7 @@ export function ProductOperationalForm({
                           {src}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                     <input
                       type="date"
                       value={snapshotDateFrom}

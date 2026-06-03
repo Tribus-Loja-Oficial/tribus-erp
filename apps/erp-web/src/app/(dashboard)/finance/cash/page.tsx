@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Header } from "@/components/layout/header";
 import { ErrorBanner } from "@/components/ui/error-banner";
+import { Select } from "@/components/ui/select";
 import { erpApiFetch } from "@/lib/api/erp-api-client";
 import { formatCurrency } from "@/lib/utils";
 import {
@@ -86,30 +87,16 @@ export default async function CashPage({
               className="space-y-2 border-t border-zinc-100 pt-4 text-sm"
             >
               <p className="text-xs font-medium text-zinc-500">Nova conta financeira</p>
-              <input
-                name="name"
-                required
-                placeholder="Nome"
-                className="w-full rounded-md border border-zinc-300 px-3 py-2"
-              />
-              <select name="type" className="w-full rounded-md border border-zinc-300 px-3 py-2">
+              <input name="name" required placeholder="Nome" />
+              <Select name="type">
                 <option value="cash">Dinheiro / caixa</option>
                 <option value="bank">Banco</option>
                 <option value="credit_card">Cartão</option>
                 <option value="payment_gateway">Gateway</option>
                 <option value="marketplace">Marketplace</option>
-              </select>
-              <input
-                name="institution"
-                placeholder="Instituição (opcional)"
-                className="w-full rounded-md border border-zinc-300 px-3 py-2"
-              />
-              <input
-                name="openingBalance"
-                placeholder="Saldo inicial R$"
-                defaultValue="0"
-                className="w-full rounded-md border border-zinc-300 px-3 py-2"
-              />
+              </Select>
+              <input name="institution" placeholder="Instituição (opcional)" />
+              <input name="openingBalance" placeholder="Saldo inicial R$" defaultValue="0" />
               <button
                 type="submit"
                 className="w-full rounded-md bg-zinc-900 py-2 text-sm font-medium text-white hover:bg-zinc-800"
@@ -147,7 +134,6 @@ export default async function CashPage({
                   <input
                     name="closingAmount"
                     placeholder="Valor contado em caixa (R$)"
-                    className="w-full rounded-md border border-zinc-300 px-3 py-2"
                     defaultValue="0"
                   />
                   <button
@@ -162,23 +148,14 @@ export default async function CashPage({
               <p className="text-sm text-zinc-600">Nenhuma sessão aberta.</p>
             )}
             <form action={openCashSessionAction} className="space-y-2 text-sm">
-              <select
-                name="cashRegisterId"
-                required
-                className="w-full rounded-md border border-zinc-300 px-3 py-2"
-              >
+              <Select name="cashRegisterId" required>
                 {registers.map((reg) => (
                   <option key={reg.id} value={reg.id}>
                     {reg.name}
                   </option>
                 ))}
-              </select>
-              <input
-                name="openingAmount"
-                placeholder="Fundo de troco (R$)"
-                defaultValue="0"
-                className="w-full rounded-md border border-zinc-300 px-3 py-2"
-              />
+              </Select>
+              <input name="openingAmount" placeholder="Fundo de troco (R$)" defaultValue="0" />
               <button
                 type="submit"
                 className="w-full rounded-md bg-zinc-900 py-2 font-medium text-white hover:bg-zinc-800"
@@ -191,17 +168,8 @@ export default async function CashPage({
               className="space-y-2 border-t border-zinc-100 pt-4 text-sm"
             >
               <p className="text-xs font-medium text-zinc-500">Novo terminal de caixa</p>
-              <input
-                name="name"
-                required
-                placeholder="Nome do caixa"
-                className="w-full rounded-md border border-zinc-300 px-3 py-2"
-              />
-              <input
-                name="location"
-                placeholder="Local"
-                className="w-full rounded-md border border-zinc-300 px-3 py-2"
-              />
+              <input name="name" required placeholder="Nome do caixa" />
+              <input name="location" placeholder="Local" />
               <button
                 type="submit"
                 className="w-full rounded-md border border-zinc-300 py-2 font-medium hover:bg-zinc-50"
