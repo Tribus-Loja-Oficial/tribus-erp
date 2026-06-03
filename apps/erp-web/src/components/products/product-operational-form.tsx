@@ -173,11 +173,11 @@ function visibleTabsForProductType(productType: string): typeof TABS {
 const PRODUCT_TYPES: { value: string; label: string }[] = [
   { value: "finished_product", label: "Produto final (venda ao cliente)" },
   { value: "raw_material", label: "Matéria-prima" },
-  { value: "packaging", label: "Embalagem / insumo operacional" },
+  { value: "packaging", label: "Embalagem" },
   { value: "kit", label: "Kit (montagem)" },
   { value: "bundle", label: "Bundle (agrupamento)" },
   { value: "service", label: "Serviço" },
-  { value: "consumable", label: "Consumível interno" },
+  { value: "consumable", label: "Insumo operacional" },
 ];
 
 const COMPOSITION_TYPES_ADD: { value: string; label: string }[] = [
@@ -202,6 +202,46 @@ const UNITS: { value: string; label: string }[] = [
   { value: "liter", label: "Litro" },
   { value: "package", label: "Pacote" },
 ];
+
+/** Rótulo em português para exibição (códigos do cadastro, compras e composição). */
+const UNIT_LABEL_PT: Record<string, string> = {
+  ...Object.fromEntries(UNITS.map((u) => [u.value, u.label.toLowerCase()])),
+  unidade: "unidade",
+  unidades: "unidade",
+  par: "par",
+  pares: "par",
+  metro: "metro",
+  metros: "metro",
+  m: "metro",
+  grama: "grama",
+  gramas: "grama",
+  g: "grama",
+  gr: "grama",
+  quilograma: "quilograma",
+  quilogramas: "quilograma",
+  litro: "litro",
+  litros: "litro",
+  l: "litro",
+  pacote: "pacote",
+  pacotes: "pacote",
+  centimetro: "centímetro",
+  centimetros: "centímetro",
+  centímetro: "centímetro",
+  centímetros: "centímetro",
+  cm: "cm",
+  milimetro: "milímetro",
+  milimetros: "milímetro",
+  milímetro: "milímetro",
+  milímetros: "milímetro",
+  mm: "mm",
+};
+
+function unitLabelPt(unit: string | null | undefined): string {
+  const raw = unit?.trim();
+  if (!raw) return "unidade";
+  const mapped = UNIT_LABEL_PT[raw.toLowerCase()];
+  return mapped ?? raw;
+}
 
 function centsToInput(cents: number): string {
   return (cents / 100).toFixed(2);
@@ -250,7 +290,7 @@ function productTypeLabel(t: string | null | undefined): string {
     finished_product: "Produto final",
     raw_material: "Matéria-prima",
     packaging: "Embalagem",
-    consumable: "Consumível",
+    consumable: "Insumo operacional",
     kit: "Kit",
     bundle: "Bundle",
     service: "Serviço",
@@ -281,13 +321,9 @@ function formatCompositionQtyPt(quantity: number): string {
   }).format(quantity);
 }
 
-/** Unidade após “/” no custo base (sempre singular, ex.: unidade, não unidades). */
+/** Unidade após “/” no custo base (sempre singular em português). */
 function compositionRateUnitSuffix(quantityUnit: string | null | undefined): string {
-  const raw = quantityUnit?.trim();
-  if (!raw) return "unidade";
-  const uLower = raw.toLowerCase();
-  if (uLower === "unidades") return "unidade";
-  return raw;
+  return unitLabelPt(quantityUnit);
 }
 
 function compositionUsagePerPieceLabel(
@@ -1277,7 +1313,7 @@ export function ProductOperationalForm({
 
   const packagingHint =
     productType === "packaging"
-      ? "Este cadastro representa uma embalagem ou insumo operacional com estoque e custo próprios."
+      ? "Este cadastro representa uma embalagem com estoque e custo próprios."
       : null;
 
   return (
@@ -1677,7 +1713,12 @@ export function ProductOperationalForm({
                         ? `R$ ${Number(initialProduct.averageCostDecimal).toFixed(4)}`
                         : "—"}
                     </li>
-                    <li>Unidade do custo médio: {String(initialProduct.averageCostUnit ?? "—")}</li>
+                    <li>
+                      Unidade do custo médio:{" "}
+                      {initialProduct.averageCostUnit
+                        ? unitLabelPt(String(initialProduct.averageCostUnit))
+                        : "—"}
+                    </li>
                     <li>
                       Último custo de compra:{" "}
                       {initialProduct.lastPurchaseCostDecimal != null
@@ -1862,7 +1903,7 @@ export function ProductOperationalForm({
                       <p className="mt-1 text-zinc-700 tabular-nums">
                         {String(initialProduct.currentStock ?? 0)}{" "}
                         <span className="text-zinc-500">
-                          ({String(initialProduct.unitOfMeasure ?? "unit")})
+                          ({unitLabelPt(String(initialProduct.unitOfMeasure ?? "unit"))})
                         </span>
                       </p>
                     </div>

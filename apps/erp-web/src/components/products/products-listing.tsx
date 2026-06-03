@@ -58,7 +58,7 @@ const PRODUCT_TYPES: { value: string; label: string }[] = [
   { value: "kit", label: "Kit" },
   { value: "bundle", label: "Bundle" },
   { value: "service", label: "Serviço" },
-  { value: "consumable", label: "Consumível" },
+  { value: "consumable", label: "Insumo operacional" },
 ];
 
 const STATUSES: { value: string; label: string }[] = [

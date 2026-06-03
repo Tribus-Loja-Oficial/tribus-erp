@@ -104,7 +104,7 @@ Valores exatos (não infira sinónimos):
 | `kit`              | Kit comercial                              |
 | `bundle`           | Bundle / agrupamento                       |
 | `service`          | Serviço (mão de obra como produto serviço) |
-| `consumable`       | Consumível operacional                     |
+| `consumable`       | Insumo operacional                         |
 
 Erro comum: `finished_good` (Woo) → **não é aceite**; use **`finished_product`**.
 
