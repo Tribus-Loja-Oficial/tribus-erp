@@ -314,16 +314,6 @@ function compositionCostBaseLabel(
   return `${formatCurrency(unitCostCents ?? 0)} / ${compositionRateUnitSuffix(quantityUnit)}`;
 }
 
-type ProductCostUnitBasis = "average" | "legacy_cost_price";
-
-function productCostUnitBasisFromRecord(product: Record<string, unknown>): ProductCostUnitBasis {
-  const averageCost = product.averageCostDecimal;
-  if (averageCost != null && Number.isFinite(Number(averageCost)) && Number(averageCost) >= 0) {
-    return "average";
-  }
-  return "legacy_cost_price";
-}
-
 function productCostDisplayUnit(product: Record<string, unknown>): string {
   const avgUnit = String(product.averageCostUnit ?? "").trim();
   if (avgUnit) return compositionRateUnitSuffix(avgUnit);
@@ -331,24 +321,30 @@ function productCostDisplayUnit(product: Record<string, unknown>): string {
 }
 
 function productCostBaseInfoTooltip(product: Record<string, unknown>): string {
-  const basis = productCostUnitBasisFromRecord(product);
   const unit = productCostDisplayUnit(product);
-  const parts = [
-    `Valor referenciado por ${unit} (unidade da última compra em estoque).`,
-    `Critério ativo: ${compositionCostBasisLabel(basis)}.`,
-    `Origem no cadastro: ${productCostSourceLabel(String(product.costSource ?? "unknown"))}.`,
-  ];
-  if (basis === "average" && product.averageCostDecimal != null) {
-    parts.push(
-      `Custo médio das 2 últimas compras (ponderado por quantidade): R$ ${Number(product.averageCostDecimal).toFixed(4)} / ${unit}.`,
-    );
-  } else {
-    parts.push(
-      "Campo «Custo base» do cadastro — registre recebimentos de compra para calcular o custo médio.",
-    );
-    if (product.costSource === "legacy_ingestion") parts.push(COMPOSITION_LEGACY_COST_TOOLTIP);
+  const hasAverage =
+    product.averageCostDecimal != null &&
+    Number.isFinite(Number(product.averageCostDecimal)) &&
+    Number(product.averageCostDecimal) >= 0;
+
+  if (hasAverage) {
+    const avg = Number(product.averageCostDecimal).toFixed(4);
+    return [
+      `Na composição dos produtos finais, o ERP usa R$ ${avg} por ${unit}.`,
+      "Esse valor é a média das 2 últimas compras (recebimentos em Compras).",
+      "O campo «Custo base» acima só vale se ainda não existir compra registrada.",
+    ].join(" ");
   }
-  return parts.join(" ");
+
+  const lines = [
+    "Na composição dos produtos finais, o ERP usa este «Custo base» porque ainda não há compras lançadas.",
+    "Depois de registrar recebimentos em Compras → Recebimentos, passa a valer a média das 2 últimas compras.",
+    `Unidade esperada na composição: ${unit}.`,
+  ];
+  if (product.costSource === "legacy_ingestion") {
+    lines.push("Valor importado de planilha — confirme com uma compra real no sistema.");
+  }
+  return lines.join(" ");
 }
 
 function CompositionColumnHelp({ title }: { title: string }) {
@@ -1612,8 +1608,8 @@ export function ProductOperationalForm({
                     />
                     {isSupplyProduct ? (
                       <p className="mt-1 text-xs text-zinc-500">
-                        Na composição de produtos finais, o ERP usa o custo médio das 2 últimas
-                        compras (recebimentos de compra). Sem compras, usa este custo base.
+                        Com compras lançadas, a composição usa a média das 2 últimas entradas. Sem
+                        compras, usa o valor deste campo.
                       </p>
                     ) : null}
                   </div>
@@ -1671,7 +1667,7 @@ export function ProductOperationalForm({
                   <p className="font-medium text-zinc-800">Custos (servidor)</p>
                   <p className="mt-1 text-xs text-zinc-600">
                     {isSupplyProduct
-                      ? "Custo médio = média ponderada das 2 últimas compras (recebimento de compra). Registre compras em Compras → Recebimentos."
+                      ? "O custo médio abaixo vem das 2 últimas compras. Lance-as em Compras → Recebimentos."
                       : "Custo base (campo acima) é independente. Totais com composição e produção vêm da aba Composição e do perfil de produção."}
                   </p>
                   <ul className="mt-2 grid gap-1 text-xs text-zinc-600 sm:grid-cols-2">
