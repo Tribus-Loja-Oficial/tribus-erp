@@ -28,9 +28,9 @@ Campo opcional no envelope de cada objecto (ao lado de `type` e `client_ref`). C
 | `line`     | `slug`                              |
 | `product`  | `slug` **ou** `sku` (pelo menos um) |
 
-**Tipos sem suporte a upsert** (`stock_location`, `party`, `customer`, `supplier`, `product_variant`, `product_composition`, `inventory_movement`, `order`, `purchase_order`): o campo `action` é aceite pela validação mas ignorado em execução (comporta-se como `skip`).
+**Tipos sem suporte a upsert** (`stock_location`, `party`, `customer`, `supplier`, `product_variant`, `product_composition`, `line_composition`, `inventory_movement`, `order`, `purchase_order`): o campo `action` é aceite pela validação mas ignorado em execução (comporta-se como `skip`).
 
-**`product_composition_set`:** exige **`action`: `"replace"`** no envelope. Substitui composição existente (arquiva linhas no escopo e insere `items`); não usa o mesmo modelo de `action` opcional acima.
+**`product_composition_set` / `line_composition_set`:** exigem **`action`: `"replace"`** no envelope. Substitui composição existente (arquiva linhas no escopo e insere `items`); não usam o mesmo modelo de `action` opcional acima.
 
 **Resultado no campo `status` de cada item:**
 
@@ -136,7 +136,7 @@ Na interface do ERP, a composição aparece como **receita técnica** do produto
 
 - **`compositionType`** (linha de composição): `packaging` | `bom` | `kit` | `bundle` | `accessory` | `included` (**tipo do componente** na linha, no sentido de papel na receita).
 - Não confundir com **`productType`** do produto que entra como componente (`raw_material`, `packaging`, …).
-- Tipo **embalagem** no sentido de negócio: use **`compositionType`: `packaging`** e preencha **`packagingChannel`**: `online` ou `presential` (regra do `refineProductComposition`).
+- Tipo **embalagem** no sentido de negócio: use **`compositionType`: `packaging`** e preencha **`packagingChannel`**: `online`, `presential` ou **`both`** (mesma embalagem nos dois canais; regra do `refineProductComposition`).
 - **`notes`:** opcional; corresponde à coluna **Notas** na UI.
 
 ## `product_composition_set` — substituição em lote
@@ -144,10 +144,25 @@ Na interface do ERP, a composição aparece como **receita técnica** do produto
 - **`type`:** `product_composition_set`; **`action`:** obrigatoriamente **`"replace"`**.
 - **Produto pai (exactamente um):** `parentProductId`, `parentProductRef`, `parentProductSku` ou `parentProductSlug`.
 - **`replaceTypes`:** subconjunto não vazio de `packaging` \| `bom` \| `kit` \| `bundle` \| `accessory` \| `included` — apenas linhas activas com esses tipos são arquivadas antes de inserir as novas.
-- **`packagingChannel`** (opcional): só permitido se `replaceTypes` incluir `packaging`; restringe o arquivo às linhas de embalagem desse canal (`online` \| `presential`).
+- **`packagingChannel`** (opcional): só permitido se `replaceTypes` incluir `packaging`; restringe o arquivo às linhas de embalagem desse canal (`online` \| `presential` \| `both`).
 - **`items`:** linhas de **componentes** a criar (mesmas regras que `product_composition` por linha: identificação do filho via `childProductRef`, `childProductId`, `childSku` ou `childProductSku`; **`quantity`** + **`quantityUnit`** para o **uso por peça**; `packagingChannel` obrigatório em linhas `packaging`).
 - **Duplicados no mesmo `items`:** mesma chave natural (tipo + identificação do filho + canal) falha na validação semântica.
 - **`product_composition`** continua a servir para **acrescentar** uma linha; **`product_composition_set`** serve para **corrigir/repor** um conjunto sem duplicar nem apagar manualmente.
+
+## `line_composition` — receita partilhada da linha
+
+Componente na receita da **linha de produtos** (`line`). Todos os produtos com **`lineRef`** (ou `lineId`) à mesma linha **herdam** estes itens na BOM/custo; composição de **produto** faz override na mesma chave natural (`compositionType` + filho + `packagingChannel` quando embalagem).
+
+- **`parentLineRef`:** obrigatório — `client_ref` de um objecto `type: "line"` no mesmo payload (ou use `parentLineId` / `parentLineSlug` em integrações com IDs/slugs já persistidos, via API directa).
+- **Filho, uso por peça, tipos:** mesmas regras que `product_composition` (`childProductRef` ou `childSku`, `quantity`, `quantityUnit`, `compositionType`, `packagingChannel` se embalagem).
+- **`packagingChannel`:** `online` \| `presential` \| **`both`** — `both` aplica a embalagem ao custo online **e** presencial.
+
+## `line_composition_set` — substituição em lote da linha
+
+- **`type`:** `line_composition_set`; **`action`:** obrigatoriamente **`"replace"`**.
+- **Linha pai (exactamente um):** `parentLineId`, `parentLineRef` ou `parentLineSlug`.
+- **`replaceTypes`**, **`packagingChannel`** (opcional), **`items`:** mesmo contrato que `product_composition_set`, mas ao nível da linha.
+- Após execução, o sistema **recalcula snapshots de custo** de todos os produtos dessa linha.
 
 ## `unitOfMeasure` (produto)
 
@@ -181,7 +196,7 @@ Definição de eixos de variação no **pai** não tem campo `attributes` de cat
 - **`totalCostCents`** deve ser exactamente **`materialCostCents` + `packagingCostCents` + `laborCostCents`**.
 - **`componentCosts`** (opcional): array de linhas gravadas em `component_costs_json`, no mesmo formato que os snapshots gerados pela receita/BOM (custos de **composição** apenas). Os rótulos na UI (custo base, custo calculado de uso por peça, etc.) referem-se a campos derivados na visualização; na ingestão de snapshot usam-se os nomes técnicos do schema (`unitCost`, `lineTotalCents`, …).
   - Se presente e não vazio: a **soma** de **`lineTotalCents`** de todas as linhas deve ser **`materialCostCents` + `packagingCostCents`** (mão de obra entra só nos totais agregados, não nas linhas).
-  - Cada linha é um objecto **estrito** (sem chaves extra): ver enum de **`unitCostBasis`** (`average` \| `legacy_cost_price`) e **`packagingChannel`** (`online` \| `presential`) quando `compositionType` for embalagem. O valor legado `consumption_unit` não é mais aceite.
+  - Cada linha é um objecto **estrito** (sem chaves extra): ver enum de **`unitCostBasis`** (`average` \| `legacy_cost_price`) e **`packagingChannel`** (`online` \| `presential` \| `both`) quando `compositionType` for embalagem. O valor legado `consumption_unit` não é mais aceite.
 - Exemplo completo para copy-paste: ficheiro **`docs/examples/ingestion/09-product-cost-snapshot-with-component-lines.json`** e o artefacto único **`ingestion-payload.schema.json`** (`x-official-examples` + schema + este guia em `x-documentation-markdown`).
 
 ## `purchase_receipt` — datas
@@ -202,6 +217,7 @@ Ficheiros em **`docs/examples/ingestion/`** (cada um validado em teste contra `i
 8. `08-upsert-update-existing.json`
 9. `09-product-cost-snapshot-with-component-lines.json`
 10. `10-product-composition-set-replace.json`
+11. `11-line-composition-and-set.json`
 
 ## Mensagens de erro com “hint”
 

@@ -20,6 +20,8 @@
     "action 'upsert' data schema is partial (only natural key required); action 'skip'/'omitted' data schema is full (all required fields must be present).",
     "Types without upsert support (stock_location, party, customer, supplier, product_variant, product_composition, inventory_movement, order, purchase_order): action field is accepted but ignored at runtime.",
     "product_composition_set requires action \"replace\": archives existing composition rows in scope (replaceTypes, optional packagingChannel filter) and inserts items in one D1 batch; use product_composition for single-line append.",
+    "line_composition_set requires action \"replace\": same as product_composition_set but for line_compositions (parentLineRef|parentLineId|parentLineSlug).",
+    "packagingChannel for compositionType packaging: online | presential | both (both counts toward online and presential cost totals).",
     "Response items[].status values: 'created' (new insert), 'updated' (upsert patch applied), 'skipped' (existed, skip action), 'failed' (error).",
     "product_cost_snapshot: totalCostCents must equal materialCostCents + packagingCostCents + laborCostCents; if componentCosts is non-empty, sum of lineTotalCents must equal materialCostCents + packagingCostCents (composition lines only, not labor)."
   ],
@@ -523,9 +525,104 @@
           }
         }
       ]
+    },
+    "11-line-composition-and-set": {
+      "version": "1.0",
+      "mode": "create",
+      "objects": [
+        {
+          "type": "line",
+          "client_ref": "lin-impulso",
+          "data": {
+            "name": "Impulso Run",
+            "slug": "impulso-run",
+            "status": "active"
+          }
+        },
+        {
+          "type": "product",
+          "client_ref": "cmp-caixa",
+          "data": {
+            "sku": "CMP-CAIXA-UNIV",
+            "name": "Caixa universal",
+            "productType": "packaging",
+            "status": "active",
+            "salePriceCents": 0,
+            "costPriceCents": 120
+          }
+        },
+        {
+          "type": "product",
+          "client_ref": "cmp-fita",
+          "data": {
+            "sku": "CMP-FITA-BLUE",
+            "name": "Blue tape",
+            "productType": "consumable",
+            "status": "active",
+            "salePriceCents": 0,
+            "costPriceCents": 4
+          }
+        },
+        {
+          "type": "line_composition",
+          "data": {
+            "parentLineRef": "lin-impulso",
+            "childProductRef": "cmp-fita",
+            "quantity": 6,
+            "quantityUnit": "cm",
+            "compositionType": "bom",
+            "notes": "Fita partilhada por todos os colares Impulso Run"
+          }
+        },
+        {
+          "type": "line_composition",
+          "data": {
+            "parentLineRef": "lin-impulso",
+            "childProductRef": "cmp-caixa",
+            "quantity": 1,
+            "quantityUnit": "unit",
+            "compositionType": "packaging",
+            "packagingChannel": "both",
+            "notes": "Mesma caixa para envio online e loja física"
+          }
+        },
+        {
+          "type": "product",
+          "client_ref": "prd-colar-impulso",
+          "data": {
+            "sku": "CE-IMPULSO-RUN",
+            "name": "Colar Impulso Run",
+            "productType": "finished_product",
+            "productKind": "simple",
+            "status": "active",
+            "lineRef": "lin-impulso",
+            "salePriceCents": 12900,
+            "costPriceCents": 4500
+          }
+        },
+        {
+          "type": "line_composition_set",
+          "action": "replace",
+          "client_ref": "line-set-impulso-packaging-only",
+          "data": {
+            "parentLineRef": "lin-impulso",
+            "replaceTypes": ["packaging"],
+            "items": [
+              {
+                "childProductRef": "cmp-caixa",
+                "quantity": 1,
+                "quantityUnit": "unit",
+                "compositionType": "packaging",
+                "packagingChannel": "both",
+                "notes": "Substituição em lote só da embalagem da linha"
+              }
+            ]
+          }
+        }
+      ]
     }
   },
-  "x-documentation-markdown": "# Guia de campos — Ingestão Tribus ERP\n\nContrato formal: **`apps/erp-api/src/schemas/ingestion.schemas.ts`** (Zod) + validação semântica em `validateIngestionPayload`.\n\n## Fonte de verdade e JSON Schema\n\n- O ficheiro **`apps/erp-web/public/ingestion-payload.schema.json`** é **gerado** a partir de `ingestionPayloadSchema` com `zod-to-json-schema` (sem divergência de enums/required face ao backend).\n- Regenerar após alterações ao Zod:\n\n```bash\ncd apps/erp-api && npm run generate:ingestion-schema\n```\n\n## Campo `action` (envelope, por objecto)\n\nCampo opcional no envelope de cada objecto (ao lado de `type` e `client_ref`). Controla o comportamento quando o registo já existe na base de dados.\n\n| Valor    | Comportamento                                                                                                                                                                            |\n| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |\n| `skip`   | **(default)** Insere se não existe; ignora (resolve refs) se já existe. Seguro para re-ingestão.                                                                                         |\n| `upsert` | Se o registo existir: actualiza **apenas os campos enviados** (merge-patch — campos omitidos ficam intocados). Se não existir: cria (campos obrigatórios do tipo devem estar presentes). |\n\n**Chave natural por tipo (identifica o registo a actualizar):**\n\n| Tipo         | Chave natural obrigatória em `data` |\n| ------------ | ----------------------------------- |\n| `category`   | `slug`                              |\n| `line` | `slug`                              |\n| `product`    | `slug` **ou** `sku` (pelo menos um) |\n\n**Tipos sem suporte a upsert** (`stock_location`, `party`, `customer`, `supplier`, `product_variant`, `product_composition`, `inventory_movement`, `order`, `purchase_order`): o campo `action` é aceite pela validação mas ignorado em execução (comporta-se como `skip`).\n\n**`product_composition_set`:** exige **`action`: `\"replace\"`** no envelope. Substitui composição existente (arquiva linhas no escopo e insere `items`); não usa o mesmo modelo de `action` opcional acima.\n\n**Resultado no campo `status` de cada item:**\n\n| Status    | Significado                                            |\n| --------- | ------------------------------------------------------ |\n| `created` | Novo registo inserido.                                 |\n| `updated` | Registo existente actualizado via upsert.              |\n| `skipped` | Registo já existia; ignorado (action skip ou omitido). |\n| `failed`  | Erro — ver campo `error`.                              |\n\n**Exemplo mínimo — actualizar só a descrição de uma categoria:**\n\n```json\n{\n  \"version\": \"1.0\",\n  \"mode\": \"create\",\n  \"objects\": [\n    {\n      \"type\": \"category\",\n      \"action\": \"upsert\",\n      \"client_ref\": \"CAT-PULSEIRAS\",\n      \"data\": {\n        \"slug\": \"pulseiras\",\n        \"description\": \"Nova descrição da categoria Pulseiras.\"\n      }\n    }\n  ]\n}\n```\n\n**Exemplo — actualizar preço de venda de um produto:**\n\n```json\n{\n  \"type\": \"product\",\n  \"action\": \"upsert\",\n  \"data\": {\n    \"slug\": \"pulseira-impulso-g\",\n    \"salePriceCents\": 8990\n  }\n}\n```\n\n## CamelCase e excepções\n\n- Quase todos os campos em `data` seguem **camelCase** como na REST API (`salePriceCents`, `categoryRef`, …).\n- **Únicas excepções na ingestão de produto** (campos extra da camada de ingestão): **`main_image_url`**, **`gallery_image_urls`** — continuam em **snake_case** por alinhamento histórico com o pipeline de URLs; não existem `mainImageUrl` / `galleryImageUrls` no validador.\n\n## Dinheiro\n\nTodos os valores monetários são **inteiros em centavos** (evitar floats):\n\n| Campo típico            | Exemplo                         | Significado |\n| ----------------------- | ------------------------------- | ----------- |\n| `salePriceCents`        | `7990`                          | R$ 79,90    |\n| `costPriceCents`        | `3500`                          | R$ 35,00    |\n| `compareAtPriceCents`   | opcional                        | “De por”    |\n| `unitPriceCents` (item) | obrigatório em linhas de pedido |             |\n\nNão enviar `regularPrice` em decimal: use **`compareAtPriceCents`** (ou campos oficiais listados no JSON Schema).\n\n## `productType` (produto)\n\nValores exatos (não infira sinónimos):\n\n| Valor              | Uso de negócio (resumo)                    |\n| ------------------ | ------------------------------------------ |\n| `finished_product` | Produto acabado para venda                 |\n| `raw_material`     | Insumo / matéria-prima                     |\n| `packaging`        | Embalagem, tag, saquinho                   |\n| `kit`              | Kit comercial                              |\n| `bundle`           | Bundle / agrupamento                       |\n| `service`          | Serviço (mão de obra como produto serviço) |\n| `consumable`       | Insumo operacional                         |\n\nErro comum: `finished_good` (Woo) → **não é aceite**; use **`finished_product`**.\n\n## `status` (produto e variante)\n\nValores: `draft` | `active` | `inactive` | `archived`.\n\nMapeamento WooCommerce → ERP:\n\n| WooCommerce | ERP                      |\n| ----------- | ------------------------ |\n| `publish`   | `active`                 |\n| `draft`     | `draft`                  |\n| `private`   | `inactive` (por defeito) |\n| `trash`     | `archived`               |\n\nNão envie **`publish`** no ERP.\n\n## `inventory_movement.data.type`\n\nValores: `purchase` | `sale` | `return` | `adjustment` | `production_in` | `production_out` | `transfer_in` | `transfer_out` | `damaged` | `reservation` | `release_reservation`.\n\n- **Carga inicial / import de stock legado:** use sempre **`adjustment`**, nunca `initial_stock` (não suportado).\n- `notes` pode descrever a origem (ex.: “Import WooCommerce”).\n\n## `product_composition` — receita técnica, componente e uso por peça\n\nNa interface do ERP, a composição aparece como **receita técnica** do produto final: cada linha é um **componente** (matéria-prima, embalagem, etc.). O **uso por peça** é a quantidade consumida por unidade do produto pai, correspondendo no JSON a **`quantity`** (número) + **`quantityUnit`** (texto livre até 80 caracteres, ex.: `cm`, `g`, `folha`, `unidade`).\n\n- **`compositionType`** (linha de composição): `packaging` | `bom` | `kit` | `bundle` | `accessory` | `included` (**tipo do componente** na linha, no sentido de papel na receita).\n- Não confundir com **`productType`** do produto que entra como componente (`raw_material`, `packaging`, …).\n- Tipo **embalagem** no sentido de negócio: use **`compositionType`: `packaging`** e preencha **`packagingChannel`**: `online` ou `presential` (regra do `refineProductComposition`).\n- **`notes`:** opcional; corresponde à coluna **Notas** na UI.\n\n## `product_composition_set` — substituição em lote\n\n- **`type`:** `product_composition_set`; **`action`:** obrigatoriamente **`\"replace\"`**.\n- **Produto pai (exactamente um):** `parentProductId`, `parentProductRef`, `parentProductSku` ou `parentProductSlug`.\n- **`replaceTypes`:** subconjunto não vazio de `packaging` \\| `bom` \\| `kit` \\| `bundle` \\| `accessory` \\| `included` — apenas linhas activas com esses tipos são arquivadas antes de inserir as novas.\n- **`packagingChannel`** (opcional): só permitido se `replaceTypes` incluir `packaging`; restringe o arquivo às linhas de embalagem desse canal (`online` \\| `presential`).\n- **`items`:** linhas de **componentes** a criar (mesmas regras que `product_composition` por linha: identificação do filho via `childProductRef`, `childProductId`, `childSku` ou `childProductSku`; **`quantity`** + **`quantityUnit`** para o **uso por peça**; `packagingChannel` obrigatório em linhas `packaging`).\n- **Duplicados no mesmo `items`:** mesma chave natural (tipo + identificação do filho + canal) falha na validação semântica.\n- **`product_composition`** continua a servir para **acrescentar** uma linha; **`product_composition_set`** serve para **corrigir/repor** um conjunto sem duplicar nem apagar manualmente.\n\n## `unitOfMeasure` (produto)\n\nEnum no backend: `unit` | `pair` | `meter` | `gram` | `kg` | `liter` | `package`.\n\nSistemas externos com `\"m\"`, `\"g\"`: mapear para **`meter`** / **`gram`** no `unitOfMeasure` do **produto**, ou documentar a unidade em **`metadata`** e usar **`quantityUnit`** na linha de composição (string livre até 80 chars) como unidade do **uso por peça** (`quantity` + `quantityUnit`).\n\n## `productKind` simple vs variable\n\n- **simple:** movimentos e pedidos podem usar só `productRef` / `productId` no produto.\n- **variable:** no mesmo lote, defina `product_variant`(s) com `client_ref`; movimentos e linhas de pedido com `productRef` ao pai exigem **`variantRef` ou `variantId`**.\n\nDefinição de eixos de variação no **pai** não tem campo `attributes` de catálogo no `createProduct` — use **`metadata`** para eixos de importação; as variações reais são linhas `product_variant` com `attributes` (mapa string→string).\n\n## `metadata`\n\n- Tipo: objeto com chaves string e valores JSON arbitrários.\n- Use para: `sourceSystem`, ids externos, tags, detalhes de custo não modelados, etc.\n- Não substitui campos oficiais (`productType`, `status`, preços em centavos, …).\n\n## `client_ref` e referências\n\n- **`client_ref`:** identificador local **no payload** (string única no lote).\n- **`*Ref`:** aponta para o `client_ref` de outro objecto do **mesmo** payload.\n- **`*Id`:** UUID já persistido no D1/ERP.\n- **`externalRef` (PRD-…, PRV-…):** gerado pelo servidor na criação; **não** enviar em modo `create` salvo suporte explícito futuro.\n\n## `product_cost_snapshot` e `componentCosts`\n\n- **`productId` ou `productRef`** (no mesmo payload): obrigatório um dos dois.\n- **`totalCostCents`** deve ser exactamente **`materialCostCents` + `packagingCostCents` + `laborCostCents`**.\n- **`componentCosts`** (opcional): array de linhas gravadas em `component_costs_json`, no mesmo formato que os snapshots gerados pela receita/BOM (custos de **composição** apenas). Os rótulos na UI (custo base, custo calculado de uso por peça, etc.) referem-se a campos derivados na visualização; na ingestão de snapshot usam-se os nomes técnicos do schema (`unitCost`, `lineTotalCents`, …).\n  - Se presente e não vazio: a **soma** de **`lineTotalCents`** de todas as linhas deve ser **`materialCostCents` + `packagingCostCents`** (mão de obra entra só nos totais agregados, não nas linhas).\n  - Cada linha é um objecto **estrito** (sem chaves extra): ver enum de **`unitCostBasis`** (`average` \\| `legacy_cost_price`) e **`packagingChannel`** (`online` \\| `presential`) quando `compositionType` for embalagem. O valor legado `consumption_unit` não é mais aceite.\n- Exemplo completo para copy-paste: ficheiro **`docs/examples/ingestion/09-product-cost-snapshot-with-component-lines.json`** e o artefacto único **`ingestion-payload.schema.json`** (`x-official-examples` + schema + este guia em `x-documentation-markdown`).\n\n## `purchase_receipt` — datas\n\n- **`issueDate`** ou **`purchaseDate`** (YYYY-MM-DD): obrigatório um dos dois; na execução usam-se de forma equivalente para a data fiscal da entrada.\n\n## Exemplos oficiais\n\nFicheiros em **`docs/examples/ingestion/`** (cada um validado em teste contra `ingestionPayloadSchema`):\n\n1. `01-minimal-category.json`\n2. `02-minimal-product-simple.json`\n3. `03-product-variable-with-variants.json`\n4. `04-product-with-composition-and-costs.json`\n5. `05-initial-stock-adjustment.json`\n6. `06-supplier-and-purchase-order.json`\n7. `07-full-tribus-product-example.json`\n8. `08-upsert-update-existing.json`\n9. `09-product-cost-snapshot-with-component-lines.json`\n10. `10-product-composition-set-replace.json`\n\n## Mensagens de erro com “hint”\n\nO schema Zod de ingestão inclui validações que sugerem correções frequentes (ex.: `finished_good`, `publish`, `initial_stock`). Em caso de falha, ler `issues[].path` e `issues[].message` na resposta `VALIDATION_ERROR`.\n",
+  "x-documentation-markdown": "# Guia de campos — Ingestão Tribus ERP\n\nContrato formal: **`apps/erp-api/src/schemas/ingestion.schemas.ts`** (Zod) + validação semântica em `validateIngestionPayload`.\n\n## Fonte de verdade e JSON Schema\n\n- O ficheiro **`apps/erp-web/public/ingestion-payload.schema.json`** é **gerado** a partir de `ingestionPayloadSchema` com `zod-to-json-schema` (sem divergência de enums/required face ao backend).\n- Regenerar após alterações ao Zod:\n\n```bash\ncd apps/erp-api && npm run generate:ingestion-schema\n```\n\n## Campo `action` (envelope, por objecto)\n\nCampo opcional no envelope de cada objecto (ao lado de `type` e `client_ref`). Controla o comportamento quando o registo já existe na base de dados.\n\n| Valor    | Comportamento                                                                                                                                                                            |\n| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |\n| `skip`   | **(default)** Insere se não existe; ignora (resolve refs) se já existe. Seguro para re-ingestão.                                                                                         |\n| `upsert` | Se o registo existir: actualiza **apenas os campos enviados** (merge-patch — campos omitidos ficam intocados). Se não existir: cria (campos obrigatórios do tipo devem estar presentes). |\n\n**Chave natural por tipo (identifica o registo a actualizar):**\n\n| Tipo       | Chave natural obrigatória em `data` |\n| ---------- | ----------------------------------- |\n| `category` | `slug`                              |\n| `line`     | `slug`                              |\n| `product`  | `slug` **ou** `sku` (pelo menos um) |\n\n**Tipos sem suporte a upsert** (`stock_location`, `party`, `customer`, `supplier`, `product_variant`, `product_composition`, `line_composition`, `inventory_movement`, `order`, `purchase_order`): o campo `action` é aceite pela validação mas ignorado em execução (comporta-se como `skip`).\n\n**`product_composition_set` / `line_composition_set`:** exigem **`action`: `\"replace\"`** no envelope. Substitui composição existente (arquiva linhas no escopo e insere `items`); não usam o mesmo modelo de `action` opcional acima.\n\n**Resultado no campo `status` de cada item:**\n\n| Status    | Significado                                            |\n| --------- | ------------------------------------------------------ |\n| `created` | Novo registo inserido.                                 |\n| `updated` | Registo existente actualizado via upsert.              |\n| `skipped` | Registo já existia; ignorado (action skip ou omitido). |\n| `failed`  | Erro — ver campo `error`.                              |\n\n**Exemplo mínimo — actualizar só a descrição de uma categoria:**\n\n```json\n{\n  \"version\": \"1.0\",\n  \"mode\": \"create\",\n  \"objects\": [\n    {\n      \"type\": \"category\",\n      \"action\": \"upsert\",\n      \"client_ref\": \"CAT-PULSEIRAS\",\n      \"data\": {\n        \"slug\": \"pulseiras\",\n        \"description\": \"Nova descrição da categoria Pulseiras.\"\n      }\n    }\n  ]\n}\n```\n\n**Exemplo — actualizar preço de venda de um produto:**\n\n```json\n{\n  \"type\": \"product\",\n  \"action\": \"upsert\",\n  \"data\": {\n    \"slug\": \"pulseira-impulso-g\",\n    \"salePriceCents\": 8990\n  }\n}\n```\n\n## CamelCase e excepções\n\n- Quase todos os campos em `data` seguem **camelCase** como na REST API (`salePriceCents`, `categoryRef`, …).\n- **Únicas excepções na ingestão de produto** (campos extra da camada de ingestão): **`main_image_url`**, **`gallery_image_urls`** — continuam em **snake_case** por alinhamento histórico com o pipeline de URLs; não existem `mainImageUrl` / `galleryImageUrls` no validador.\n\n## Dinheiro\n\nTodos os valores monetários são **inteiros em centavos** (evitar floats):\n\n| Campo típico            | Exemplo                         | Significado |\n| ----------------------- | ------------------------------- | ----------- |\n| `salePriceCents`        | `7990`                          | R$ 79,90    |\n| `costPriceCents`        | `3500`                          | R$ 35,00    |\n| `compareAtPriceCents`   | opcional                        | “De por”    |\n| `unitPriceCents` (item) | obrigatório em linhas de pedido |             |\n\nNão enviar `regularPrice` em decimal: use **`compareAtPriceCents`** (ou campos oficiais listados no JSON Schema).\n\n## `productType` (produto)\n\nValores exatos (não infira sinónimos):\n\n| Valor              | Uso de negócio (resumo)                    |\n| ------------------ | ------------------------------------------ |\n| `finished_product` | Produto acabado para venda                 |\n| `raw_material`     | Insumo / matéria-prima                     |\n| `packaging`        | Embalagem, tag, saquinho                   |\n| `kit`              | Kit comercial                              |\n| `bundle`           | Bundle / agrupamento                       |\n| `service`          | Serviço (mão de obra como produto serviço) |\n| `consumable`       | Insumo operacional                         |\n\nErro comum: `finished_good` (Woo) → **não é aceite**; use **`finished_product`**.\n\n## `status` (produto e variante)\n\nValores: `draft` | `active` | `inactive` | `archived`.\n\nMapeamento WooCommerce → ERP:\n\n| WooCommerce | ERP                      |\n| ----------- | ------------------------ |\n| `publish`   | `active`                 |\n| `draft`     | `draft`                  |\n| `private`   | `inactive` (por defeito) |\n| `trash`     | `archived`               |\n\nNão envie **`publish`** no ERP.\n\n## `inventory_movement.data.type`\n\nValores: `purchase` | `sale` | `return` | `adjustment` | `production_in` | `production_out` | `transfer_in` | `transfer_out` | `damaged` | `reservation` | `release_reservation`.\n\n- **Carga inicial / import de stock legado:** use sempre **`adjustment`**, nunca `initial_stock` (não suportado).\n- `notes` pode descrever a origem (ex.: “Import WooCommerce”).\n\n## `product_composition` — receita técnica, componente e uso por peça\n\nNa interface do ERP, a composição aparece como **receita técnica** do produto final: cada linha é um **componente** (matéria-prima, embalagem, etc.). O **uso por peça** é a quantidade consumida por unidade do produto pai, correspondendo no JSON a **`quantity`** (número) + **`quantityUnit`** (texto livre até 80 caracteres, ex.: `cm`, `g`, `folha`, `unidade`).\n\n- **`compositionType`** (linha de composição): `packaging` | `bom` | `kit` | `bundle` | `accessory` | `included` (**tipo do componente** na linha, no sentido de papel na receita).\n- Não confundir com **`productType`** do produto que entra como componente (`raw_material`, `packaging`, …).\n- Tipo **embalagem** no sentido de negócio: use **`compositionType`: `packaging`** e preencha **`packagingChannel`**: `online`, `presential` ou **`both`** (mesma embalagem nos dois canais; regra do `refineProductComposition`).\n- **`notes`:** opcional; corresponde à coluna **Notas** na UI.\n\n## `product_composition_set` — substituição em lote\n\n- **`type`:** `product_composition_set`; **`action`:** obrigatoriamente **`\"replace\"`**.\n- **Produto pai (exactamente um):** `parentProductId`, `parentProductRef`, `parentProductSku` ou `parentProductSlug`.\n- **`replaceTypes`:** subconjunto não vazio de `packaging` \\| `bom` \\| `kit` \\| `bundle` \\| `accessory` \\| `included` — apenas linhas activas com esses tipos são arquivadas antes de inserir as novas.\n- **`packagingChannel`** (opcional): só permitido se `replaceTypes` incluir `packaging`; restringe o arquivo às linhas de embalagem desse canal (`online` \\| `presential` \\| `both`).\n- **`items`:** linhas de **componentes** a criar (mesmas regras que `product_composition` por linha: identificação do filho via `childProductRef`, `childProductId`, `childSku` ou `childProductSku`; **`quantity`** + **`quantityUnit`** para o **uso por peça**; `packagingChannel` obrigatório em linhas `packaging`).\n- **Duplicados no mesmo `items`:** mesma chave natural (tipo + identificação do filho + canal) falha na validação semântica.\n- **`product_composition`** continua a servir para **acrescentar** uma linha; **`product_composition_set`** serve para **corrigir/repor** um conjunto sem duplicar nem apagar manualmente.\n\n## `line_composition` — receita partilhada da linha\n\nComponente na receita da **linha de produtos** (`line`). Todos os produtos com **`lineRef`** (ou `lineId`) à mesma linha **herdam** estes itens na BOM/custo; composição de **produto** faz override na mesma chave natural (`compositionType` + filho + `packagingChannel` quando embalagem).\n\n- **`parentLineRef`:** obrigatório — `client_ref` de um objecto `type: \"line\"` no mesmo payload (ou use `parentLineId` / `parentLineSlug` em integrações com IDs/slugs já persistidos, via API directa).\n- **Filho, uso por peça, tipos:** mesmas regras que `product_composition` (`childProductRef` ou `childSku`, `quantity`, `quantityUnit`, `compositionType`, `packagingChannel` se embalagem).\n- **`packagingChannel`:** `online` \\| `presential` \\| **`both`** — `both` aplica a embalagem ao custo online **e** presencial.\n\n## `line_composition_set` — substituição em lote da linha\n\n- **`type`:** `line_composition_set`; **`action`:** obrigatoriamente **`\"replace\"`**.\n- **Linha pai (exactamente um):** `parentLineId`, `parentLineRef` ou `parentLineSlug`.\n- **`replaceTypes`**, **`packagingChannel`** (opcional), **`items`:** mesmo contrato que `product_composition_set`, mas ao nível da linha.\n- Após execução, o sistema **recalcula snapshots de custo** de todos os produtos dessa linha.\n\n## `unitOfMeasure` (produto)\n\nEnum no backend: `unit` | `pair` | `meter` | `gram` | `kg` | `liter` | `package`.\n\nSistemas externos com `\"m\"`, `\"g\"`: mapear para **`meter`** / **`gram`** no `unitOfMeasure` do **produto**, ou documentar a unidade em **`metadata`** e usar **`quantityUnit`** na linha de composição (string livre até 80 chars) como unidade do **uso por peça** (`quantity` + `quantityUnit`).\n\n## `productKind` simple vs variable\n\n- **simple:** movimentos e pedidos podem usar só `productRef` / `productId` no produto.\n- **variable:** no mesmo lote, defina `product_variant`(s) com `client_ref`; movimentos e linhas de pedido com `productRef` ao pai exigem **`variantRef` ou `variantId`**.\n\nDefinição de eixos de variação no **pai** não tem campo `attributes` de catálogo no `createProduct` — use **`metadata`** para eixos de importação; as variações reais são linhas `product_variant` com `attributes` (mapa string→string).\n\n## `metadata`\n\n- Tipo: objeto com chaves string e valores JSON arbitrários.\n- Use para: `sourceSystem`, ids externos, tags, detalhes de custo não modelados, etc.\n- Não substitui campos oficiais (`productType`, `status`, preços em centavos, …).\n\n## `client_ref` e referências\n\n- **`client_ref`:** identificador local **no payload** (string única no lote).\n- **`*Ref`:** aponta para o `client_ref` de outro objecto do **mesmo** payload.\n- **`*Id`:** UUID já persistido no D1/ERP.\n- **`externalRef` (PRD-…, PRV-…):** gerado pelo servidor na criação; **não** enviar em modo `create` salvo suporte explícito futuro.\n\n## `product_cost_snapshot` e `componentCosts`\n\n- **`productId` ou `productRef`** (no mesmo payload): obrigatório um dos dois.\n- **`totalCostCents`** deve ser exactamente **`materialCostCents` + `packagingCostCents` + `laborCostCents`**.\n- **`componentCosts`** (opcional): array de linhas gravadas em `component_costs_json`, no mesmo formato que os snapshots gerados pela receita/BOM (custos de **composição** apenas). Os rótulos na UI (custo base, custo calculado de uso por peça, etc.) referem-se a campos derivados na visualização; na ingestão de snapshot usam-se os nomes técnicos do schema (`unitCost`, `lineTotalCents`, …).\n  - Se presente e não vazio: a **soma** de **`lineTotalCents`** de todas as linhas deve ser **`materialCostCents` + `packagingCostCents`** (mão de obra entra só nos totais agregados, não nas linhas).\n  - Cada linha é um objecto **estrito** (sem chaves extra): ver enum de **`unitCostBasis`** (`average` \\| `legacy_cost_price`) e **`packagingChannel`** (`online` \\| `presential` \\| `both`) quando `compositionType` for embalagem. O valor legado `consumption_unit` não é mais aceite.\n- Exemplo completo para copy-paste: ficheiro **`docs/examples/ingestion/09-product-cost-snapshot-with-component-lines.json`** e o artefacto único **`ingestion-payload.schema.json`** (`x-official-examples` + schema + este guia em `x-documentation-markdown`).\n\n## `purchase_receipt` — datas\n\n- **`issueDate`** ou **`purchaseDate`** (YYYY-MM-DD): obrigatório um dos dois; na execução usam-se de forma equivalente para a data fiscal da entrada.\n\n## Exemplos oficiais\n\nFicheiros em **`docs/examples/ingestion/`** (cada um validado em teste contra `ingestionPayloadSchema`):\n\n1. `01-minimal-category.json`\n2. `02-minimal-product-simple.json`\n3. `03-product-variable-with-variants.json`\n4. `04-product-with-composition-and-costs.json`\n5. `05-initial-stock-adjustment.json`\n6. `06-supplier-and-purchase-order.json`\n7. `07-full-tribus-product-example.json`\n8. `08-upsert-update-existing.json`\n9. `09-product-cost-snapshot-with-component-lines.json`\n10. `10-product-composition-set-replace.json`\n11. `11-line-composition-and-set.json`\n\n## Mensagens de erro com “hint”\n\nO schema Zod de ingestão inclui validações que sugerem correções frequentes (ex.: `finished_good`, `publish`, `initial_stock`). Em caso de falha, ler `issues[].path` e `issues[].message` na resposta `VALIDATION_ERROR`.\n",
   "$ref": "#/definitions/IngestionPayload",
   "definitions": {
     "IngestionPayload": {
@@ -1879,7 +1976,7 @@
                               },
                               {
                                 "type": "string",
-                                "enum": ["online", "presential"]
+                                "enum": ["online", "presential", "both"]
                               }
                             ]
                           },
@@ -1971,7 +2068,7 @@
                       },
                       "packagingChannel": {
                         "type": "string",
-                        "enum": ["online", "presential"]
+                        "enum": ["online", "presential", "both"]
                       },
                       "items": {
                         "type": "array",
@@ -2014,7 +2111,7 @@
                                     },
                                     {
                                       "type": "string",
-                                      "enum": ["online", "presential"]
+                                      "enum": ["online", "presential", "both"]
                                     }
                                   ]
                                 },
@@ -2124,7 +2221,7 @@
                               },
                               {
                                 "type": "string",
-                                "enum": ["online", "presential"]
+                                "enum": ["online", "presential", "both"]
                               }
                             ]
                           },
@@ -2211,7 +2308,7 @@
                       },
                       "packagingChannel": {
                         "type": "string",
-                        "enum": ["online", "presential"]
+                        "enum": ["online", "presential", "both"]
                       },
                       "items": {
                         "type": "array",
@@ -2254,7 +2351,7 @@
                                     },
                                     {
                                       "type": "string",
-                                      "enum": ["online", "presential"]
+                                      "enum": ["online", "presential", "both"]
                                     }
                                   ]
                                 },
@@ -2911,7 +3008,7 @@
                               "anyOf": [
                                 {
                                   "type": "string",
-                                  "enum": ["online", "presential"]
+                                  "enum": ["online", "presential", "both"]
                                 },
                                 {
                                   "type": "null"

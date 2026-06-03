@@ -186,6 +186,22 @@ describe("buildProductCostBreakdownCents", () => {
     productType: "packaging",
   } as Product;
 
+  it("counts both packaging channel toward online and presential totals", () => {
+    const out = buildProductCostBreakdownCents(
+      [
+        {
+          compositionType: "packaging",
+          quantity: 1,
+          packagingChannel: "both",
+          child: childB,
+        },
+      ],
+      0,
+    );
+    expect(out.packagingOnlineCostCents).toBe(50);
+    expect(out.packagingPresentialCostCents).toBe(50);
+  });
+
   it("splits materials, packaging channels and labor", () => {
     const out = buildProductCostBreakdownCents(
       [

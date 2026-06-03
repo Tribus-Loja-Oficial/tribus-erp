@@ -107,6 +107,73 @@ describe("product_composition_set (Zod)", () => {
   });
 });
 
+describe("line_composition (Zod)", () => {
+  it("accepts line BOM and packaging with both channel", () => {
+    const result = ingestionPayloadSchema.safeParse({
+      version: "1.0",
+      mode: "create",
+      objects: [
+        {
+          type: "line",
+          client_ref: "lin-1",
+          data: { name: "Linha teste", slug: "linha-teste" },
+        },
+        {
+          type: "product",
+          client_ref: "cmp-1",
+          data: {
+            sku: "CMP-1",
+            name: "Caixa",
+            productType: "packaging",
+            salePriceCents: 0,
+            costPriceCents: 100,
+          },
+        },
+        {
+          type: "line_composition",
+          data: {
+            parentLineRef: "lin-1",
+            childProductRef: "cmp-1",
+            quantity: 1,
+            quantityUnit: "unit",
+            compositionType: "packaging",
+            packagingChannel: "both",
+          },
+        },
+      ],
+    });
+    expect(result.success).toBe(true);
+  });
+});
+
+describe("line_composition_set (Zod)", () => {
+  it("accepts replace payload with parentLineRef and packagingChannel both", () => {
+    const result = ingestionPayloadSchema.safeParse({
+      version: "1.0",
+      mode: "create",
+      objects: [
+        {
+          type: "line_composition_set",
+          action: "replace",
+          data: {
+            parentLineRef: "lin-1",
+            replaceTypes: ["packaging"],
+            items: [
+              {
+                childProductSku: "CMP-1",
+                quantity: 1,
+                compositionType: "packaging",
+                packagingChannel: "both",
+              },
+            ],
+          },
+        },
+      ],
+    });
+    expect(result.success).toBe(true);
+  });
+});
+
 describe("productIngestionDataSchema", () => {
   it("accepts optional image URLs", () => {
     const result = productIngestionDataSchema.safeParse({

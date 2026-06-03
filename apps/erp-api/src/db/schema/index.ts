@@ -297,7 +297,7 @@ export const productCompositions = sqliteTable(
       enum: ["packaging", "bom", "kit", "bundle", "accessory", "included"],
     }).notNull(),
     packagingChannel: text("packaging_channel", {
-      enum: ["online", "presential"],
+      enum: ["online", "presential", "both"],
     }),
     unitCostSnapshotCents: real("unit_cost_snapshot_cents"),
     totalCostSnapshotCents: real("total_cost_snapshot_cents"),
@@ -330,7 +330,7 @@ export const lineCompositions = sqliteTable(
       enum: ["packaging", "bom", "kit", "bundle", "accessory", "included"],
     }).notNull(),
     packagingChannel: text("packaging_channel", {
-      enum: ["online", "presential"],
+      enum: ["online", "presential", "both"],
     }),
     unitCostSnapshotCents: real("unit_cost_snapshot_cents"),
     totalCostSnapshotCents: real("total_cost_snapshot_cents"),

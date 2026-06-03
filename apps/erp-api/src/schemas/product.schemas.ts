@@ -29,7 +29,7 @@ export const compositionTypeSchema = z.enum([
   "included",
 ]);
 
-export const packagingChannelSchema = z.enum(["online", "presential"]);
+export const packagingChannelSchema = z.enum(["online", "presential", "both"]);
 
 export const productKindSchema = z.enum(["simple", "variable"]);
 
@@ -151,10 +151,14 @@ export function refineProductComposition(
   ctx: z.RefinementCtx,
 ) {
   if (data.compositionType === "packaging") {
-    if (data.packagingChannel !== "online" && data.packagingChannel !== "presential") {
+    if (
+      data.packagingChannel !== "online" &&
+      data.packagingChannel !== "presential" &&
+      data.packagingChannel !== "both"
+    ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Embalagem exige canal online ou presencial",
+        message: "Embalagem exige canal online, presencial ou ambos",
         path: ["packagingChannel"],
       });
     }

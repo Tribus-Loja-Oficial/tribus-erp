@@ -10,7 +10,7 @@ import {
 export function activeLineCompositionScopeWhere(
   parentLineId: string,
   replaceTypes: readonly ("packaging" | "bom" | "kit" | "bundle" | "accessory" | "included")[],
-  packagingChannel?: "online" | "presential",
+  packagingChannel?: "online" | "presential" | "both",
 ): SQL {
   return and(
     eq(lineCompositions.parentLineId, parentLineId),
@@ -84,7 +84,7 @@ export function createLineCompositionRepository(db: AppDb) {
     async countActiveInScope(
       parentLineId: string,
       replaceTypes: readonly ("packaging" | "bom" | "kit" | "bundle" | "accessory" | "included")[],
-      packagingChannel?: "online" | "presential",
+      packagingChannel?: "online" | "presential" | "both",
     ): Promise<number> {
       const where = activeLineCompositionScopeWhere(parentLineId, replaceTypes, packagingChannel);
       const [row] = await db

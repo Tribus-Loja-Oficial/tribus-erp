@@ -11,7 +11,7 @@ import {
 export function activeCompositionScopeWhere(
   parentProductId: string,
   replaceTypes: readonly ("packaging" | "bom" | "kit" | "bundle" | "accessory" | "included")[],
-  packagingChannel?: "online" | "presential",
+  packagingChannel?: "online" | "presential" | "both",
 ): SQL {
   const base = and(
     eq(productCompositions.parentProductId, parentProductId),
@@ -92,7 +92,7 @@ export function createProductCompositionRepository(db: AppDb) {
     async countActiveInScope(
       parentProductId: string,
       replaceTypes: readonly ("packaging" | "bom" | "kit" | "bundle" | "accessory" | "included")[],
-      packagingChannel?: "online" | "presential",
+      packagingChannel?: "online" | "presential" | "both",
     ): Promise<number> {
       const where = activeCompositionScopeWhere(parentProductId, replaceTypes, packagingChannel);
       const [row] = await db
@@ -105,7 +105,7 @@ export function createProductCompositionRepository(db: AppDb) {
     async archiveActiveInScope(
       parentProductId: string,
       replaceTypes: readonly ("packaging" | "bom" | "kit" | "bundle" | "accessory" | "included")[],
-      packagingChannel?: "online" | "presential",
+      packagingChannel?: "online" | "presential" | "both",
     ): Promise<void> {
       const ts = new Date().toISOString();
       const where = activeCompositionScopeWhere(parentProductId, replaceTypes, packagingChannel);

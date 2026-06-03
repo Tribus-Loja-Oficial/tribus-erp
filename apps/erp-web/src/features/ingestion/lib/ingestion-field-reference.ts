@@ -281,7 +281,7 @@ export const INGESTION_TYPE_REFERENCES: IngestionTypeReference[] = [
         key: "packagingChannel",
         requirement: "conditional",
         condition: "se compositionType = packaging",
-        valueType: "online | presential",
+        valueType: "online | presential | both",
       },
       {
         key: "required",
@@ -347,7 +347,7 @@ export const INGESTION_TYPE_REFERENCES: IngestionTypeReference[] = [
       {
         key: "packagingChannel",
         requirement: "optional",
-        valueType: "online | presential",
+        valueType: "online | presential | both",
         hint: "só com replaceTypes incluindo packaging; restringe o arquivo a esse canal",
       },
       {
@@ -355,6 +355,121 @@ export const INGESTION_TYPE_REFERENCES: IngestionTypeReference[] = [
         requirement: "required",
         valueType:
           "array de linhas (componente via childProductRef|childProductId|childSku|childProductSku; quantity + quantityUnit opcional = uso por peça; compositionType; …)",
+      },
+    ],
+  },
+  {
+    type: "line_composition",
+    summary:
+      "Componente na receita partilhada da **linha** (`parentLineRef` → `client_ref` de `line` no mesmo payload). Mesmo contrato de campos que `product_composition` (componente filho, `quantity` + `quantityUnit` = uso por peça). Produtos com `lineRef` herdam; composição de produto faz override na mesma chave (tipo + filho + canal).",
+    envelope: envCommon,
+    dataFields: [
+      {
+        key: "parentLineRef",
+        requirement: "required",
+        valueType: "string",
+        hint: "client_ref de line no payload",
+      },
+      {
+        key: "childProductRef",
+        requirement: "conditional",
+        condition: "ou childSku",
+        valueType: "string",
+        hint: "client_ref do componente no mesmo payload",
+      },
+      {
+        key: "childSku",
+        requirement: "conditional",
+        condition: "ou childProductRef",
+        valueType: "string",
+        hint: "SKU do componente já existente (ou criado no lote)",
+      },
+      {
+        key: "quantity",
+        requirement: "required",
+        valueType: "number > 0",
+        hint: "parte numérica do uso por peça (junto com quantityUnit)",
+      },
+      {
+        key: "quantityUnit",
+        requirement: "optional",
+        valueType: "string ≤ 80",
+        hint: "unidade do uso (m, cm, g, unidade, …)",
+      },
+      {
+        key: "compositionType",
+        requirement: "required",
+        valueType: "enum",
+        enumValues: ["packaging", "bom", "kit", "bundle", "accessory", "included"],
+      },
+      {
+        key: "packagingChannel",
+        requirement: "conditional",
+        condition: "se compositionType = packaging",
+        valueType: "online | presential | both",
+        hint: "both = embalagem válida para online e presencial (custo entra nos dois canais)",
+      },
+      {
+        key: "required",
+        requirement: "optional",
+        valueType: "boolean",
+        default: "true",
+      },
+      {
+        key: "isDefault",
+        requirement: "optional",
+        valueType: "boolean",
+        default: "true",
+      },
+      { key: "notes", requirement: "optional", valueType: "string ≤ 1000" },
+    ],
+  },
+  {
+    type: "line_composition_set",
+    summary:
+      'Substitui a receita da **linha** (BOM/embalagem): `action` obrigatória `"replace"`. Arquiva o escopo (`replaceTypes`, `packagingChannel` opcional) e insere `items`. Pai: exactamente um de parentLineId, parentLineRef ou parentLineSlug. Cada item: mesmo contrato que `line_composition` / `product_composition_set.items`.',
+    envelope: [
+      { key: "type", requirement: "required", hint: "literal line_composition_set" },
+      { key: "action", requirement: "required", hint: 'deve ser "replace"' },
+      { key: "client_ref", requirement: "optional", hint: "único no payload" },
+      { key: "data", requirement: "required", hint: "replaceTypes, items, identificador da linha" },
+    ],
+    dataFields: [
+      {
+        key: "parentLineId",
+        requirement: "conditional",
+        condition: "exactamente um identificador da linha",
+        valueType: "string (ID na base)",
+      },
+      {
+        key: "parentLineRef",
+        requirement: "conditional",
+        condition: "exactamente um identificador da linha",
+        valueType: "string (client_ref de line no payload)",
+      },
+      {
+        key: "parentLineSlug",
+        requirement: "conditional",
+        condition: "exactamente um identificador da linha",
+        valueType: "string (slug da linha na base)",
+      },
+      {
+        key: "replaceTypes",
+        requirement: "required",
+        valueType: "array não vazio",
+        enumValues: ["packaging", "bom", "kit", "bundle", "accessory", "included"],
+      },
+      {
+        key: "packagingChannel",
+        requirement: "optional",
+        valueType: "online | presential | both",
+        hint: "só com replaceTypes incluindo packaging; restringe o arquivo a esse canal",
+      },
+      {
+        key: "items",
+        requirement: "required",
+        valueType:
+          "array de linhas (componente via childProductRef|childProductId|childSku|childProductSku; quantity + quantityUnit = uso por peça; compositionType; packagingChannel se embalagem)",
       },
     ],
   },

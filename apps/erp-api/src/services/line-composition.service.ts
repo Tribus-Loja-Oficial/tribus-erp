@@ -25,8 +25,12 @@ function validateLineCompositionRules(opts: {
     throw new ValidationError("Quantidade deve ser maior que zero");
   }
   if (opts.compositionType === "packaging") {
-    if (opts.packagingChannel !== "online" && opts.packagingChannel !== "presential") {
-      throw new ValidationError("Embalagem exige canal: online ou presencial");
+    if (
+      opts.packagingChannel !== "online" &&
+      opts.packagingChannel !== "presential" &&
+      opts.packagingChannel !== "both"
+    ) {
+      throw new ValidationError("Embalagem exige canal: online, presencial ou ambos");
     }
   } else if (opts.packagingChannel != null) {
     throw new ValidationError("Canal de embalagem só se aplica a composição do tipo embalagem");
@@ -138,8 +142,8 @@ export function createLineCompositionService(db: AppDb) {
       const child = await productsRepo.findById(nextChildId);
       if (!child) throw new NotFoundError("Product", nextChildId);
 
-      const packagingChannel: "online" | "presential" | null =
-        nextType === "packaging" ? (nextChannel as "online" | "presential") : null;
+      const packagingChannel: "online" | "presential" | "both" | null =
+        nextType === "packaging" ? (nextChannel as "online" | "presential" | "both") : null;
 
       const { unitCostCents, totalCostCents } = lineCostCentsFromComposition(nextQty, child);
 
@@ -180,7 +184,7 @@ export function createLineCompositionService(db: AppDb) {
     async replaceCompositionScope(params: {
       parentLineId: string;
       replaceTypes: readonly ("packaging" | "bom" | "kit" | "bundle" | "accessory" | "included")[];
-      packagingChannel?: "online" | "presential";
+      packagingChannel?: "online" | "presential" | "both";
       lines: CreateProductCompositionInput[];
     }): Promise<{ removedCount: number; createdCount: number }> {
       const line = await productsRepo.findLineById(params.parentLineId);

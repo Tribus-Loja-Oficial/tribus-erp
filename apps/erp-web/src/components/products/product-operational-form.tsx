@@ -199,6 +199,14 @@ const COMPOSITION_TYPES_EDIT: { value: string; label: string }[] = [
   { value: "included", label: "Incluso" },
 ];
 
+const PACKAGING_CHANNELS = [
+  { value: "online", label: "Online" },
+  { value: "presential", label: "Presencial" },
+  { value: "both", label: "Online e presencial" },
+] as const;
+
+type PackagingChannel = (typeof PACKAGING_CHANNELS)[number]["value"];
+
 const UNITS: { value: string; label: string }[] = [
   { value: "unit", label: "Unidade" },
   { value: "pair", label: "Par" },
@@ -321,7 +329,31 @@ function productTypeLabel(t: string | null | undefined): string {
 function packagingChannelLabel(ch: string | null | undefined): string {
   if (ch === "online") return "Online";
   if (ch === "presential") return "Presencial";
+  if (ch === "both") return "Online e presencial";
   return "—";
+}
+
+function packagingChannelFromRow(ch: string | null | undefined): PackagingChannel {
+  if (ch === "presential" || ch === "both") return ch;
+  return "online";
+}
+
+function PackagingChannelSelect({
+  value,
+  onChange,
+}: {
+  value: PackagingChannel;
+  onChange: (value: PackagingChannel) => void;
+}) {
+  return (
+    <Select value={value} onChange={(e) => onChange(e.target.value as PackagingChannel)}>
+      {PACKAGING_CHANNELS.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}
+        </option>
+      ))}
+    </Select>
+  );
 }
 
 const COMPOSITION_COST_BASE_HEADER_TOOLTIP =
@@ -1048,9 +1080,7 @@ export function ProductOperationalForm({
   const [compType, setCompType] = useState("bom");
   const [compQty, setCompQty] = useState("1");
   const [compQtyUnit, setCompQtyUnit] = useState("unit");
-  const [compPackagingChannel, setCompPackagingChannel] = useState<"online" | "presential">(
-    "online",
-  );
+  const [compPackagingChannel, setCompPackagingChannel] = useState<PackagingChannel>("online");
   const [compNotes, setCompNotes] = useState("");
 
   const [editCompId, setEditCompId] = useState<string | null>(null);
@@ -1059,9 +1089,8 @@ export function ProductOperationalForm({
   const [editCompType, setEditCompType] = useState("bom");
   const [editCompQty, setEditCompQty] = useState("1");
   const [editCompQtyUnit, setEditCompQtyUnit] = useState("");
-  const [editCompPackagingChannel, setEditCompPackagingChannel] = useState<"online" | "presential">(
-    "online",
-  );
+  const [editCompPackagingChannel, setEditCompPackagingChannel] =
+    useState<PackagingChannel>("online");
   const [editCompNotes, setEditCompNotes] = useState("");
   const [expandedCompositionIds, setExpandedCompositionIds] = useState<Set<string>>(
     () => new Set(),
@@ -1381,7 +1410,7 @@ export function ProductOperationalForm({
     setEditCompType(row.compositionType);
     setEditCompQty(String(row.quantity));
     setEditCompQtyUnit(row.quantityUnit ?? "unit");
-    setEditCompPackagingChannel(row.packagingChannel === "presential" ? "presential" : "online");
+    setEditCompPackagingChannel(packagingChannelFromRow(row.packagingChannel));
     setEditCompNotes(row.notes ?? "");
     setError(null);
   }
@@ -2246,18 +2275,10 @@ export function ProductOperationalForm({
                                               <label className="mb-1 block text-xs text-zinc-600">
                                                 Canal embalagem
                                               </label>
-                                              <Select
+                                              <PackagingChannelSelect
                                                 value={editCompPackagingChannel}
-                                                onChange={(e) =>
-                                                  setEditCompPackagingChannel(
-                                                    e.target.value as "online" | "presential",
-                                                  )
-                                                }
-                                                className={cn(formSelectClassName, "min-w-[11rem]")}
-                                              >
-                                                <option value="online">Online</option>
-                                                <option value="presential">Presencial</option>
-                                              </Select>
+                                                onChange={setEditCompPackagingChannel}
+                                              />
                                             </div>
                                           ) : null}
                                         </div>
@@ -2489,18 +2510,10 @@ export function ProductOperationalForm({
                                             <label className="mb-1 block text-xs text-zinc-600">
                                               Canal *
                                             </label>
-                                            <Select
+                                            <PackagingChannelSelect
                                               value={editCompPackagingChannel}
-                                              onChange={(e) =>
-                                                setEditCompPackagingChannel(
-                                                  e.target.value as "online" | "presential",
-                                                )
-                                              }
-                                              className={cn(formSelectClassName, "min-w-[11rem]")}
-                                            >
-                                              <option value="online">Online</option>
-                                              <option value="presential">Presencial</option>
-                                            </Select>
+                                              onChange={setEditCompPackagingChannel}
+                                            />
                                           </div>
                                           <div>
                                             <label className="mb-1 flex items-center gap-1 text-xs text-zinc-600">
@@ -2591,18 +2604,10 @@ export function ProductOperationalForm({
                                             <label className="mb-1 block text-xs text-zinc-600">
                                               Canal *
                                             </label>
-                                            <Select
+                                            <PackagingChannelSelect
                                               value={editCompPackagingChannel}
-                                              onChange={(e) =>
-                                                setEditCompPackagingChannel(
-                                                  e.target.value as "online" | "presential",
-                                                )
-                                              }
-                                              className={cn(formSelectClassName, "min-w-[11rem]")}
-                                            >
-                                              <option value="online">Online</option>
-                                              <option value="presential">Presencial</option>
-                                            </Select>
+                                              onChange={setEditCompPackagingChannel}
+                                            />
                                           </div>
                                           <div>
                                             <label className="mb-1 flex items-center gap-1 text-xs text-zinc-600">
@@ -2822,16 +2827,10 @@ export function ProductOperationalForm({
                             <label className="mb-1 block text-xs text-zinc-600">
                               Canal embalagem *
                             </label>
-                            <Select
+                            <PackagingChannelSelect
                               value={compPackagingChannel}
-                              onChange={(e) =>
-                                setCompPackagingChannel(e.target.value as "online" | "presential")
-                              }
-                              className={cn(formSelectClassName, "min-w-[11rem]")}
-                            >
-                              <option value="online">Online</option>
-                              <option value="presential">Presencial</option>
-                            </Select>
+                              onChange={setCompPackagingChannel}
+                            />
                           </div>
                         ) : null}
                       </div>

@@ -449,7 +449,7 @@ export const productCostSnapshotComponentLineIngestionSchema = z
     compositionType: z.string().min(1).max(50),
     quantity: z.number().nonnegative(),
     quantityUnit: z.string().max(50).nullable().optional(),
-    packagingChannel: z.enum(["online", "presential"]).nullable().optional(),
+    packagingChannel: z.enum(["online", "presential", "both"]).nullable().optional(),
     unitCostBasis: z.enum(["average", "legacy_cost_price"]).optional(),
     unitCost: z.number().nonnegative(),
     lineTotalCents: z.number().int(),

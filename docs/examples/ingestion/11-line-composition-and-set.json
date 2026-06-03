@@ -1,0 +1,95 @@
+{
+  "version": "1.0",
+  "mode": "create",
+  "objects": [
+    {
+      "type": "line",
+      "client_ref": "lin-impulso",
+      "data": {
+        "name": "Impulso Run",
+        "slug": "impulso-run",
+        "status": "active"
+      }
+    },
+    {
+      "type": "product",
+      "client_ref": "cmp-caixa",
+      "data": {
+        "sku": "CMP-CAIXA-UNIV",
+        "name": "Caixa universal",
+        "productType": "packaging",
+        "status": "active",
+        "salePriceCents": 0,
+        "costPriceCents": 120
+      }
+    },
+    {
+      "type": "product",
+      "client_ref": "cmp-fita",
+      "data": {
+        "sku": "CMP-FITA-BLUE",
+        "name": "Blue tape",
+        "productType": "consumable",
+        "status": "active",
+        "salePriceCents": 0,
+        "costPriceCents": 4
+      }
+    },
+    {
+      "type": "line_composition",
+      "data": {
+        "parentLineRef": "lin-impulso",
+        "childProductRef": "cmp-fita",
+        "quantity": 6,
+        "quantityUnit": "cm",
+        "compositionType": "bom",
+        "notes": "Fita partilhada por todos os colares Impulso Run"
+      }
+    },
+    {
+      "type": "line_composition",
+      "data": {
+        "parentLineRef": "lin-impulso",
+        "childProductRef": "cmp-caixa",
+        "quantity": 1,
+        "quantityUnit": "unit",
+        "compositionType": "packaging",
+        "packagingChannel": "both",
+        "notes": "Mesma caixa para envio online e loja física"
+      }
+    },
+    {
+      "type": "product",
+      "client_ref": "prd-colar-impulso",
+      "data": {
+        "sku": "CE-IMPULSO-RUN",
+        "name": "Colar Impulso Run",
+        "productType": "finished_product",
+        "productKind": "simple",
+        "status": "active",
+        "lineRef": "lin-impulso",
+        "salePriceCents": 12900,
+        "costPriceCents": 4500
+      }
+    },
+    {
+      "type": "line_composition_set",
+      "action": "replace",
+      "client_ref": "line-set-impulso-packaging-only",
+      "data": {
+        "parentLineRef": "lin-impulso",
+        "replaceTypes": ["packaging"],
+        "items": [
+          {
+            "childProductRef": "cmp-caixa",
+            "quantity": 1,
+            "quantityUnit": "unit",
+            "compositionType": "packaging",
+            "packagingChannel": "both",
+            "notes": "Substituição em lote só da embalagem da linha"
+          }
+        ]
+      }
+    }
+  ]
+}

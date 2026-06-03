@@ -129,6 +129,10 @@ export function buildProductCostBreakdownCents(
       if (row.packagingChannel === "online") packagingOnlineCostCents += totalCostCents;
       else if (row.packagingChannel === "presential")
         packagingPresentialCostCents += totalCostCents;
+      else if (row.packagingChannel === "both") {
+        packagingOnlineCostCents += totalCostCents;
+        packagingPresentialCostCents += totalCostCents;
+      }
     }
   }
 

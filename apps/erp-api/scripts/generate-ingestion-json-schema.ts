@@ -72,6 +72,8 @@ const envelope: Record<string, unknown> = {
     "action 'upsert' data schema is partial (only natural key required); action 'skip'/'omitted' data schema is full (all required fields must be present).",
     "Types without upsert support (stock_location, party, customer, supplier, product_variant, product_composition, inventory_movement, order, purchase_order): action field is accepted but ignored at runtime.",
     'product_composition_set requires action "replace": archives existing composition rows in scope (replaceTypes, optional packagingChannel filter) and inserts items in one D1 batch; use product_composition for single-line append.',
+    'line_composition_set requires action "replace": same as product_composition_set but for line_compositions (parentLineRef|parentLineId|parentLineSlug).',
+    "packagingChannel for compositionType packaging: online | presential | both (both counts toward online and presential cost totals).",
     "Response items[].status values: 'created' (new insert), 'updated' (upsert patch applied), 'skipped' (existed, skip action), 'failed' (error).",
     "product_cost_snapshot: totalCostCents must equal materialCostCents + packagingCostCents + laborCostCents; if componentCosts is non-empty, sum of lineTotalCents must equal materialCostCents + packagingCostCents (composition lines only, not labor).",
   ],
