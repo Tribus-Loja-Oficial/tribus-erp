@@ -694,7 +694,7 @@ export function ProductsListing({
                       <Link
                         href={`/products/${p.id}`}
                         className="inline-block rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
-                        title={`Ver ${p.name}`}
+                        aria-label={`Abrir ficha de ${p.name}`}
                       >
                         <ProductListMainImage
                           key={p.mainImageFileId ?? `empty-${p.id}`}

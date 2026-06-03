@@ -1,10 +1,12 @@
 "use client";
 
+import { CheckCircle2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
   searchProductsCatalogAction,
   type CatalogProductSearchRow,
 } from "@/server/product-operational-actions";
+import { cn } from "@/lib/utils";
 
 type Props = {
   value: string;
@@ -70,23 +72,43 @@ export function CompositionProductPicker({
           setOpen(true);
         }}
         onFocus={() => setOpen(true)}
-        placeholder="Digite SKU ou nome…"
-        className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+        placeholder={value ? "Buscar outro produto…" : "Digite SKU ou nome…"}
+        className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
         autoComplete="off"
       />
       {value ? (
-        <p className="mt-1 text-xs text-zinc-700">
-          Selecionado: <span className="font-mono">{displaySku ?? "—"}</span>
-          {" — "}
-          <span>{displayName ?? value}</span>
+        <div
+          className="mt-2 flex items-start gap-2.5 rounded-lg border border-emerald-200 bg-emerald-50/90 px-3 py-2.5 shadow-sm"
+          role="status"
+          aria-live="polite"
+        >
+          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden />
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-semibold tracking-wide text-emerald-800/80 uppercase">
+              Componente selecionado
+            </p>
+            <p className="mt-1 truncate text-sm leading-snug font-semibold text-zinc-900">
+              {displayName ?? "Produto sem nome"}
+            </p>
+            {displaySku ? (
+              <span className="mt-1.5 inline-flex rounded-md bg-white/90 px-2 py-0.5 font-mono text-[11px] text-zinc-700 tabular-nums ring-1 ring-emerald-200/90">
+                {displaySku}
+              </span>
+            ) : null}
+          </div>
           <button
             type="button"
-            className="ml-2 text-zinc-500 underline hover:text-zinc-800"
-            onClick={() => onChange("")}
+            className="shrink-0 rounded-md p-1 text-zinc-500 transition-colors hover:bg-emerald-100/80 hover:text-zinc-800"
+            aria-label="Limpar seleção"
+            title="Limpar seleção"
+            onClick={() => {
+              onChange("");
+              setQ("");
+            }}
           >
-            Limpar
+            <X className="h-4 w-4" aria-hidden />
           </button>
-        </p>
+        </div>
       ) : null}
       {open ? (
         <div className="absolute z-20 mt-1 max-h-48 w-full overflow-auto rounded-md border border-zinc-200 bg-white py-1 text-sm shadow-lg">
@@ -95,21 +117,39 @@ export function CompositionProductPicker({
             <div className="px-3 py-2 text-xs text-zinc-500">Nenhum resultado.</div>
           ) : null}
           {!loading
-            ? results.map((r) => (
-                <button
-                  key={r.id}
-                  type="button"
-                  className="flex w-full flex-col items-start px-3 py-2 text-left hover:bg-zinc-50"
-                  onClick={() => {
-                    onChange(r.id);
-                    setQ("");
-                    setOpen(false);
-                  }}
-                >
-                  <span className="font-mono text-xs text-zinc-600">{r.sku}</span>
-                  <span className="text-zinc-900">{r.name}</span>
-                </button>
-              ))
+            ? results.map((r) => {
+                const isSelected = r.id === value;
+                return (
+                  <button
+                    key={r.id}
+                    type="button"
+                    className={cn(
+                      "flex w-full items-start gap-2 px-3 py-2 text-left transition-colors hover:bg-zinc-50",
+                      isSelected && "bg-emerald-50 hover:bg-emerald-50/90",
+                    )}
+                    onClick={() => {
+                      onChange(r.id);
+                      setQ("");
+                      setOpen(false);
+                    }}
+                  >
+                    {isSelected ? (
+                      <CheckCircle2
+                        className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600"
+                        aria-hidden
+                      />
+                    ) : (
+                      <span className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                    )}
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-mono text-xs text-zinc-600 tabular-nums">
+                        {r.sku}
+                      </span>
+                      <span className="block text-zinc-900">{r.name}</span>
+                    </span>
+                  </button>
+                );
+              })
             : null}
         </div>
       ) : null}

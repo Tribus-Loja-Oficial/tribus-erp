@@ -208,6 +208,20 @@ const UNITS: { value: string; label: string }[] = [
   { value: "package", label: "Pacote" },
 ];
 
+/** Unidades de consumo na composição (uso por peça). */
+const COMPOSITION_USAGE_UNITS: { value: string; label: string }[] = [
+  ...UNITS,
+  { value: "cm", label: "Centímetro (cm)" },
+  { value: "mm", label: "Milímetro (mm)" },
+  { value: "m", label: "Metro (m)" },
+  { value: "g", label: "Grama (g)" },
+  { value: "mg", label: "Miligrama (mg)" },
+  { value: "ml", label: "Mililitro (ml)" },
+  { value: "unidade", label: "Unidade (unidade)" },
+  { value: "folha", label: "Folha" },
+  { value: "uso proporcional", label: "Uso proporcional" },
+];
+
 /** Rótulo em português para exibição (códigos do cadastro, compras e composição). */
 const UNIT_LABEL_PT: Record<string, string> = {
   ...Object.fromEntries(UNITS.map((u) => [u.value, u.label.toLowerCase()])),
@@ -318,6 +332,15 @@ const COMPOSITION_COST_ON_PRODUCT_HEADER_TOOLTIP =
 const COMPOSITION_LEGACY_COST_TOOLTIP =
   "Custo legado. Este valor veio do cadastro/importação. Registre compras para formar custo médio real.";
 
+const ADD_TO_LINE_BUTTON_HELP =
+  "Inclui o componente na receita partilhada da linha. Todos os produtos com a mesma linha (aba Geral) herdam este item na BOM e no custo.";
+
+const ADD_TO_LINE_BUTTON_HELP_DISABLED =
+  "Defina a linha na aba Geral para adicionar à receita partilhada. Depois, o componente passará a valer para todos os produtos dessa linha.";
+
+const COMPOSITION_USAGE_PER_PIECE_TOOLTIP =
+  "Quantidade deste componente consumida para fabricar uma unidade do produto — o mesmo valor da coluna «Uso por peça» na tabela.";
+
 function formatCompositionQtyPt(quantity: number): string {
   if (!Number.isFinite(quantity)) return String(quantity);
   return new Intl.NumberFormat("pt-BR", {
@@ -394,6 +417,40 @@ function CompositionColumnHelp({ title }: { title: string }) {
       <Info className="h-3.5 w-3.5 shrink-0" aria-hidden />
       <span className="sr-only">{title}</span>
     </span>
+  );
+}
+
+function CompositionUsageUnitSelect({
+  value,
+  onChange,
+  className,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  className?: string;
+}) {
+  const options = useMemo(() => {
+    const trimmed = value.trim();
+    const known = new Set(COMPOSITION_USAGE_UNITS.map((u) => u.value));
+    if (trimmed && !known.has(trimmed)) {
+      return [{ value: trimmed, label: `${trimmed} (valor atual)` }, ...COMPOSITION_USAGE_UNITS];
+    }
+    return COMPOSITION_USAGE_UNITS;
+  }, [value]);
+
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={className ?? "w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"}
+    >
+      <option value="">— Selecione —</option>
+      {options.map((u) => (
+        <option key={u.value} value={u.value}>
+          {u.label}
+        </option>
+      ))}
+    </select>
   );
 }
 
@@ -986,7 +1043,7 @@ export function ProductOperationalForm({
   const [compChildId, setCompChildId] = useState("");
   const [compType, setCompType] = useState("bom");
   const [compQty, setCompQty] = useState("1");
-  const [compQtyUnit, setCompQtyUnit] = useState("");
+  const [compQtyUnit, setCompQtyUnit] = useState("unit");
   const [compPackagingChannel, setCompPackagingChannel] = useState<"online" | "presential">(
     "online",
   );
@@ -1289,7 +1346,7 @@ export function ProductOperationalForm({
       }
       setCompChildId("");
       setCompQty("1");
-      setCompQtyUnit("");
+      setCompQtyUnit("unit");
       setCompNotes("");
       router.refresh();
     } catch (e) {
@@ -1324,7 +1381,7 @@ export function ProductOperationalForm({
     setEditCompChildId(row.childProductId);
     setEditCompType(row.compositionType);
     setEditCompQty(String(row.quantity));
-    setEditCompQtyUnit(row.quantityUnit ?? "");
+    setEditCompQtyUnit(row.quantityUnit ?? "unit");
     setEditCompPackagingChannel(row.packagingChannel === "presential" ? "presential" : "online");
     setEditCompRequired(row.required);
     setEditCompDefault(row.isDefault);
@@ -2184,8 +2241,11 @@ export function ProductOperationalForm({
                                             </select>
                                           </div>
                                           <div>
-                                            <label className="mb-1 block text-xs text-zinc-600">
-                                              Quantidade
+                                            <label className="mb-1 flex items-center gap-1 text-xs text-zinc-600">
+                                              Uso por peça
+                                              <CompositionColumnHelp
+                                                title={COMPOSITION_USAGE_PER_PIECE_TOOLTIP}
+                                              />
                                             </label>
                                             <input
                                               value={editCompQty}
@@ -2195,13 +2255,11 @@ export function ProductOperationalForm({
                                           </div>
                                           <div>
                                             <label className="mb-1 block text-xs text-zinc-600">
-                                              Unidade (uso)
+                                              Unidade de uso
                                             </label>
-                                            <input
+                                            <CompositionUsageUnitSelect
                                               value={editCompQtyUnit}
-                                              onChange={(e) => setEditCompQtyUnit(e.target.value)}
-                                              className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
-                                              placeholder="ex.: cm"
+                                              onChange={setEditCompQtyUnit}
                                             />
                                           </div>
                                           {editCompType === "packaging" ? (
@@ -2333,8 +2391,11 @@ export function ProductOperationalForm({
                                             </select>
                                           </div>
                                           <div>
-                                            <label className="mb-1 block text-xs text-zinc-600">
-                                              Quantidade
+                                            <label className="mb-1 flex items-center gap-1 text-xs text-zinc-600">
+                                              Uso por peça
+                                              <CompositionColumnHelp
+                                                title={COMPOSITION_USAGE_PER_PIECE_TOOLTIP}
+                                              />
                                             </label>
                                             <input
                                               value={editCompQty}
@@ -2344,13 +2405,11 @@ export function ProductOperationalForm({
                                           </div>
                                           <div>
                                             <label className="mb-1 block text-xs text-zinc-600">
-                                              Unidade (uso)
+                                              Unidade de uso
                                             </label>
-                                            <input
+                                            <CompositionUsageUnitSelect
                                               value={editCompQtyUnit}
-                                              onChange={(e) => setEditCompQtyUnit(e.target.value)}
-                                              className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
-                                              placeholder="ex.: cm"
+                                              onChange={setEditCompQtyUnit}
                                             />
                                           </div>
                                         </div>
@@ -2485,13 +2544,25 @@ export function ProductOperationalForm({
                                             </select>
                                           </div>
                                           <div>
-                                            <label className="mb-1 block text-xs text-zinc-600">
-                                              Quantidade
+                                            <label className="mb-1 flex items-center gap-1 text-xs text-zinc-600">
+                                              Uso por peça
+                                              <CompositionColumnHelp
+                                                title={COMPOSITION_USAGE_PER_PIECE_TOOLTIP}
+                                              />
                                             </label>
                                             <input
                                               value={editCompQty}
                                               onChange={(e) => setEditCompQty(e.target.value)}
                                               className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
+                                            />
+                                          </div>
+                                          <div>
+                                            <label className="mb-1 block text-xs text-zinc-600">
+                                              Unidade de uso
+                                            </label>
+                                            <CompositionUsageUnitSelect
+                                              value={editCompQtyUnit}
+                                              onChange={setEditCompQtyUnit}
                                             />
                                           </div>
                                         </div>
@@ -2575,13 +2646,25 @@ export function ProductOperationalForm({
                                             </select>
                                           </div>
                                           <div>
-                                            <label className="mb-1 block text-xs text-zinc-600">
-                                              Quantidade
+                                            <label className="mb-1 flex items-center gap-1 text-xs text-zinc-600">
+                                              Uso por peça
+                                              <CompositionColumnHelp
+                                                title={COMPOSITION_USAGE_PER_PIECE_TOOLTIP}
+                                              />
                                             </label>
                                             <input
                                               value={editCompQty}
                                               onChange={(e) => setEditCompQty(e.target.value)}
                                               className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
+                                            />
+                                          </div>
+                                          <div>
+                                            <label className="mb-1 block text-xs text-zinc-600">
+                                              Unidade de uso
+                                            </label>
+                                            <CompositionUsageUnitSelect
+                                              value={editCompQtyUnit}
+                                              onChange={setEditCompQtyUnit}
                                             />
                                           </div>
                                         </div>
@@ -2758,7 +2841,10 @@ export function ProductOperationalForm({
                           </select>
                         </div>
                         <div>
-                          <label className="mb-1 block text-xs text-zinc-600">Quantidade</label>
+                          <label className="mb-1 flex items-center gap-1 text-xs text-zinc-600">
+                            Uso por peça
+                            <CompositionColumnHelp title={COMPOSITION_USAGE_PER_PIECE_TOOLTIP} />
+                          </label>
                           <input
                             value={compQty}
                             onChange={(e) => setCompQty(e.target.value)}
@@ -2766,14 +2852,10 @@ export function ProductOperationalForm({
                           />
                         </div>
                         <div>
-                          <label className="mb-1 block text-xs text-zinc-600">
-                            Unidade (uso na composição)
-                          </label>
-                          <input
+                          <label className="mb-1 block text-xs text-zinc-600">Unidade de uso</label>
+                          <CompositionUsageUnitSelect
                             value={compQtyUnit}
-                            onChange={(e) => setCompQtyUnit(e.target.value)}
-                            className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
-                            placeholder="ex.: cm, un"
+                            onChange={setCompQtyUnit}
                           />
                         </div>
                         {compType === "packaging" ? (
@@ -2831,20 +2913,25 @@ export function ProductOperationalForm({
                           <option value="line">Na linha (todos os produtos da linha)</option>
                         </select>
                       </div>
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          disabled={!lineId}
-                          title={
-                            lineId
-                              ? undefined
-                              : "Defina a linha na aba Geral para adicionar à receita da linha"
-                          }
-                          onClick={() => addComposition("line")}
-                          className="rounded-md border border-sky-300 bg-sky-50 px-4 py-2 text-sm font-medium text-sky-950 hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          Adicionar à linha
-                        </button>
+                      <div className="mt-4 flex flex-wrap items-center gap-2">
+                        <div className="inline-flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            disabled={!lineId}
+                            title={
+                              lineId ? ADD_TO_LINE_BUTTON_HELP : ADD_TO_LINE_BUTTON_HELP_DISABLED
+                            }
+                            onClick={() => addComposition("line")}
+                            className="rounded-md border border-sky-300 bg-sky-50 px-4 py-2 text-sm font-medium text-sky-950 hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Adicionar à linha
+                          </button>
+                          <CompositionColumnHelp
+                            title={
+                              lineId ? ADD_TO_LINE_BUTTON_HELP : ADD_TO_LINE_BUTTON_HELP_DISABLED
+                            }
+                          />
+                        </div>
                         <button
                           type="button"
                           onClick={() => addComposition("product")}
