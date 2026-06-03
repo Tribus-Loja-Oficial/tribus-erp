@@ -1055,7 +1055,6 @@ export function ProductOperationalForm({
   const [compDefault, setCompDefault] = useState(true);
   const [compNotes, setCompNotes] = useState("");
 
-  const [compAddTarget, setCompAddTarget] = useState<"line" | "product">("product");
   const [editCompId, setEditCompId] = useState<string | null>(null);
   const [editCompScope, setEditCompScope] = useState<"line" | "product">("product");
   const [editCompChildId, setEditCompChildId] = useState("");
@@ -1320,7 +1319,7 @@ export function ProductOperationalForm({
     }
   }
 
-  async function addComposition(target: "line" | "product" = compAddTarget) {
+  async function addComposition(target: "line" | "product") {
     if (!productId) return;
     if (target === "line" && !lineId) {
       setError("Escolha uma linha na aba Geral antes de adicionar à receita da linha.");
@@ -2887,17 +2886,6 @@ export function ProductOperationalForm({
                           onChange={(e) => setCompNotes(e.target.value)}
                           className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
                         />
-                      </div>
-                      <div className="mt-3 flex flex-wrap items-center gap-2">
-                        <label className="text-xs text-zinc-600">Destino:</label>
-                        <Select
-                          compact
-                          value={compAddTarget}
-                          onChange={(e) => setCompAddTarget(e.target.value as "line" | "product")}
-                        >
-                          <option value="product">Só neste produto</option>
-                          <option value="line">Na linha (todos os produtos da linha)</option>
-                        </Select>
                       </div>
                       <div className="mt-4 flex flex-wrap items-center gap-2">
                         <div className="inline-flex items-center gap-1.5">
