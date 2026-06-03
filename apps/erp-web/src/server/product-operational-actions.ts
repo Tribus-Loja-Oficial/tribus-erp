@@ -19,7 +19,7 @@ export interface ProductOperationalEditPayload {
   costBreakdown: ProductCostBreakdown | null;
   variants: VariantApiRow[];
   categories: { id: string; name: string }[];
-  collections: { id: string; name: string }[];
+  lines: { id: string; name: string }[];
   locations: { id: string; name: string }[];
   auditLogs: ProductAuditLogRow[];
   costSnapshots: ProductCostSnapshotRow[];
@@ -45,7 +45,7 @@ export async function getProductOperationalEditPayloadAction(
       };
     }>({ path: `/products/${productId}/detail` }),
     erpApiFetch<{ data: { id: string; name: string }[] }>({ path: "/products/categories" }),
-    erpApiFetch<{ data: { id: string; name: string }[] }>({ path: "/products/collections" }),
+    erpApiFetch<{ data: { id: string; name: string }[] }>({ path: "/products/lines" }),
     erpApiFetch<{ data: { id: string; name: string }[] }>({ path: "/inventory/locations" }),
   ]);
 
@@ -79,7 +79,7 @@ export async function getProductOperationalEditPayloadAction(
     costBreakdown: detail.costBreakdown ?? null,
     variants: detail.variants ?? [],
     categories: cRes.data ?? [],
-    collections: colRes.data ?? [],
+    lines: colRes.data ?? [],
     locations: locRes.data ?? [],
     auditLogs,
     costSnapshots,
@@ -170,6 +170,32 @@ export async function updateProductCompositionAction(
     body,
   });
   revalidatePath(`/products/${productId}`);
+}
+
+export async function addLineCompositionAction(lineId: string, body: Record<string, unknown>) {
+  await erpApiFetch({
+    method: "POST",
+    path: `/products/lines/${lineId}/compositions`,
+    body,
+  });
+}
+
+export async function updateLineCompositionAction(
+  compositionId: string,
+  body: Record<string, unknown>,
+) {
+  await erpApiFetch({
+    method: "PATCH",
+    path: `/products/lines/compositions/${compositionId}`,
+    body,
+  });
+}
+
+export async function removeLineCompositionAction(compositionId: string) {
+  await erpApiFetch({
+    method: "DELETE",
+    path: `/products/lines/compositions/${compositionId}`,
+  });
 }
 
 export async function recalculateProductCostSnapshotAction(productId: string) {

@@ -171,6 +171,19 @@ No **plano Free**, reduzir chunk (ex. `3` ou `1`) e/ou budget de imagens se apar
 
 ---
 
+## Breaking: linha + composição herdada (migrações `0015`, `0016`)
+
+Após deploy com estas migrations:
+
+- Tabela operacional renomeada: `product_collections` → `product_lines`; `products.collection_id` → `line_id`.
+- Nova tabela vazia `product_collections` (uso futuro).
+- Nova tabela `line_compositions`.
+- API/ingestão: sem aliases `collection*` — usar `line`, `lineId`, `lineRef`, `GET /products/lines`.
+- Ingestão: tipos `line`, `line_composition`, `line_composition_set` (substituem `collection` no contrato).
+- Regenerar `apps/erp-web/public/ingestion-payload.schema.json` após pull: `cd apps/erp-api && npm run generate:ingestion-schema`.
+
+---
+
 ## Migrations
 
 Migrations gerenciadas pelo Drizzle Kit em `apps/erp-api/src/db/migrations/`.

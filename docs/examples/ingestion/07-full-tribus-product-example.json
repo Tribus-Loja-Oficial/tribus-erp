@@ -8,7 +8,7 @@
       "data": { "name": "Acessórios", "slug": "acessorios" }
     },
     {
-      "type": "collection",
+      "type": "line",
       "client_ref": "col-verao",
       "data": {
         "name": "Verão 2026",
@@ -35,7 +35,7 @@
         "costPriceCents": 4500,
         "compareAtPriceCents": 14990,
         "categoryRef": "cat-acessorios",
-        "collectionRef": "col-verao",
+        "lineRef": "col-verao",
         "unitOfMeasure": "unit",
         "availableForEcommerce": true,
         "availableForPos": true,

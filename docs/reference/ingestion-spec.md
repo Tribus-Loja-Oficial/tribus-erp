@@ -46,11 +46,13 @@ Contrato espelhado no **tribus-hub**: envelope `version` / `mode` / `objects`, `
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `stock_location`          | Local de armazém (`POST /inventory/locations`).                                                                                                                |
 | `category`                | Categoria de produto.                                                                                                                                          |
-| `collection`              | Coleção.                                                                                                                                                       |
+| `line`                    | Linha de produto (ex-coleção operacional).                                                                                                                     |
+| `line_composition`        | Componente na receita da linha.                                                                                                                                |
+| `line_composition_set`    | Substituição em lote da receita da linha (`action: replace`).                                                                                                  |
 | `party`                   | Party base (sem perfil cliente/fornecedor).                                                                                                                    |
 | `customer`                | Party + cliente.                                                                                                                                               |
 | `supplier`                | Party + fornecedor.                                                                                                                                            |
-| `product`                 | Produto; `productKind`; `categoryRef` / `collectionRef`; URLs de imagem.                                                                                       |
+| `product`                 | Produto; `productKind`; `categoryRef` / `lineRef`; URLs de imagem. Composição de produto faz override da linha na mesma chave natural.                         |
 | `product_variant`         | Variante; `productRef` → `product` variable; `client_ref` recomendado para `variantRef`.                                                                       |
 | `product_composition`     | Linha da **receita técnica** (BOM ou embalagem): `parentProductRef`; componente (`childProductRef` ou `childSku`); `quantity` + `quantityUnit` (uso por peça). |
 | `product_composition_set` | Substituição em lote da receita: `action` `"replace"`; um identificador do produto pai; `replaceTypes`; `items` (linhas de componente).                        |
@@ -66,7 +68,7 @@ Os objectos são ordenados antes de executar (independentemente da ordem no JSON
 
 1. `stock_location`
 2. `category`
-3. `collection`
+3. `line`
 4. `party`
 5. `customer`
 6. `supplier`

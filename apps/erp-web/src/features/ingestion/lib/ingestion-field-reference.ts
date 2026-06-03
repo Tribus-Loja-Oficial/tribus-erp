@@ -15,7 +15,9 @@ export type IngestionFieldRow = {
 export type IngestionObjectTypeId =
   | "stock_location"
   | "category"
-  | "collection"
+  | "line"
+  | "line_composition"
+  | "line_composition_set"
   | "party"
   | "customer"
   | "supplier"
@@ -50,7 +52,7 @@ const envCommon: IngestionTypeReference["envelope"] = [
     hint:
       '"skip" (default): insere se não existe, ignora se existe. ' +
       '"upsert": atualiza campos enviados se existe (merge-patch), cria se não existe. ' +
-      "Suporte a upsert: category (chave: slug), collection (chave: slug), product (chave: slug ou sku). " +
+      "Suporte a upsert: category (chave: slug), line (chave: slug), product (chave: slug ou sku). " +
       "Outros tipos: campo aceite mas ignorado.",
   },
   { key: "client_ref", requirement: "optional", hint: "único no payload; use *Ref nos filhos" },
@@ -60,7 +62,9 @@ const envCommon: IngestionTypeReference["envelope"] = [
 export const INGESTION_TYPE_LABELS_UI: Record<IngestionObjectTypeId, string> = {
   stock_location: "Local de stock",
   category: "Categoria",
-  collection: "Coleção",
+  line: "Linha",
+  line_composition: "Composição da linha",
+  line_composition_set: "Substituição da composição da linha",
   party: "Entidade (party)",
   customer: "Cliente",
   supplier: "Fornecedor",
@@ -109,8 +113,8 @@ export const INGESTION_TYPE_REFERENCES: IngestionTypeReference[] = [
     ],
   },
   {
-    type: "collection",
-    summary: "Coleção de produtos.",
+    type: "line",
+    summary: "Linha de produtos (receita partilhada).",
     envelope: envCommon,
     dataFields: [
       { key: "name", requirement: "required", valueType: "string" },
@@ -184,7 +188,7 @@ export const INGESTION_TYPE_REFERENCES: IngestionTypeReference[] = [
   {
     type: "product",
     summary:
-      "Produto; categoryRef/collectionRef ligam a client_ref no mesmo payload. Variações exigem productKind variable neste product.",
+      "Produto; categoryRef/lineRef ligam a client_ref no mesmo payload. Composição de produto faz override da linha na mesma chave (tipo+filho+canal). Variações exigem productKind variable neste product.",
     envelope: envCommon,
     dataFields: [
       { key: "sku", requirement: "required", valueType: "string" },
@@ -211,7 +215,7 @@ export const INGESTION_TYPE_REFERENCES: IngestionTypeReference[] = [
       },
       { key: "salePriceCents", requirement: "required", valueType: "number (int)" },
       { key: "categoryRef", requirement: "optional", valueType: "string" },
-      { key: "collectionRef", requirement: "optional", valueType: "string" },
+      { key: "lineRef", requirement: "optional", valueType: "string" },
       { key: "main_image_url", requirement: "optional", valueType: "https URL" },
       { key: "gallery_image_urls", requirement: "optional", valueType: "string[]" },
     ],

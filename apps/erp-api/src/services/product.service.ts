@@ -6,6 +6,8 @@ import { createProductRepository } from "../repositories/product.repository.js";
 import { createDocumentRepository } from "../repositories/document.repository.js";
 import type { StorageProvider } from "../storage/storage-provider.js";
 import { createProductCompositionRepository } from "../repositories/product-composition.repository.js";
+import { createLineCompositionRepository } from "../repositories/line-composition.repository.js";
+import { mergeEffectiveComposition } from "../domain/composition-merge.js";
 import { createProductProductionProfileRepository } from "../repositories/product-production-profile.repository.js";
 import { createAuditRepository } from "../repositories/audit.repository.js";
 import {
@@ -23,7 +25,7 @@ import type {
   CreateVariantInput,
   UpdateProductVariantInput,
   CreateCategoryInput,
-  CreateCollectionInput,
+  CreateLineInput,
   PermanentDeleteProductInput,
 } from "../schemas/product.schemas.js";
 import { createProductVariantRepository } from "../repositories/product-variant.repository.js";
@@ -52,6 +54,7 @@ export function createProductService(db: AppDb) {
   const variantsRepo = createProductVariantRepository(db);
   const variantSvc = createProductVariantService(db);
   const compositionsRepo = createProductCompositionRepository(db);
+  const lineCompositionsRepo = createLineCompositionRepository(db);
   const profileRepo = createProductProductionProfileRepository(db);
   const costService = createProductCostService(db);
   const auditRepo = createAuditRepository(db);
@@ -90,7 +93,7 @@ export function createProductService(db: AppDb) {
         internalDescription: input.internalDescription ?? null,
         productType: input.productType,
         categoryId: input.categoryId ?? null,
-        collectionId: input.collectionId ?? null,
+        lineId: input.lineId ?? null,
         niche: input.niche ?? null,
         brand: input.brand ?? null,
         status: input.status,
@@ -217,16 +220,27 @@ export function createProductService(db: AppDb) {
 
     async getOperationalDetail(id: string) {
       const product = await this.findById(id);
-      const compositions = await compositionsRepo.findActiveByParentId(id);
-      const childIds = [...new Set(compositions.map((c) => c.childProductId))];
-      const children = await productsRepo.findByIds(childIds);
+      const productCompositionRows = await compositionsRepo.findActiveByParentId(id);
+      const lineCompositionRows = product.lineId
+        ? await lineCompositionsRepo.findActiveByParentLineId(product.lineId)
+        : [];
+      const effectiveRows = mergeEffectiveComposition(lineCompositionRows, productCompositionRows);
+
+      const allChildIds = [
+        ...new Set([
+          ...effectiveRows.map((c) => c.childProductId),
+          ...productCompositionRows.map((c) => c.childProductId),
+          ...lineCompositionRows.map((c) => c.childProductId),
+        ]),
+      ];
+      const children = await productsRepo.findByIds(allChildIds);
       const childMap = new Map(children.map((c) => [c.id, c]));
       const profile = await profileRepo.findByProductId(id);
       const costBreakdown = await costService.getBreakdownForParentProduct(id);
 
-      const latestReceiptByChild = await purchaseRepo.findLatestReceiptIdPerProductIds(childIds);
+      const latestReceiptByChild = await purchaseRepo.findLatestReceiptIdPerProductIds(allChildIds);
 
-      const compositionsWithChild = compositions.map((c) => {
+      const mapCompositionWithChild = (c: (typeof effectiveRows)[number]) => {
         const ch = childMap.get(c.childProductId);
         const { unitCostCents, totalCostCents } = ch
           ? lineCostCentsFromComposition(c.quantity, ch)
@@ -234,6 +248,8 @@ export function createProductService(db: AppDb) {
         const basis = ch ? childCostUnitBasisForProduct(ch) : "legacy_cost_price";
         return {
           ...c,
+          scope: c.scope,
+          sourceCompositionId: c.sourceCompositionId,
           childSku: ch?.sku ?? null,
           childName: ch?.name ?? null,
           childProductType: ch?.productType ?? null,
@@ -248,7 +264,25 @@ export function createProductService(db: AppDb) {
           childAverageCostUnit: ch?.averageCostUnit ?? null,
           childLatestReceiptId: latestReceiptByChild.get(c.childProductId) ?? null,
         };
-      });
+      };
+
+      const compositionsWithChild = effectiveRows.map(mapCompositionWithChild);
+
+      const productCompositionsWithChild = productCompositionRows.map((c) =>
+        mapCompositionWithChild({
+          ...c,
+          scope: "product" as const,
+          sourceCompositionId: c.id,
+        }),
+      );
+
+      const lineCompositionsWithChild = lineCompositionRows.map((c) =>
+        mapCompositionWithChild({
+          ...c,
+          scope: "line" as const,
+          sourceCompositionId: c.id,
+        }),
+      );
 
       const movements = await inventoryRepo.findMovementsByProduct(id, 80);
       const locationIds = [...new Set(movements.map((m) => m.locationId))];
@@ -318,6 +352,9 @@ export function createProductService(db: AppDb) {
       return {
         product: mergedProduct,
         compositions: compositionsWithChild,
+        effectiveCompositions: compositionsWithChild,
+        productCompositions: productCompositionsWithChild,
+        lineCompositions: lineCompositionsWithChild,
         children,
         costBreakdown,
         variants,
@@ -615,8 +652,8 @@ export function createProductService(db: AppDb) {
       });
     },
 
-    async createCollection(input: CreateCollectionInput) {
-      return productsRepo.insertCollection({
+    async createLine(input: CreateLineInput) {
+      return productsRepo.insertLine({
         id: generateId(),
         ...input,
         description: input.description ?? null,
@@ -633,8 +670,8 @@ export function createProductService(db: AppDb) {
       return productsRepo.findCategories();
     },
 
-    async findCollections() {
-      return productsRepo.findCollections();
+    async findLines() {
+      return productsRepo.findLines();
     },
   };
 }

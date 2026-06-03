@@ -6,7 +6,7 @@ interface CategoryRow {
   name: string;
 }
 
-interface CollectionRow {
+interface LineRow {
   id: string;
   name: string;
 }
@@ -18,17 +18,17 @@ interface LocationRow {
 
 export default async function NewProductPage() {
   let categories: CategoryRow[] = [];
-  let collections: CollectionRow[] = [];
+  let lines: LineRow[] = [];
   let locations: LocationRow[] = [];
 
   try {
     const [cRes, colRes, locRes] = await Promise.all([
       erpApiFetch<{ data: CategoryRow[] }>({ path: "/products/categories" }),
-      erpApiFetch<{ data: CollectionRow[] }>({ path: "/products/collections" }),
+      erpApiFetch<{ data: LineRow[] }>({ path: "/products/lines" }),
       erpApiFetch<{ data: LocationRow[] }>({ path: "/inventory/locations" }),
     ]);
     categories = cRes.data ?? [];
-    collections = colRes.data ?? [];
+    lines = colRes.data ?? [];
     locations = locRes.data ?? [];
   } catch {
     /* formulário ainda funciona com listas vazias */
@@ -57,7 +57,7 @@ export default async function NewProductPage() {
           productKind: "simple",
         }}
         categories={categories.map((c) => ({ id: c.id, name: c.name }))}
-        collections={collections.map((c) => ({ id: c.id, name: c.name }))}
+        lines={lines.map((c) => ({ id: c.id, name: c.name }))}
         locations={locations.map((l) => ({ id: l.id, name: l.name }))}
       />
     </div>

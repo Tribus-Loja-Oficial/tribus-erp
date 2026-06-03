@@ -137,7 +137,7 @@ export function ProductListMainImage({
           THUMB_CLASS,
           "relative shrink-0 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-100",
         )}
-        title={`Imagem principal: ${name}`}
+        aria-label={`Pré-visualizar imagem de ${name}`}
         onMouseEnter={schedulePopup}
         onMouseLeave={scheduleClose}
         onFocus={schedulePopup}
@@ -184,7 +184,8 @@ export function ProductListMainImage({
                 left: popupPos.left,
                 width: POPUP_SIZE_PX,
               }}
-              role="tooltip"
+              role="dialog"
+              aria-label={name}
               onMouseEnter={cancelClose}
               onMouseLeave={scheduleClose}
             >

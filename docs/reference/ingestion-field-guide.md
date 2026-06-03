@@ -22,11 +22,11 @@ Campo opcional no envelope de cada objecto (ao lado de `type` e `client_ref`). C
 
 **Chave natural por tipo (identifica o registo a actualizar):**
 
-| Tipo         | Chave natural obrigatória em `data` |
-| ------------ | ----------------------------------- |
-| `category`   | `slug`                              |
-| `collection` | `slug`                              |
-| `product`    | `slug` **ou** `sku` (pelo menos um) |
+| Tipo       | Chave natural obrigatória em `data` |
+| ---------- | ----------------------------------- |
+| `category` | `slug`                              |
+| `line`     | `slug`                              |
+| `product`  | `slug` **ou** `sku` (pelo menos um) |
 
 **Tipos sem suporte a upsert** (`stock_location`, `party`, `customer`, `supplier`, `product_variant`, `product_composition`, `inventory_movement`, `order`, `purchase_order`): o campo `action` é aceite pela validação mas ignorado em execução (comporta-se como `skip`).
 

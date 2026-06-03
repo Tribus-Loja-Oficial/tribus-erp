@@ -105,13 +105,27 @@ export const productCategories = sqliteTable("product_categories", {
   archivedAt: text("archived_at"),
 });
 
-export const productCollections = sqliteTable("product_collections", {
+/** Linha de produto (ex-coleção operacional); BOM partilhado por produtos da mesma linha. */
+export const productLines = sqliteTable("product_lines", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
   description: text("description"),
   niche: text("niche"),
   season: text("season"),
+  status: text("status", { enum: ["draft", "active", "archived"] })
+    .notNull()
+    .default("active"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+  archivedAt: text("archived_at"),
+});
+
+/** Reservada para “coleção” comercial futura (sem FK em products no MVP). */
+export const productCollections = sqliteTable("product_collections", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
   status: text("status", { enum: ["draft", "active", "archived"] })
     .notNull()
     .default("active"),
@@ -151,7 +165,7 @@ export const products = sqliteTable(
       .notNull()
       .default("simple"),
     categoryId: text("category_id").references(() => productCategories.id),
-    collectionId: text("collection_id").references(() => productCollections.id),
+    lineId: text("line_id").references(() => productLines.id),
     niche: text("niche"),
     brand: text("brand"),
     status: text("status", { enum: ["draft", "active", "inactive", "archived"] })
@@ -297,6 +311,39 @@ export const productCompositions = sqliteTable(
   (t) => [
     index("product_compositions_parent_idx").on(t.parentProductId),
     index("product_compositions_child_idx").on(t.childProductId),
+  ],
+);
+
+export const lineCompositions = sqliteTable(
+  "line_compositions",
+  {
+    id: text("id").primaryKey(),
+    parentLineId: text("parent_line_id")
+      .notNull()
+      .references(() => productLines.id),
+    childProductId: text("child_product_id")
+      .notNull()
+      .references(() => products.id),
+    quantity: real("quantity").notNull(),
+    quantityUnit: text("quantity_unit"),
+    compositionType: text("composition_type", {
+      enum: ["packaging", "bom", "kit", "bundle", "accessory", "included"],
+    }).notNull(),
+    packagingChannel: text("packaging_channel", {
+      enum: ["online", "presential"],
+    }),
+    unitCostSnapshotCents: real("unit_cost_snapshot_cents"),
+    totalCostSnapshotCents: real("total_cost_snapshot_cents"),
+    required: integer("required", { mode: "boolean" }).notNull().default(true),
+    isDefault: integer("is_default", { mode: "boolean" }).notNull().default(true),
+    notes: text("notes"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    archivedAt: text("archived_at"),
+  },
+  (t) => [
+    index("line_compositions_parent_idx").on(t.parentLineId),
+    index("line_compositions_child_idx").on(t.childProductId),
   ],
 );
 
@@ -1078,9 +1125,9 @@ export const productsRelations = relations(products, ({ one, many }) => ({
     fields: [products.categoryId],
     references: [productCategories.id],
   }),
-  collection: one(productCollections, {
-    fields: [products.collectionId],
-    references: [productCollections.id],
+  line: one(productLines, {
+    fields: [products.lineId],
+    references: [productLines.id],
   }),
   variants: many(productVariants),
   stockMovements: many(stockMovements),
@@ -1132,8 +1179,12 @@ export type PartyAddress = typeof partyAddresses.$inferSelect;
 export type NewPartyAddress = typeof partyAddresses.$inferInsert;
 export type ProductCategory = typeof productCategories.$inferSelect;
 export type NewProductCategory = typeof productCategories.$inferInsert;
+export type ProductLine = typeof productLines.$inferSelect;
+export type NewProductLine = typeof productLines.$inferInsert;
 export type ProductCollectionRow = typeof productCollections.$inferSelect;
 export type NewProductCollection = typeof productCollections.$inferInsert;
+export type LineComposition = typeof lineCompositions.$inferSelect;
+export type NewLineComposition = typeof lineCompositions.$inferInsert;
 export type CashSession = typeof cashSessions.$inferSelect;
 export type NewCashSession = typeof cashSessions.$inferInsert;
 export type CashMovement = typeof cashMovements.$inferSelect;

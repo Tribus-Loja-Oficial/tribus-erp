@@ -34,11 +34,11 @@ import type { AppDb } from "../db/client.js";
 import {
   products,
   productCategories,
-  productCollections,
+  productLines,
   type Product,
   type NewProduct,
   type NewProductCategory,
-  type NewProductCollection,
+  type NewProductLine,
 } from "../db/schema/index.js";
 import type {
   ProductListChannelFilter,
@@ -432,42 +432,51 @@ export function createProductRepository(db: AppDb) {
       return { row: existing[0], skipped: true };
     },
 
-    async findCollections() {
+    async findLines() {
       return db
         .select()
-        .from(productCollections)
-        .where(isNull(productCollections.archivedAt))
-        .orderBy(productCollections.name);
+        .from(productLines)
+        .where(isNull(productLines.archivedAt))
+        .orderBy(productLines.name);
     },
 
-    async findCollectionBySlug(slug: string) {
+    async findLineById(id: string) {
+      const result = await db.select().from(productLines).where(eq(productLines.id, id)).limit(1);
+      return result[0] ?? null;
+    },
+
+    async findLineBySlug(slug: string) {
       const result = await db
         .select()
-        .from(productCollections)
-        .where(eq(productCollections.slug, slug))
+        .from(productLines)
+        .where(eq(productLines.slug, slug))
         .limit(1);
       return result[0] ?? null;
     },
 
-    async insertCollection(data: NewProductCollection) {
-      const result = await db.insert(productCollections).values(data).returning();
-      if (!result[0]) throw new Error("Failed to insert collection");
+    async findProductIdsByLineId(lineId: string): Promise<string[]> {
+      const rows = await db
+        .select({ id: products.id })
+        .from(products)
+        .where(and(eq(products.lineId, lineId), isNull(products.deletedAt)));
+      return rows.map((r) => r.id);
+    },
+
+    async insertLine(data: NewProductLine) {
+      const result = await db.insert(productLines).values(data).returning();
+      if (!result[0]) throw new Error("Failed to insert line");
       return result[0];
     },
 
-    async insertCollectionIdempotent(data: NewProductCollection) {
-      const inserted = await db
-        .insert(productCollections)
-        .values(data)
-        .onConflictDoNothing()
-        .returning();
+    async insertLineIdempotent(data: NewProductLine) {
+      const inserted = await db.insert(productLines).values(data).onConflictDoNothing().returning();
       if (inserted[0]) return { row: inserted[0], skipped: false };
       const existing = await db
         .select()
-        .from(productCollections)
-        .where(eq(productCollections.slug, data.slug))
+        .from(productLines)
+        .where(eq(productLines.slug, data.slug))
         .limit(1);
-      if (!existing[0]) throw new Error(`Falha ao inserir ou localizar coleção: ${data.slug}`);
+      if (!existing[0]) throw new Error(`Falha ao inserir ou localizar linha: ${data.slug}`);
       return { row: existing[0], skipped: true };
     },
 
@@ -496,14 +505,14 @@ export function createProductRepository(db: AppDb) {
       return result[0];
     },
 
-    async upsertCollectionBySlug(
+    async upsertLineBySlug(
       slug: string,
-      patch: Partial<Omit<NewProductCollection, "id" | "slug" | "createdAt" | "archivedAt">>,
+      patch: Partial<Omit<NewProductLine, "id" | "slug" | "createdAt" | "archivedAt">>,
     ) {
       const existing = await db
         .select()
-        .from(productCollections)
-        .where(eq(productCollections.slug, slug))
+        .from(productLines)
+        .where(eq(productLines.slug, slug))
         .limit(1);
       if (!existing[0]) return null;
       const set: Record<string, unknown> = { updatedAt: new Date().toISOString() };
@@ -513,11 +522,11 @@ export function createProductRepository(db: AppDb) {
       if (patch.season !== undefined) set.season = patch.season;
       if (patch.status !== undefined) set.status = patch.status;
       const result = await db
-        .update(productCollections)
-        .set(set as Partial<NewProductCollection>)
-        .where(eq(productCollections.slug, slug))
+        .update(productLines)
+        .set(set as Partial<NewProductLine>)
+        .where(eq(productLines.slug, slug))
         .returning();
-      if (!result[0]) throw new Error(`Falha ao actualizar coleção: ${slug}`);
+      if (!result[0]) throw new Error(`Falha ao actualizar linha: ${slug}`);
       return result[0];
     },
 

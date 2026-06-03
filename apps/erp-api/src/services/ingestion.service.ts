@@ -7,6 +7,8 @@ import { createProductMediaService } from "./product-media.service.js";
 import { createPartyService } from "./party.service.js";
 import { createInventoryService } from "./inventory.service.js";
 import { createProductCompositionService } from "./product-composition.service.js";
+import { createLineCompositionService } from "./line-composition.service.js";
+import { createLineCompositionRepository } from "../repositories/line-composition.repository.js";
 import { createOrderService } from "./order.service.js";
 import { createPurchaseService } from "./purchase.service.js";
 import { createProductRepository } from "../repositories/product.repository.js";
@@ -141,17 +143,23 @@ function sortByDependency(objects: IngestionObject[]): IngestionObject[] {
  */
 function normalizeIngestionPayload(payload: IngestionPayload): IngestionPayload {
   const out: IngestionObject[] = [];
-  type CompositionObject = Extract<IngestionObject, { type: "product_composition" }>;
+  type CompositionObject = Extract<
+    IngestionObject,
+    { type: "product_composition" | "line_composition" }
+  >;
   const byCompKey = new Map<string, CompositionObject>();
 
   for (const obj of payload.objects) {
-    if (obj.type !== "product_composition") {
+    if (obj.type !== "product_composition" && obj.type !== "line_composition") {
       out.push(obj);
       continue;
     }
 
+    const parentKey =
+      obj.type === "product_composition" ? obj.data.parentProductRef : obj.data.parentLineRef;
     const key = [
-      obj.data.parentProductRef,
+      obj.type,
+      parentKey,
       obj.data.childProductRef ?? "",
       obj.data.childSku ?? "",
       obj.data.compositionType,
@@ -178,15 +186,12 @@ function normalizeIngestionPayload(payload: IngestionPayload): IngestionPayload 
 
 function stripProductIngestionUrls(
   data: ProductIngestionData,
-): Omit<
-  ProductIngestionData,
-  "main_image_url" | "gallery_image_urls" | "categoryRef" | "collectionRef"
-> {
+): Omit<ProductIngestionData, "main_image_url" | "gallery_image_urls" | "categoryRef" | "lineRef"> {
   const {
     main_image_url: _m,
     gallery_image_urls: _g,
     categoryRef: _cr,
-    collectionRef: _colr,
+    lineRef: _lr,
     ...rest
   } = data;
   return rest;
@@ -200,19 +205,17 @@ function toCreateProductInput(
   const categoryId = data.categoryRef
     ? (refMap[data.categoryRef] ?? stripped.categoryId)
     : stripped.categoryId;
-  const collectionId = data.collectionRef
-    ? (refMap[data.collectionRef] ?? stripped.collectionId)
-    : stripped.collectionId;
+  const lineId = data.lineRef ? (refMap[data.lineRef] ?? stripped.lineId) : stripped.lineId;
   if (data.categoryRef && !refMap[data.categoryRef] && !stripped.categoryId) {
     throw new Error(`categoryRef "${data.categoryRef}" ainda não resolvido.`);
   }
-  if (data.collectionRef && !refMap[data.collectionRef] && !stripped.collectionId) {
-    throw new Error(`collectionRef "${data.collectionRef}" ainda não resolvido.`);
+  if (data.lineRef && !refMap[data.lineRef] && !stripped.lineId) {
+    throw new Error(`lineRef "${data.lineRef}" ainda não resolvido.`);
   }
   return createProductSchema.parse({
     ...stripped,
     categoryId,
-    collectionId,
+    lineId,
   });
 }
 
@@ -322,14 +325,7 @@ export function validateIngestionPayload(payload: IngestionPayload): ValidationR
         break;
       case "product":
         expectRef(clientRefs, obj.data.categoryRef, "category", ctx, "data.categoryRef", errors);
-        expectRef(
-          clientRefs,
-          obj.data.collectionRef,
-          "collection",
-          ctx,
-          "data.collectionRef",
-          errors,
-        );
+        expectRef(clientRefs, obj.data.lineRef, "line", ctx, "data.lineRef", errors);
         break;
       case "product_variant":
         expectRef(clientRefs, obj.data.productRef, "product", ctx, "data.productRef", errors);
@@ -387,6 +383,48 @@ export function validateIngestionPayload(payload: IngestionPayload): ValidationR
             });
           }
           seenKeys.add(k);
+        });
+        break;
+      }
+      case "line_composition":
+        expectRef(clientRefs, obj.data.parentLineRef, "line", ctx, "data.parentLineRef", errors);
+        if (obj.data.childProductRef) {
+          expectRef(
+            clientRefs,
+            obj.data.childProductRef,
+            "product",
+            ctx,
+            "data.childProductRef",
+            errors,
+          );
+        }
+        break;
+      case "line_composition_set": {
+        if (obj.data.parentLineRef?.trim()) {
+          expectRef(clientRefs, obj.data.parentLineRef, "line", ctx, "data.parentLineRef", errors);
+        }
+        const seenLineKeys = new Set<string>();
+        obj.data.items.forEach((it, j) => {
+          if (it.childProductRef?.trim()) {
+            expectRef(
+              clientRefs,
+              it.childProductRef,
+              "product",
+              ctx,
+              `data.items[${j}].childProductRef`,
+              errors,
+            );
+          }
+          const k = compositionSetItemRawDedupeKey(it);
+          if (seenLineKeys.has(k)) {
+            errors.push({
+              ...ctx,
+              field: `data.items[${j}]`,
+              message:
+                "Chave natural duplicada em items (mesmo compositionType, mesmo filho/canal que outra linha).",
+            });
+          }
+          seenLineKeys.add(k);
         });
         break;
       }
@@ -619,12 +657,14 @@ type IngestionCtx = {
   partyService: ReturnType<typeof createPartyService>;
   inventoryService: ReturnType<typeof createInventoryService>;
   compositionService: ReturnType<typeof createProductCompositionService>;
+  lineCompositionService: ReturnType<typeof createLineCompositionService>;
   orderService: ReturnType<typeof createOrderService>;
   purchaseService: ReturnType<typeof createPurchaseService>;
   productsRepo: ReturnType<typeof createProductRepository>;
   variantsRepo: ReturnType<typeof createProductVariantRepository>;
   productCostSnapshotRepo: ReturnType<typeof createProductCostSnapshotRepository>;
   compositionsRepo: ReturnType<typeof createProductCompositionRepository>;
+  lineCompositionsRepo: ReturnType<typeof createLineCompositionRepository>;
   media: ReturnType<typeof createProductMediaService> | null;
 };
 
@@ -785,6 +825,64 @@ async function resolveParentProductIdWithBatch(
   );
 }
 
+type LineParentResolveKeys = {
+  parentLineId?: string | undefined;
+  parentLineRef?: string | undefined;
+  parentLineSlug?: string | undefined;
+};
+
+async function resolveParentLineIdDryRun(
+  ctx: IngestionCtx,
+  refMap: Record<string, string>,
+  data: LineParentResolveKeys,
+): Promise<{ id: string; slug?: string } | { error: string }> {
+  const idDirect = data.parentLineId?.trim();
+  if (idDirect) {
+    const row = await ctx.productsRepo.findLineById(idDirect);
+    if (!row) return { error: `parentLineId "${idDirect}" não encontrado.` };
+    return { id: row.id, slug: row.slug };
+  }
+  const ref = data.parentLineRef?.trim();
+  if (ref) {
+    const id = refMap[ref];
+    if (!id) return { error: `parentLineRef "${ref}" não resolvido no simulador.` };
+    return { id };
+  }
+  const slug = data.parentLineSlug?.trim();
+  if (slug) {
+    const row = await ctx.productsRepo.findLineBySlug(slug);
+    if (row) return { id: row.id, slug: row.slug };
+    return { error: `parentLineSlug "${slug}" não encontrado.` };
+  }
+  return { error: "Indique parentLineId, parentLineRef ou parentLineSlug." };
+}
+
+async function resolveParentLineIdWithBatch(
+  ctx: IngestionCtx,
+  refMap: Record<string, string>,
+  data: LineParentResolveKeys,
+): Promise<string> {
+  const idDirect = data.parentLineId?.trim();
+  if (idDirect) {
+    const row = await ctx.productsRepo.findLineById(idDirect);
+    if (!row) throw new Error(`parentLineId "${idDirect}" não encontrado.`);
+    return row.id;
+  }
+  const ref = data.parentLineRef?.trim();
+  if (ref) {
+    const id = refMap[ref];
+    if (!id) throw new Error(`parentLineRef "${ref}" não resolvido.`);
+    return id;
+  }
+  const slug = data.parentLineSlug?.trim();
+  if (slug) {
+    const row = await ctx.productsRepo.findLineBySlug(slug);
+    if (row) return row.id;
+    throw new Error(`parentLineSlug "${slug}" não encontrado.`);
+  }
+  throw new Error("Indique parentLineId, parentLineRef ou parentLineSlug.");
+}
+
 async function resolveChildProductIdDryRun(
   ctx: IngestionCtx,
   refMap: Record<string, string>,
@@ -872,15 +970,15 @@ async function predictDryRunObject(
       if (existing) return { status: "skipped", id: existing.id };
       return { status: "created", id: dryRunSyntheticId(obj.client_ref, undefined, objectIndex) };
     }
-    case "collection": {
+    case "line": {
       const slug = obj.data.slug;
-      const existing = await ctx.productsRepo.findCollectionBySlug(slug);
+      const existing = await ctx.productsRepo.findLineBySlug(slug);
       if (obj.action === "upsert") {
         if (existing) return { status: "updated", id: existing.id };
         if (!obj.data.name) {
           return {
             status: "failed",
-            detail: `Coleção "${slug}" não existe e falta "name" para criar.`,
+            detail: `Linha "${slug}" não existe e falta "name" para criar.`,
           };
         }
         return {
@@ -1014,6 +1112,58 @@ async function predictDryRunObject(
       return {
         status: "created",
         id: dryRunSyntheticId(obj.client_ref, undefined, objectIndex),
+      };
+    }
+    case "line_composition": {
+      const parentLineId = refMap[obj.data.parentLineRef];
+      if (!parentLineId) {
+        return {
+          status: "failed",
+          detail: `parentLineRef "${obj.data.parentLineRef}" não resolvido.`,
+        };
+      }
+      const child = await resolveChildProductIdDryRun(ctx, refMap, skuToId, {
+        childProductRef: obj.data.childProductRef,
+        childSku: obj.data.childSku,
+      });
+      if ("error" in child) return { status: "failed", detail: child.error };
+      void parentLineId;
+      return {
+        status: "created",
+        id: dryRunSyntheticId(obj.client_ref, undefined, objectIndex),
+      };
+    }
+    case "line_composition_set": {
+      const parentRes = await resolveParentLineIdDryRun(ctx, refMap, obj.data);
+      if ("error" in parentRes) {
+        return { status: "failed", detail: parentRes.error };
+      }
+      const itemErrors: CompositionSetItemError[] = [];
+      for (let j = 0; j < obj.data.items.length; j++) {
+        const it = obj.data.items[j]!;
+        const childSku = it.childSku ?? it.childProductSku;
+        const ch = await resolveChildProductIdDryRun(ctx, refMap, skuToId, {
+          childProductRef: it.childProductRef,
+          childProductId: it.childProductId,
+          childSku,
+        });
+        if ("error" in ch) itemErrors.push({ index: j, message: ch.error });
+      }
+      if (itemErrors.length > 0) {
+        return {
+          status: "failed",
+          detail: `Erro(s) em ${itemErrors.length} linha(s) de items.`,
+        };
+      }
+      const removed = await ctx.lineCompositionsRepo.countActiveInScope(
+        parentRes.id,
+        obj.data.replaceTypes,
+        obj.data.packagingChannel,
+      );
+      return {
+        status: "updated",
+        id: parentRes.id,
+        detail: `Removeria ${removed} linha(s); criaria ${obj.data.items.length} linha(s).`,
       };
     }
     case "product_composition_set": {
@@ -1286,11 +1436,11 @@ async function createIngestionObject(
       });
       return { id: row.id, outcome: skipped ? "skipped" : "created", warnings };
     }
-    case "collection": {
+    case "line": {
       const ts = new Date().toISOString();
 
       if (obj.action === "upsert") {
-        const updated = await ctx.productsRepo.upsertCollectionBySlug(obj.data.slug, {
+        const updated = await ctx.productsRepo.upsertLineBySlug(obj.data.slug, {
           name: obj.data.name,
           description: obj.data.description ?? null,
           niche: obj.data.niche ?? null,
@@ -1299,10 +1449,10 @@ async function createIngestionObject(
         });
         if (updated) return { id: updated.id, outcome: "updated", warnings };
         if (!obj.data.name)
-          throw new Error(`Coleção "${obj.data.slug}" não encontrada e name ausente para criar.`);
+          throw new Error(`Linha "${obj.data.slug}" não encontrada e name ausente para criar.`);
       }
 
-      const { row, skipped } = await ctx.productsRepo.insertCollectionIdempotent({
+      const { row, skipped } = await ctx.productsRepo.insertLineIdempotent({
         id: generateId(),
         name: obj.data.name!,
         slug: obj.data.slug,
@@ -1335,12 +1485,10 @@ async function createIngestionObject(
           throw new Error("Em upsert de produto forneça slug ou sku para identificar o registo.");
         const categoryId =
           (obj.data.categoryRef ? refMap[obj.data.categoryRef] : undefined) ?? obj.data.categoryId;
-        const collectionId =
-          (obj.data.collectionRef ? refMap[obj.data.collectionRef] : undefined) ??
-          obj.data.collectionId;
+        const lineId = (obj.data.lineRef ? refMap[obj.data.lineRef] : undefined) ?? obj.data.lineId;
         const {
           categoryRef: _cr,
-          collectionRef: _colr,
+          lineRef: _lr,
           main_image_url: _mi,
           gallery_image_urls: _gi,
           status: _st,
@@ -1351,7 +1499,7 @@ async function createIngestionObject(
         const patch: Parameters<typeof ctx.productsRepo.upsertProductBySlugOrSku>[1] = {
           ...patchRest,
           ...(categoryId !== undefined ? { categoryId } : {}),
-          ...(collectionId !== undefined ? { collectionId } : {}),
+          ...(lineId !== undefined ? { lineId } : {}),
           ...(_st !== undefined
             ? { status: _st as "draft" | "active" | "inactive" | "archived" }
             : {}),
@@ -1482,6 +1630,22 @@ async function createIngestionObject(
       const row = await ctx.compositionService.add(parentId, payload);
       return { id: row.id, outcome: "created", warnings };
     }
+    case "line_composition": {
+      const parentLineId = refMap[obj.data.parentLineRef];
+      if (!parentLineId)
+        throw new Error(`parentLineRef "${obj.data.parentLineRef}" não resolvido.`);
+      const childProductId = await resolveChildProductIdWithBatch(ctx, refMap, {
+        childProductRef: obj.data.childProductRef,
+        childSku: obj.data.childSku,
+      });
+      const { parentLineRef: _pl, childProductRef: _c, childSku: _s, ...compRest } = obj.data;
+      const payload: CreateProductCompositionInput = {
+        ...compRest,
+        childProductId,
+      };
+      const row = await ctx.lineCompositionService.add(parentLineId, payload);
+      return { id: row.id, outcome: "created", warnings };
+    }
     case "product_composition_set": {
       const parentId = await resolveParentProductIdWithBatch(ctx, refMap, obj.data);
       const parentRow = await ctx.productsRepo.findById(parentId);
@@ -1521,6 +1685,42 @@ async function createIngestionObject(
           removedCount,
           createdCount,
         },
+      };
+    }
+    case "line_composition_set": {
+      const parentLineId = await resolveParentLineIdWithBatch(ctx, refMap, obj.data);
+      const parentRow = await ctx.productsRepo.findLineById(parentLineId);
+      const lines: CreateProductCompositionInput[] = [];
+      for (const it of obj.data.items) {
+        const childProductId = await resolveChildProductIdWithBatch(ctx, refMap, {
+          childProductRef: it.childProductRef,
+          childProductId: it.childProductId,
+          childSku: it.childSku ?? it.childProductSku,
+        });
+        const parsed = createProductCompositionSchema.parse({
+          childProductId,
+          quantity: it.quantity,
+          quantityUnit: it.quantityUnit,
+          compositionType: it.compositionType,
+          packagingChannel: it.packagingChannel,
+          required: it.required,
+          isDefault: it.isDefault,
+          notes: it.notes,
+        });
+        lines.push(parsed);
+      }
+      const { removedCount, createdCount } =
+        await ctx.lineCompositionService.replaceCompositionScope({
+          parentLineId,
+          replaceTypes: obj.data.replaceTypes,
+          packagingChannel: obj.data.packagingChannel,
+          lines,
+        });
+      return {
+        id: parentLineId,
+        outcome: "updated",
+        warnings,
+        detail: `Linha ${parentRow?.slug ?? parentLineId}: removidas ${removedCount}, criadas ${createdCount}.`,
       };
     }
     case "inventory_movement": {
@@ -1675,12 +1875,14 @@ export function createIngestionService(db: AppDb, storage: StorageProvider | und
   const partyService = createPartyService(db);
   const inventoryService = createInventoryService(db);
   const compositionService = createProductCompositionService(db);
+  const lineCompositionService = createLineCompositionService(db);
   const orderService = createOrderService(db);
   const purchaseService = createPurchaseService(db);
   const productsRepo = createProductRepository(db);
   const variantsRepo = createProductVariantRepository(db);
   const productCostSnapshotRepo = createProductCostSnapshotRepository(db);
   const compositionsRepo = createProductCompositionRepository(db);
+  const lineCompositionsRepo = createLineCompositionRepository(db);
   const media = storage ? createProductMediaService(db, storage) : null;
   const auditRepo = createAuditRepository(db);
   const now = () => new Date().toISOString();
@@ -1690,12 +1892,14 @@ export function createIngestionService(db: AppDb, storage: StorageProvider | und
     partyService,
     inventoryService,
     compositionService,
+    lineCompositionService,
     orderService,
     purchaseService,
     productsRepo,
     variantsRepo,
     productCostSnapshotRepo,
     compositionsRepo,
+    lineCompositionsRepo,
     media,
   };
 

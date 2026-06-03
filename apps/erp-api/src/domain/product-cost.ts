@@ -227,6 +227,8 @@ export function compositionLineUsesLegacyCostRisk(child: Product): boolean {
 /** Linhas persistidas em `product_cost_snapshots.component_costs_json`. */
 export type ProductCostSnapshotComponentLine = {
   compositionId: string;
+  scope?: "line" | "product";
+  sourceCompositionId?: string;
   childProductId: string;
   childSku: string | null;
   childName: string | null;
@@ -254,12 +256,16 @@ export function buildSnapshotComponentLines(
     packagingChannel: string | null;
     childProductId: string;
     child: Product;
+    scope?: "line" | "product";
+    sourceCompositionId?: string;
   }>,
 ): ProductCostSnapshotComponentLine[] {
   return rows.map((row) => {
     const { unitCostCents, totalCostCents } = lineCostCentsFromComposition(row.quantity, row.child);
     return {
       compositionId: row.id,
+      scope: row.scope,
+      sourceCompositionId: row.sourceCompositionId ?? row.id,
       childProductId: row.childProductId,
       childSku: row.child.sku,
       childName: row.child.name,

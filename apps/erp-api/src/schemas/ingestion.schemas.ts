@@ -2,7 +2,7 @@ import { z } from "zod";
 import {
   createProductSchema,
   createCategorySchema,
-  createCollectionSchema,
+  createLineSchema,
   createVariantSchema,
   productCompositionDataWithoutChildSchema,
   refineProductComposition,
@@ -38,7 +38,7 @@ const httpsImageUrl = z
  * │          │ presentes em `data`).                                              │
  * │          │ Requer a chave natural em `data`:                                  │
  * │          │   • category → slug                                                │
- * │          │   • collection → slug                                              │
+ * │          │   • line → slug                                                    │
  * │          │   • product → slug ou sku                                          │
  * └──────────┴────────────────────────────────────────────────────────────────────┘
  *
@@ -78,16 +78,14 @@ export const categoryPatchIngestionDataSchema = createCategorySchema
     parentCategoryRef: z.string().min(1).max(200).optional(),
   });
 
-/** --- Collection --- */
-export const collectionIngestionDataSchema = createCollectionSchema;
+/** --- Line (linha de produto) --- */
+export const lineIngestionDataSchema = createLineSchema;
 
 /**
- * Schema de patch para collection (action: "upsert").
+ * Schema de patch para line (action: "upsert").
  * Chave natural: `slug` (obrigatório). Todos os outros campos opcionais.
  */
-export const collectionPatchIngestionDataSchema = createCollectionSchema
-  .partial()
-  .required({ slug: true });
+export const linePatchIngestionDataSchema = createLineSchema.partial().required({ slug: true });
 
 /** --- Party / customer / supplier --- */
 export const partyIngestionDataSchema = createPartySchema;
@@ -112,7 +110,7 @@ export const productIngestionDataSchema = productIngestionBodySchema
     main_image_url: httpsImageUrl.optional(),
     gallery_image_urls: z.array(httpsImageUrl).max(50).optional(),
     categoryRef: z.string().min(1).max(200).optional(),
-    collectionRef: z.string().min(1).max(200).optional(),
+    lineRef: z.string().min(1).max(200).optional(),
   })
   .strict()
   .superRefine((data, ctx) => {
@@ -145,7 +143,7 @@ export const productIngestionDataSchema = productIngestionBodySchema
 export const productPatchIngestionDataSchema = productIngestionBodySchema
   .extend({
     categoryRef: z.string().min(1).max(200).optional(),
-    collectionRef: z.string().min(1).max(200).optional(),
+    lineRef: z.string().min(1).max(200).optional(),
     main_image_url: httpsImageUrl.optional(),
     gallery_image_urls: z.array(httpsImageUrl).max(50).optional(),
   })
@@ -242,6 +240,58 @@ export const productCompositionSetIngestionDataSchema = z
       message:
         "Indique exactamente um identificador do produto pai: parentProductId, parentProductRef, parentProductSku ou parentProductSlug.",
       path: ["parentProductRef"],
+    },
+  )
+  .refine((d) => !d.packagingChannel || d.replaceTypes.includes("packaging"), {
+    message: 'packagingChannel só é permitido quando replaceTypes inclui "packaging".',
+    path: ["packagingChannel"],
+  });
+
+/** --- Composição ao nível da linha --- */
+export const lineCompositionIngestionDataSchema = productCompositionDataWithoutChildSchema
+  .extend({
+    parentLineRef: z.string().min(1).max(200),
+    childProductRef: z.string().min(1).max(200).optional(),
+    childSku: z.string().min(1).max(100).optional(),
+  })
+  .refine((d) => d.childProductRef || d.childSku, {
+    message:
+      "Indique childProductRef (mesmo payload) ou childSku (SKU existente ou criado no lote).",
+    path: ["childProductRef"],
+  })
+  .superRefine((d, ctx) => {
+    refineProductComposition(
+      {
+        ...d,
+        childProductId: "_placeholder",
+      } as Parameters<typeof refineProductComposition>[0],
+      ctx,
+    );
+  });
+
+export const lineCompositionSetIngestionDataSchema = z
+  .object({
+    parentLineId: z.string().min(1).optional(),
+    parentLineRef: z.string().min(1).max(200).optional(),
+    parentLineSlug: z.string().min(1).max(200).optional(),
+    replaceTypes: z.array(compositionTypeSchema).min(1),
+    packagingChannel: packagingChannelSchema.optional(),
+    items: z.array(productCompositionSetItemIngestionSchema).max(500).default([]),
+  })
+  .strict()
+  .refine(
+    (d) => {
+      const keys = [
+        d.parentLineId?.trim(),
+        d.parentLineRef?.trim(),
+        d.parentLineSlug?.trim(),
+      ].filter(Boolean);
+      return keys.length === 1;
+    },
+    {
+      message:
+        "Indique exactamente um identificador da linha: parentLineId, parentLineRef ou parentLineSlug.",
+      path: ["parentLineRef"],
     },
   )
   .refine((d) => !d.packagingChannel || d.replaceTypes.includes("packaging"), {
@@ -488,18 +538,18 @@ export const ingestionObjectSchema = z.union([
     client_ref: clientRefField,
     data: categoryPatchIngestionDataSchema,
   }),
-  // ── collection ───────────────────────────────────────────────────────────
+  // ── line ─────────────────────────────────────────────────────────────────
   z.object({
-    type: z.literal("collection"),
+    type: z.literal("line"),
     action: z.enum(["skip"]).optional(),
     client_ref: clientRefField,
-    data: collectionIngestionDataSchema,
+    data: lineIngestionDataSchema,
   }),
   z.object({
-    type: z.literal("collection"),
+    type: z.literal("line"),
     action: z.literal("upsert"),
     client_ref: clientRefField,
-    data: collectionPatchIngestionDataSchema,
+    data: linePatchIngestionDataSchema,
   }),
   // ── product ──────────────────────────────────────────────────────────────
   z.object({
@@ -556,6 +606,18 @@ export const ingestionObjectSchema = z.union([
     action: z.literal("replace"),
     client_ref: clientRefField,
     data: productCompositionSetIngestionDataSchema,
+  }),
+  z.object({
+    type: z.literal("line_composition"),
+    action: ingestionActionField,
+    client_ref: clientRefField,
+    data: lineCompositionIngestionDataSchema,
+  }),
+  z.object({
+    type: z.literal("line_composition_set"),
+    action: z.literal("replace"),
+    client_ref: clientRefField,
+    data: lineCompositionSetIngestionDataSchema,
   }),
   z.object({
     type: z.literal("inventory_movement"),
@@ -625,14 +687,16 @@ export type IngestionObjectType = IngestionObject["type"];
 export const INGESTION_TYPE_LABELS: Record<IngestionObjectType, string> = {
   stock_location: "Local de stock",
   category: "Categoria",
-  collection: "Coleção",
+  line: "Linha",
   party: "Entidade (party)",
   customer: "Cliente",
   supplier: "Fornecedor",
   product: "Produto",
   product_variant: "Variante de produto",
-  product_composition: "Receita / composição (BOM ou embalagem)",
-  product_composition_set: "Substituição da receita (BOM ou embalagem)",
+  product_composition: "Receita / composição do produto (BOM ou embalagem)",
+  product_composition_set: "Substituição da receita do produto (BOM ou embalagem)",
+  line_composition: "Receita / composição da linha (BOM ou embalagem)",
+  line_composition_set: "Substituição da receita da linha (BOM ou embalagem)",
   inventory_movement: "Movimento de stock",
   order: "Pedido",
   purchase_order: "Ordem de compra",
@@ -646,7 +710,7 @@ export type ProductIngestionData = z.infer<typeof productIngestionDataSchema>;
 export const INGESTION_TYPE_ORDER: Record<IngestionObjectType, number> = {
   stock_location: 0,
   category: 1,
-  collection: 2,
+  line: 2,
   party: 3,
   customer: 4,
   supplier: 5,
@@ -654,6 +718,8 @@ export const INGESTION_TYPE_ORDER: Record<IngestionObjectType, number> = {
   product_variant: 7,
   product_composition: 8,
   product_composition_set: 8,
+  line_composition: 8,
+  line_composition_set: 8,
   inventory_movement: 9,
   order: 10,
   purchase_order: 11,

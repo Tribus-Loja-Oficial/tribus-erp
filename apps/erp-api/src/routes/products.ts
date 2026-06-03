@@ -17,6 +17,8 @@ import {
   permanentDeleteProductSchema,
 } from "../schemas/product.schemas.js";
 import { createProductCompositionService } from "../services/product-composition.service.js";
+import { createLineCompositionService } from "../services/line-composition.service.js";
+import { createLineCompositionRepository } from "../repositories/line-composition.repository.js";
 import { verifyInternalToken } from "../auth/verify-internal-token.js";
 import { R2StorageProvider } from "../storage/r2-storage-provider.js";
 import { createProductMediaService } from "../services/product-media.service.js";
@@ -138,13 +140,79 @@ products.post("/categories", async (c) => {
   }
 });
 
-products.get("/collections", async (c) => {
+products.get("/lines", async (c) => {
   try {
     const config = getEnv(c.env);
     const db = createDb(config.db);
     const service = createProductService(db);
-    const data = await service.findCollections();
+    const data = await service.findLines();
     return c.json({ data });
+  } catch (err) {
+    const { message, code, status } = toApiError(err);
+    return c.json({ message, code }, status);
+  }
+});
+
+products.get("/lines/:lineId/compositions", async (c) => {
+  try {
+    const config = getEnv(c.env);
+    const db = createDb(config.db);
+    const service = createLineCompositionService(db);
+    const data = await service.listByLine(c.req.param("lineId"));
+    return c.json({ data });
+  } catch (err) {
+    const { message, code, status } = toApiError(err);
+    return c.json({ message, code }, status);
+  }
+});
+
+products.post("/lines/:lineId/compositions", async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const parsed = createProductCompositionSchema.safeParse(body);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  try {
+    const config = getEnv(c.env);
+    const db = createDb(config.db);
+    const service = createLineCompositionService(db);
+    const data = await service.add(c.req.param("lineId"), parsed.data);
+    return c.json({ data }, 201);
+  } catch (err) {
+    const { message, code, status } = toApiError(err);
+    return c.json({ message, code }, status);
+  }
+});
+
+products.patch("/lines/compositions/:compositionId", async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const parsed = updateProductCompositionSchema.safeParse(body);
+  if (!parsed.success)
+    return c.json({ code: "VALIDATION_ERROR", issues: parsed.error.issues }, 400);
+  try {
+    const config = getEnv(c.env);
+    const db = createDb(config.db);
+    const lineCompositionsRepo = createLineCompositionRepository(db);
+    const row = await lineCompositionsRepo.findById(c.req.param("compositionId"));
+    if (!row) return c.json({ message: "Composição não encontrada", code: "NOT_FOUND" }, 404);
+    const service = createLineCompositionService(db);
+    const data = await service.update(row.parentLineId, c.req.param("compositionId"), parsed.data);
+    return c.json({ data });
+  } catch (err) {
+    const { message, code, status } = toApiError(err);
+    return c.json({ message, code }, status);
+  }
+});
+
+products.delete("/lines/compositions/:compositionId", async (c) => {
+  try {
+    const config = getEnv(c.env);
+    const db = createDb(config.db);
+    const lineCompositionsRepo = createLineCompositionRepository(db);
+    const row = await lineCompositionsRepo.findById(c.req.param("compositionId"));
+    if (!row) return c.json({ message: "Composição não encontrada", code: "NOT_FOUND" }, 404);
+    const service = createLineCompositionService(db);
+    await service.archive(row.parentLineId, c.req.param("compositionId"));
+    return c.json({ success: true });
   } catch (err) {
     const { message, code, status } = toApiError(err);
     return c.json({ message, code }, status);

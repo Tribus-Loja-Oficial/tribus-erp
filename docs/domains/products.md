@@ -55,15 +55,31 @@ Linha vendável/estocável ligada a um `products.id` quando `productKind = varia
 | `parentId`    | text FK? | Categoria pai (suporte a hierarquia) |
 | `description` | text?    |                                      |
 
-### `product_collections`
+### `product_lines` (linha operacional; ex-`product_collections`)
 
-| Campo         | Tipo    | Descrição |
-| ------------- | ------- | --------- |
-| `id`          | text PK |           |
-| `name`        | text    |           |
-| `slug`        | text    |           |
-| `description` | text?   |           |
-| `isActive`    | boolean |           |
+| Campo         | Tipo    | Descrição                       |
+| ------------- | ------- | ------------------------------- |
+| `id`          | text PK |                                 |
+| `name`        | text    |                                 |
+| `slug`        | text    |                                 |
+| `description` | text?   |                                 |
+| `niche`       | text?   |                                 |
+| `season`      | text?   |                                 |
+| `status`      | text    | `draft` / `active` / `archived` |
+
+Produtos referenciam a linha via `products.line_id`. A receita partilhada fica em `line_compositions`.
+
+### `line_compositions`
+
+Composição (BOM/embalagem) ao nível da **linha**. Mesma forma que `product_compositions`, com `parent_line_id` em vez de `parent_product_id`.
+
+### `product_collections` (reservada)
+
+Tabela vazia reservada para “coleção” comercial futura (sem FK em `products` no MVP).
+
+### Composição efetiva no produto
+
+Na leitura/custo, `mergeEffectiveComposition` combina `line_compositions` + `product_compositions`: mesma chave (`compositionType` + `childProductId` + `packagingChannel` quando embalagem) → o produto **substitui** a linha; linhas só no produto são **aditivas**.
 
 ---
 
@@ -76,9 +92,13 @@ Linha vendável/estocável ligada a um `products.id` quando `productKind = varia
 | `GET`    | `/products/low-stock`                       | Produtos abaixo do estoque mínimo                                                                                                             |
 | `GET`    | `/products/categories`                      | Lista categorias                                                                                                                              |
 | `POST`   | `/products/categories`                      | Cria categoria                                                                                                                                |
-| `GET`    | `/products/collections`                     | Lista coleções                                                                                                                                |
+| `GET`    | `/products/lines`                           | Lista linhas                                                                                                                                  |
+| `GET`    | `/products/lines/:lineId/compositions`      | Composição da linha                                                                                                                           |
+| `POST`   | `/products/lines/:lineId/compositions`      | Adiciona componente à linha                                                                                                                   |
+| `PATCH`  | `/products/lines/compositions/:id`          | Atualiza composição da linha                                                                                                                  |
+| `DELETE` | `/products/lines/compositions/:id`          | Arquiva composição da linha                                                                                                                   |
 | `GET`    | `/products/:id`                             | Retorna produto com variantes (`externalRef` incluído)                                                                                        |
-| `GET`    | `/products/:id/detail`                      | Vista operacional (produto + composições, custo, **variants**)                                                                                |
+| `GET`    | `/products/:id/detail`                      | Vista operacional (`compositions` = merge efetivo; `lineCompositions` / `productCompositions`; custo, **variants**)                           |
 | `GET`    | `/products/:id/variants`                    | Lista variações (vazio se produto simples)                                                                                                    |
 | `PATCH`  | `/products/:id/variants/:variantId`         | Atualiza variação                                                                                                                             |
 | `POST`   | `/products/:id/variants/:variantId/archive` | Arquiva variação                                                                                                                              |
@@ -109,4 +129,6 @@ Linha vendável/estocável ligada a um `products.id` quando `productKind = varia
 
 `src/services/product.service.ts` — `createProductService(db)`
 
-Métodos: `create`, `findById`, `listProducts`, `findLowStock`, `update`, `archive`, `restoreProduct`, `permanentDelete`, `createCategory`, `createCollection`, `findCategories`, `findCollections`, `createVariant`, `listVariants`, `updateVariant`, `archiveVariant`, `restoreVariant`. Serviço dedicado: `src/services/product-variant.service.ts`.
+Métodos: `create`, `findById`, `listProducts`, `findLowStock`, `update`, `archive`, `restoreProduct`, `permanentDelete`, `createCategory`, `createLine`, `findCategories`, `findLines`, `createVariant`, `listVariants`, `updateVariant`, `archiveVariant`, `restoreVariant`. Serviços: `product-variant.service.ts`, `line-composition.service.ts`, domínio `composition-merge.ts`.
+
+**Breaking (migrações 0015–0016):** `collection` → `line` na API/ingestão (`lineId`, `lineRef`, `GET /products/lines`); tipo de ingestão `collection` passou a `line`; `line_composition` / `line_composition_set` novos.

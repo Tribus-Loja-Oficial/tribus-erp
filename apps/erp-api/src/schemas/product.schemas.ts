@@ -48,7 +48,7 @@ export const createProductSchema = z.object({
   productType: productTypeSchema,
   productKind: productKindSchema.default("simple"),
   categoryId: z.string().optional(),
-  collectionId: z.string().optional(),
+  lineId: z.string().optional(),
   niche: z.string().max(100).optional(),
   brand: z.string().max(120).optional(),
   status: z.enum(["draft", "active", "inactive", "archived"]).default("draft"),
@@ -124,7 +124,7 @@ export const createCategorySchema = z.object({
   description: z.string().max(500).optional(),
 });
 
-export const createCollectionSchema = z.object({
+export const createLineSchema = z.object({
   name: z.string().min(1).max(100),
   slug: z.string().min(1).max(100),
   description: z.string().max(500).optional(),
@@ -213,7 +213,7 @@ export type UpdateProductInput = z.infer<typeof updateProductSchema>;
 export type CreateVariantInput = z.infer<typeof createVariantSchema>;
 export type UpdateProductVariantInput = z.infer<typeof updateProductVariantSchema>;
 export type CreateCategoryInput = z.infer<typeof createCategorySchema>;
-export type CreateCollectionInput = z.infer<typeof createCollectionSchema>;
+export type CreateLineInput = z.infer<typeof createLineSchema>;
 export type CreateProductCompositionInput = z.infer<typeof createProductCompositionSchema>;
 export type UpdateProductCompositionInput = z.infer<typeof updateProductCompositionSchema>;
 export type ListProductsInput = z.infer<typeof listProductsSchema>;

@@ -1,5 +1,6 @@
 import type { AppDb } from "../db/client.js";
 import { createProductCompositionRepository } from "../repositories/product-composition.repository.js";
+import { createLineCompositionRepository } from "../repositories/line-composition.repository.js";
 import { createProductRepository } from "../repositories/product.repository.js";
 import { createProductProductionProfileRepository } from "../repositories/product-production-profile.repository.js";
 import {
@@ -10,9 +11,11 @@ import {
   type ProductCostBreakdownCents,
   type ProductCostSnapshotComponentLine,
 } from "../domain/product-cost.js";
+import { mergeEffectiveComposition } from "../domain/composition-merge.js";
 
 export function createProductCostService(db: AppDb) {
   const compositionsRepo = createProductCompositionRepository(db);
+  const lineCompositionsRepo = createLineCompositionRepository(db);
   const productsRepo = createProductRepository(db);
   const profileRepo = createProductProductionProfileRepository(db);
 
@@ -21,8 +24,22 @@ export function createProductCostService(db: AppDb) {
       breakdown: ProductCostBreakdownCents;
       componentLines: ProductCostSnapshotComponentLine[];
     }> {
-      const compositions = await compositionsRepo.findActiveByParentId(parentProductId);
-      const childIds = [...new Set(compositions.map((c) => c.childProductId))];
+      const parent = await productsRepo.findById(parentProductId);
+      if (!parent) {
+        return {
+          breakdown: buildProductCostBreakdownCents([], 0),
+          componentLines: [],
+        };
+      }
+
+      const productRows = await compositionsRepo.findActiveByParentId(parentProductId);
+      const lineRows = parent.lineId
+        ? await lineCompositionsRepo.findActiveByParentLineId(parent.lineId)
+        : [];
+
+      const merged = mergeEffectiveComposition(lineRows, productRows);
+
+      const childIds = [...new Set(merged.map((c) => c.childProductId))];
       const children = await productsRepo.findByIds(childIds);
       const childMap = new Map(children.map((c) => [c.id, c]));
       const profile = await profileRepo.findByProductId(parentProductId);
@@ -36,9 +53,11 @@ export function createProductCostService(db: AppDb) {
         packagingChannel: string | null;
         childProductId: string;
         child: (typeof children)[number];
+        scope: "line" | "product";
+        sourceCompositionId: string;
       }> = [];
 
-      for (const c of compositions) {
+      for (const c of merged) {
         const child = childMap.get(c.childProductId);
         if (!child) continue;
         rows.push({
@@ -55,6 +74,8 @@ export function createProductCostService(db: AppDb) {
           packagingChannel: c.packagingChannel ?? null,
           childProductId: c.childProductId,
           child,
+          scope: c.scope,
+          sourceCompositionId: c.sourceCompositionId,
         });
       }
 

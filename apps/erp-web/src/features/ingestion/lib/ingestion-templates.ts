@@ -26,7 +26,7 @@ export const INGESTION_TEMPLATES: IngestionTemplate[] = [
           data: { name: "Acessórios", slug: "acessorios" },
         },
         {
-          type: "collection",
+          type: "line",
           client_ref: "col_verao",
           data: { name: "Verão 2026", slug: "verao-2026", status: "draft" },
         },
@@ -70,7 +70,7 @@ export const INGESTION_TEMPLATES: IngestionTemplate[] = [
             salePriceCents: 1000,
             costPriceCents: 400,
             categoryRef: "cat_acessorios",
-            collectionRef: "col_verao",
+            lineRef: "col_verao",
             status: "draft",
           },
         },

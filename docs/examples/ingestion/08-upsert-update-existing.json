@@ -4,7 +4,7 @@
     "action:'upsert' → se o registo existir, actualiza APENAS os campos enviados (outros ficam intocados).",
     "action:'upsert' → se o registo NÃO existir, cria-o (campos obrigatórios do tipo devem estar presentes).",
     "action omitido / 'skip' (default) → ignora se já existe, cria se não existe.",
-    "Chave natural: category e collection usam 'slug'; product usa 'slug' OU 'sku'.",
+    "Chave natural: category e line usam 'slug'; product usa 'slug' OU 'sku'.",
     "Campos omitidos em upsert não são apagados nem sobrescritos no banco.",
     "client_ref continua a ser resolvido para refMap mesmo em upsert (útil para refs descendentes)."
   ],
@@ -23,7 +23,7 @@
     },
     {
       "_comment": "Actualizar status e niche de uma coleção existente.",
-      "type": "collection",
+      "type": "line",
       "action": "upsert",
       "client_ref": "COL-FAISCA",
       "data": {
