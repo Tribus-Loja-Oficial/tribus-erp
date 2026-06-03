@@ -1,7 +1,7 @@
 "use client";
 
 import { CheckCircle2, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   searchProductsCatalogAction,
   type CatalogProductSearchRow,
@@ -14,6 +14,8 @@ type Props = {
   excludeProductId?: string;
   selectedSku?: string | null;
   selectedName?: string | null;
+  /** Inline na tabela de composição — sem cartão grande. */
+  variant?: "default" | "compact";
 };
 
 export function CompositionProductPicker({
@@ -22,7 +24,13 @@ export function CompositionProductPicker({
   excludeProductId,
   selectedSku,
   selectedName,
+  variant = "default",
 }: Props) {
+  const isCompact = variant === "compact";
+  const autoId = useId();
+  const searchInputId = `composition-product-search-${autoId}`;
+  const excludeInputId = `composition-product-exclude-finished-${autoId}`;
+
   const [q, setQ] = useState("");
   const [excludeFinishedProducts, setExcludeFinishedProducts] = useState(true);
   const [results, setResults] = useState<CatalogProductSearchRow[]>([]);
@@ -30,6 +38,7 @@ export function CompositionProductPicker({
   const [loading, setLoading] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -61,32 +70,154 @@ export function CompositionProductPicker({
   const picked = results.find((r) => r.id === value);
   const displaySku = picked?.sku ?? selectedSku;
   const displayName = picked?.name ?? selectedName;
+  const showCompactSelection = isCompact && value && !open && !q.trim();
+
+  function openSearch() {
+    setOpen(true);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }
+
+  const excludeFinishedControl = (
+    <label
+      className={cn(
+        "flex shrink-0 cursor-pointer items-center gap-1 text-zinc-600",
+        isCompact ? "text-[10px]" : "gap-1.5 text-[11px]",
+      )}
+      title="Marcado: matéria-prima, insumo operacional e embalagem. Desmarcado: todos os tipos."
+    >
+      <input
+        id={excludeInputId}
+        type="checkbox"
+        checked={excludeFinishedProducts}
+        onChange={(e) => {
+          setExcludeFinishedProducts(e.target.checked);
+          setOpen(true);
+        }}
+        className="rounded border-zinc-300"
+      />
+      {isCompact ? "Sem finais" : "Excluir produtos finais"}
+    </label>
+  );
+
+  const dropdown = open ? (
+    <div
+      className={cn(
+        "absolute z-20 mt-1 max-h-48 w-full overflow-auto rounded-md border border-zinc-200 bg-white py-1 shadow-lg",
+        isCompact ? "text-xs" : "text-sm",
+      )}
+    >
+      {loading ? <div className="px-3 py-2 text-xs text-zinc-500">Buscando…</div> : null}
+      {!loading && results.length === 0 ? (
+        <div className="px-3 py-2 text-xs text-zinc-500">Nenhum resultado.</div>
+      ) : null}
+      {!loading
+        ? results.map((r) => {
+            const isSelected = r.id === value;
+            return (
+              <button
+                key={r.id}
+                type="button"
+                className={cn(
+                  "flex w-full items-start gap-2 px-3 py-2 text-left transition-colors hover:bg-zinc-50",
+                  isSelected && "bg-emerald-50 hover:bg-emerald-50/90",
+                  isCompact && "py-1.5",
+                )}
+                onClick={() => {
+                  onChange(r.id);
+                  setQ("");
+                  setOpen(false);
+                }}
+              >
+                {isSelected ? (
+                  <CheckCircle2
+                    className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600"
+                    aria-hidden
+                  />
+                ) : (
+                  <span className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                )}
+                <span className="min-w-0 flex-1">
+                  <span className="block font-mono text-[10px] text-zinc-600 tabular-nums">
+                    {r.sku}
+                  </span>
+                  <span className="block text-zinc-900">{r.name}</span>
+                </span>
+              </button>
+            );
+          })
+        : null}
+    </div>
+  ) : null;
+
+  if (isCompact) {
+    return (
+      <div ref={wrapRef} className="relative min-w-0">
+        {showCompactSelection ? (
+          <div className="flex items-start gap-0.5 rounded border border-zinc-300 bg-white px-1.5 py-1">
+            <button
+              type="button"
+              className="min-w-0 flex-1 text-left"
+              onClick={openSearch}
+              title="Clique para trocar o componente"
+            >
+              <div className="truncate text-xs leading-snug font-medium text-zinc-900">
+                {displayName ?? "Produto sem nome"}
+              </div>
+              {displaySku ? (
+                <div className="truncate font-mono text-[10px] leading-tight text-zinc-500">
+                  {displaySku}
+                </div>
+              ) : null}
+            </button>
+            <button
+              type="button"
+              className="shrink-0 rounded p-0.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
+              aria-label="Limpar seleção"
+              title="Limpar seleção"
+              onClick={() => {
+                onChange("");
+                setQ("");
+                openSearch();
+              }}
+            >
+              <X className="h-3 w-3" aria-hidden />
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5">
+            <input
+              ref={inputRef}
+              id={searchInputId}
+              type="text"
+              value={q}
+              onChange={(e) => {
+                setQ(e.target.value);
+                setOpen(true);
+              }}
+              onFocus={() => setOpen(true)}
+              placeholder="SKU ou nome…"
+              className="min-w-0 flex-1 rounded border border-zinc-300 bg-white px-1.5 py-1 text-xs"
+              autoComplete="off"
+            />
+            {excludeFinishedControl}
+          </div>
+        )}
+        {dropdown}
+      </div>
+    );
+  }
 
   return (
     <div ref={wrapRef} className="relative">
       <div className="mb-1 flex items-center justify-between gap-2">
-        <label className="text-xs text-zinc-600" htmlFor="composition-product-search">
+        <label className="text-xs text-zinc-600" htmlFor={searchInputId}>
           Buscar produto
         </label>
-        <label
-          className="flex shrink-0 cursor-pointer items-center gap-1.5 text-[11px] text-zinc-600"
-          title="Marcado: matéria-prima, insumo operacional e embalagem. Desmarcado: todos os tipos."
-        >
-          <input
-            id="composition-product-exclude-finished"
-            type="checkbox"
-            checked={excludeFinishedProducts}
-            onChange={(e) => {
-              setExcludeFinishedProducts(e.target.checked);
-              setOpen(true);
-            }}
-            className="rounded border-zinc-300"
-          />
-          Excluir produtos finais
-        </label>
+        {excludeFinishedControl}
       </div>
       <input
-        id="composition-product-search"
+        ref={inputRef}
+        id={searchInputId}
         type="text"
         value={q}
         onChange={(e) => {
@@ -132,49 +263,7 @@ export function CompositionProductPicker({
           </button>
         </div>
       ) : null}
-      {open ? (
-        <div className="absolute z-20 mt-1 max-h-48 w-full overflow-auto rounded-md border border-zinc-200 bg-white py-1 text-sm shadow-lg">
-          {loading ? <div className="px-3 py-2 text-xs text-zinc-500">Buscando…</div> : null}
-          {!loading && results.length === 0 ? (
-            <div className="px-3 py-2 text-xs text-zinc-500">Nenhum resultado.</div>
-          ) : null}
-          {!loading
-            ? results.map((r) => {
-                const isSelected = r.id === value;
-                return (
-                  <button
-                    key={r.id}
-                    type="button"
-                    className={cn(
-                      "flex w-full items-start gap-2 px-3 py-2 text-left transition-colors hover:bg-zinc-50",
-                      isSelected && "bg-emerald-50 hover:bg-emerald-50/90",
-                    )}
-                    onClick={() => {
-                      onChange(r.id);
-                      setQ("");
-                      setOpen(false);
-                    }}
-                  >
-                    {isSelected ? (
-                      <CheckCircle2
-                        className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600"
-                        aria-hidden
-                      />
-                    ) : (
-                      <span className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-                    )}
-                    <span className="min-w-0 flex-1">
-                      <span className="block font-mono text-xs text-zinc-600 tabular-nums">
-                        {r.sku}
-                      </span>
-                      <span className="block text-zinc-900">{r.name}</span>
-                    </span>
-                  </button>
-                );
-              })
-            : null}
-        </div>
-      ) : null}
+      {dropdown}
     </div>
   );
 }

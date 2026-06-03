@@ -783,9 +783,9 @@ function CompositionComponentCell({
 
   if (editing && draft && onDraftChange && parentProductId) {
     return (
-      <td className={`${compositionTableTd} min-w-[12rem]`}>
-        <div className="max-w-[18rem] min-w-[11rem]">
-          <div className="flex items-start gap-1">
+      <td className={`${compositionTableTd} min-w-[10rem]`}>
+        <div className="max-w-[16rem] min-w-[9rem]">
+          <div className="flex items-start gap-0.5">
             <div className="min-w-0 flex-1">
               <CompositionProductPicker
                 value={draft.childProductId}
@@ -793,6 +793,7 @@ function CompositionComponentCell({
                 excludeProductId={parentProductId}
                 selectedSku={row.childSku}
                 selectedName={row.childName}
+                variant="compact"
               />
             </div>
             {childId && onQuickEditChildProduct ? (
