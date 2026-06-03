@@ -28,24 +28,52 @@ export interface ProductOperationalEditPayload {
   bomParents: ProductBomParentRow[];
 }
 
+async function fetchLinesForProductForm(): Promise<{ id: string; name: string }[]> {
+  try {
+    const res = await erpApiFetch<{ data: { id: string; name: string }[] }>({
+      path: "/products/lines",
+    });
+    return res.data ?? [];
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes("404") || msg.toLowerCase().includes("not found")) {
+      return [];
+    }
+    throw new Error(
+      `Não foi possível carregar linhas de produto (${msg}). Confirme que a API em produção está atualizada e que as migrações 0015/0016 foram aplicadas.`,
+    );
+  }
+}
+
 /** Dados para montar `ProductOperationalForm` (ex.: popup na listagem). */
 export async function getProductOperationalEditPayloadAction(
   productId: string,
 ): Promise<ProductOperationalEditPayload> {
-  const [dRes, cRes, colRes, locRes] = await Promise.all([
-    erpApiFetch<{
-      data: {
-        product: Record<string, unknown>;
-        compositions?: CompositionRow[];
-        costBreakdown?: ProductCostBreakdown | null;
-        variants?: VariantApiRow[];
-        stockMovements?: ProductStockMovementRow[];
-        purchaseReceiptHistory?: ProductPurchaseReceiptHistoryRow[];
-        bomParents?: ProductBomParentRow[];
-      };
-    }>({ path: `/products/${productId}/detail` }),
+  let dRes: {
+    data: {
+      product: Record<string, unknown>;
+      compositions?: CompositionRow[];
+      costBreakdown?: ProductCostBreakdown | null;
+      variants?: VariantApiRow[];
+      stockMovements?: ProductStockMovementRow[];
+      purchaseReceiptHistory?: ProductPurchaseReceiptHistoryRow[];
+      bomParents?: ProductBomParentRow[];
+    };
+  };
+  try {
+    dRes = await erpApiFetch({
+      path: `/products/${productId}/detail`,
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(
+      `Não foi possível carregar o produto (${msg}). Se a API já foi actualizada, aplique as migrações D1 0015_rename_collection_to_line e 0016_line_compositions no ambiente de produção.`,
+    );
+  }
+
+  const [cRes, lines, locRes] = await Promise.all([
     erpApiFetch<{ data: { id: string; name: string }[] }>({ path: "/products/categories" }),
-    erpApiFetch<{ data: { id: string; name: string }[] }>({ path: "/products/lines" }),
+    fetchLinesForProductForm(),
     erpApiFetch<{ data: { id: string; name: string }[] }>({ path: "/inventory/locations" }),
   ]);
 
@@ -79,7 +107,7 @@ export async function getProductOperationalEditPayloadAction(
     costBreakdown: detail.costBreakdown ?? null,
     variants: detail.variants ?? [],
     categories: cRes.data ?? [],
-    lines: colRes.data ?? [],
+    lines,
     locations: locRes.data ?? [],
     auditLogs,
     costSnapshots,

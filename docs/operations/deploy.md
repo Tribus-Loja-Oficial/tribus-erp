@@ -35,7 +35,7 @@ Passos:
 
 1. CI (`ci.yml`) executa: typecheck, Prettier, ESLint, Vitest, coverage snapshot.
 2. Deploy Production aguarda o CI verde (via `workflow_run`).
-3. Executa `wrangler d1 migrations apply` (migrations).
+3. Executa `wrangler d1 migrations apply TRIBUS_ERP_DB --env production --remote` (D1 de produção, não a cópia local do runner).
 4. Executa `wrangler deploy` (deploy do Worker).
 
 Credenciais necessárias no **GitHub Environment `PROD`**:

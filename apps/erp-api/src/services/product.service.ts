@@ -221,9 +221,17 @@ export function createProductService(db: AppDb) {
     async getOperationalDetail(id: string) {
       const product = await this.findById(id);
       const productCompositionRows = await compositionsRepo.findActiveByParentId(id);
-      const lineCompositionRows = product.lineId
-        ? await lineCompositionsRepo.findActiveByParentLineId(product.lineId)
-        : [];
+      let lineCompositionRows: Awaited<
+        ReturnType<typeof lineCompositionsRepo.findActiveByParentLineId>
+      > = [];
+      if (product.lineId) {
+        try {
+          lineCompositionRows = await lineCompositionsRepo.findActiveByParentLineId(product.lineId);
+        } catch {
+          // Tabela line_compositions ausente (migration 0016 pendente) — segue só com composição de produto.
+          lineCompositionRows = [];
+        }
+      }
       const effectiveRows = mergeEffectiveComposition(lineCompositionRows, productCompositionRows);
 
       const allChildIds = [

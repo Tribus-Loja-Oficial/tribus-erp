@@ -65,10 +65,10 @@ jobs:
         if: steps.paths.outputs.skip != 'true'
         run: npm ci
 
-      - name: Run migrations
+      - name: Run migrations (D1 remoto)
         if: steps.paths.outputs.skip != 'true'
         working-directory: apps/erp-api
-        run: npx wrangler d1 migrations apply TRIBUS_ERP_DB --env production
+        run: npx wrangler d1 migrations apply TRIBUS_ERP_DB --env production --remote
 
       - name: Deploy to Cloudflare Workers
         if: steps.paths.outputs.skip != 'true'

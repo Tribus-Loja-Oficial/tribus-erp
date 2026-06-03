@@ -33,9 +33,14 @@ export function createProductCostService(db: AppDb) {
       }
 
       const productRows = await compositionsRepo.findActiveByParentId(parentProductId);
-      const lineRows = parent.lineId
-        ? await lineCompositionsRepo.findActiveByParentLineId(parent.lineId)
-        : [];
+      let lineRows: Awaited<ReturnType<typeof lineCompositionsRepo.findActiveByParentLineId>> = [];
+      if (parent.lineId) {
+        try {
+          lineRows = await lineCompositionsRepo.findActiveByParentLineId(parent.lineId);
+        } catch {
+          lineRows = [];
+        }
+      }
 
       const merged = mergeEffectiveComposition(lineRows, productRows);
 
