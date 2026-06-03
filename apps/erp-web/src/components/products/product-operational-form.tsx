@@ -364,7 +364,7 @@ function PackagingChannelSelect({
 }
 
 const COMPOSITION_COST_BASE_HEADER_TOOLTIP =
-  "Custo do componente na unidade desta linha (R$/m, R$/unidade, etc.). Passe o cursor sobre o ícone ao lado de cada valor para ver a fonte (média de compras, legado, etc.).";
+  "Custo do componente na unidade desta linha. Passe o cursor sobre o ícone ao lado de cada valor para ver de onde veio (compras, cadastro ou importação).";
 
 const COMPOSITION_COST_ON_PRODUCT_HEADER_TOOLTIP =
   "Valor deste componente em uma unidade do produto final: uso por peça × custo base.";
@@ -552,6 +552,55 @@ function CompositionCostHeader({ label, tooltip }: { label: ReactNode; tooltip: 
   );
 }
 
+function compositionCostOriginExplanation(row: CompositionRow): string {
+  const unit = compositionRateUnitSuffix(row.quantityUnit);
+  const lines = [
+    `${compositionCostBaseLabel(row.childUnitCostCents, row.quantityUnit)} por ${unit} nesta linha.`,
+  ];
+
+  if (row.childUnitCostBasis === "average") {
+    lines.push("Origem: média ponderada das 2 últimas entradas de compra deste componente.");
+    if (row.childLegacyCostWarning && row.childCostSource === "legacy_ingestion") {
+      lines.push("Cadastro importado de planilha — confirme o valor com compras reais.");
+    }
+  } else if (row.childCostSource === "legacy_ingestion") {
+    lines.push("Origem: custo importado no cadastro do componente (ainda sem compras no ERP).");
+  } else if (row.childCostSource === "manual") {
+    lines.push("Origem: «Custo base» digitado no cadastro (ainda sem compras no ERP).");
+  } else {
+    lines.push(
+      "Origem: «Custo base» do cadastro do componente — registre compras para usar média real.",
+    );
+  }
+
+  return lines.join("\n");
+}
+
+function snapshotCostOriginExplanation(line: ProductCostSnapshotComponentLineRow): string {
+  const unit = compositionRateUnitSuffix(line.quantityUnit);
+  const lines: string[] = [];
+
+  if (line.unitCost != null) {
+    lines.push(
+      `${compositionCostBaseLabel(line.unitCost, line.quantityUnit)} por ${unit} nesta linha.`,
+    );
+  }
+
+  if (line.unitCostBasis === "average") {
+    lines.push("Origem: média ponderada das 2 últimas entradas de compra deste componente.");
+  } else if (line.costSource === "legacy_ingestion") {
+    lines.push("Origem: custo importado no cadastro do componente (ainda sem compras no ERP).");
+  } else if (line.costSource === "manual") {
+    lines.push("Origem: «Custo base» digitado no cadastro (ainda sem compras no ERP).");
+  } else if (line.unitCost != null) {
+    lines.push(
+      "Origem: «Custo base» do cadastro do componente — registre compras para usar média real.",
+    );
+  }
+
+  return lines.join("\n");
+}
+
 function compositionCostSourceChip(row: CompositionRow): { label: string; warn: boolean } {
   if (row.childLegacyCostWarning) {
     return { label: "Legado", warn: true };
@@ -568,57 +617,16 @@ function compositionCostSourceChip(row: CompositionRow): { label: string; warn: 
   }
 }
 
-function compositionMergedCostTooltip(row: CompositionRow): string {
-  const chip = compositionCostSourceChip(row);
-  const unit = compositionRateUnitSuffix(row.quantityUnit);
-  const lines = [
-    `Valor: ${compositionCostBaseLabel(row.childUnitCostCents, row.quantityUnit)} (${unit} nesta linha).`,
-    `Fonte: ${chip.label}.`,
-  ];
-  const basis = compositionCostBasisLabel(row.childUnitCostBasis);
-  if (basis !== "—") lines.push(basis + ".");
-  const source = productCostSourceLabel(row.childCostSource);
-  if (source !== "Desconhecido") lines.push(`Origem no cadastro: ${source}.`);
-  if (row.childLegacyCostWarning) {
-    lines.push("Custo legado — registre compras para formar média real.");
-  }
-  if (row.childAverageCostUnit?.trim()) {
-    lines.push(`Unidade do custo médio: ${row.childAverageCostUnit.trim()}.`);
-  }
-  return lines.join("\n");
-}
-
 function CompositionCostBaseCell({ row }: { row: CompositionRow }) {
   const chip = compositionCostSourceChip(row);
   return (
     <td className={compositionTableTdNumeric}>
       <span className="inline-flex items-center justify-end gap-1">
         {compositionCostBaseLabel(row.childUnitCostCents, row.quantityUnit)}
-        <CompositionColumnHelp title={compositionMergedCostTooltip(row)} warn={chip.warn} />
+        <CompositionColumnHelp title={compositionCostOriginExplanation(row)} warn={chip.warn} />
       </span>
     </td>
   );
-}
-
-function snapshotMergedCostTooltip(line: ProductCostSnapshotComponentLineRow): string {
-  const unit = compositionRateUnitSuffix(line.quantityUnit);
-  const lines: string[] = [];
-  if (line.unitCost != null) {
-    lines.push(
-      `Valor: ${compositionCostBaseLabel(line.unitCost, line.quantityUnit)} (${unit} nesta linha).`,
-    );
-  }
-  const basis = compositionCostBasisLabel(line.unitCostBasis);
-  if (basis !== "—") lines.push(basis + ".");
-  const source = productCostSourceLabel(line.costSource);
-  if (source !== "Desconhecido") lines.push(`Fonte: ${source}.`);
-  if (snapshotCostSourceWarn(line)) {
-    lines.push("Custo legado — registre compras para formar média real.");
-  }
-  if (line.averageCostUnit?.trim()) {
-    lines.push(`Unidade do custo médio: ${line.averageCostUnit.trim()}.`);
-  }
-  return lines.join("\n");
 }
 
 function snapshotCostSourceWarn(line: ProductCostSnapshotComponentLineRow): boolean {
@@ -3608,7 +3616,7 @@ export function ProductOperationalForm({
                                                 line.quantityUnit,
                                               )}
                                               <CompositionColumnHelp
-                                                title={snapshotMergedCostTooltip(line)}
+                                                title={snapshotCostOriginExplanation(line)}
                                                 warn={snapshotCostSourceWarn(line)}
                                               />
                                             </span>
