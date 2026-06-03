@@ -691,13 +691,7 @@ function CompositionScopeToggle({
   );
 }
 
-function CompositionNotesEditor({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-}) {
+function useNotesHoverPopover() {
   const [open, setOpen] = useState(false);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -717,6 +711,45 @@ function CompositionNotesEditor({
     [],
   );
 
+  return { open, keepOpen, scheduleClose };
+}
+
+function CompositionNotesPreview({ value }: { value: string }) {
+  const { open, keepOpen, scheduleClose } = useNotesHoverPopover();
+  const preview = value.trim();
+
+  return (
+    <div className="relative min-w-[4rem]" onMouseEnter={keepOpen} onMouseLeave={scheduleClose}>
+      <span className="block cursor-default truncate text-zinc-600">{preview}</span>
+      {open ? (
+        <div
+          className="absolute top-full right-0 z-40 mt-1 w-64 rounded-lg border border-zinc-200 bg-white p-2 shadow-lg"
+          onMouseEnter={keepOpen}
+          onMouseLeave={scheduleClose}
+        >
+          <p className="mb-1 text-[11px] font-medium text-zinc-500">Notas</p>
+          <textarea
+            readOnly
+            value={preview}
+            rows={4}
+            tabIndex={-1}
+            aria-readonly
+            className="w-full resize-none rounded-md border border-zinc-200 bg-zinc-50 px-2 py-1.5 text-xs leading-relaxed text-zinc-800 focus:outline-none"
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function CompositionNotesEditor({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const { open, keepOpen, scheduleClose } = useNotesHoverPopover();
   const preview = value.trim();
 
   return (
@@ -733,7 +766,6 @@ function CompositionNotesEditor({
           "block w-full truncate rounded border border-dashed border-zinc-300 bg-white px-1.5 py-1 text-left text-xs",
           preview ? "text-zinc-700" : "text-zinc-400",
         )}
-        title={preview || "Passar o mouse para editar notas"}
       >
         {preview || "Notas…"}
       </button>
@@ -1015,9 +1047,7 @@ function CompositionTableRow({
                 onChange={(notes) => onDraftChange?.({ notes })}
               />
             ) : notes ? (
-              <span className="block truncate text-zinc-600" title={notes}>
-                {notes}
-              </span>
+              <CompositionNotesPreview value={notes} />
             ) : (
               <span className="text-zinc-400">—</span>
             )}
