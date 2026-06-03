@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronDown, ChevronRight, Info } from "lucide-react";
+import { ChevronDown, ChevronRight, Eye, Info } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { cn, formatCurrency, formatDateTime } from "@/lib/utils";
@@ -18,6 +18,7 @@ import {
 } from "@/server/product-operational-actions";
 import type { UploadedProductMediaRow } from "@/lib/product-media-types";
 import { CompositionProductPicker } from "@/components/products/composition-product-picker";
+import { ProductQuickEditModal } from "@/components/products/product-quick-edit-modal";
 import { Select, formSelectClassName } from "@/components/ui/select";
 import {
   ProductVariantsPanel,
@@ -626,14 +627,203 @@ function compositionCostSourceChip(row: CompositionRow): {
   }
 }
 
-function CompositionComponentCell({ row }: { row: CompositionRow }) {
+function CompositionChildQuickEditButton({
+  productId,
+  productName,
+  onQuickEdit,
+}: {
+  productId: string;
+  productName: string;
+  onQuickEdit: (id: string, name: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="shrink-0 rounded p-0.5 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-900"
+      title={`Editar ${productName}`}
+      aria-label={`Editar produto ${productName}`}
+      onClick={() => onQuickEdit(productId, productName)}
+    >
+      <Eye className="h-3.5 w-3.5" aria-hidden />
+    </button>
+  );
+}
+
+function CompositionScopeToggle({
+  value,
+  onChange,
+  lineDisabled,
+}: {
+  value: "line" | "product";
+  onChange: (value: "line" | "product") => void;
+  lineDisabled: boolean;
+}) {
+  return (
+    <div className="mt-1.5 flex flex-wrap gap-1">
+      <button
+        type="button"
+        disabled={lineDisabled}
+        title={lineDisabled ? ADD_TO_LINE_BUTTON_HELP_DISABLED : ADD_TO_LINE_BUTTON_HELP}
+        onClick={() => onChange("line")}
+        className={cn(
+          "rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase transition-colors",
+          value === "line"
+            ? "border-sky-300 bg-sky-100 text-sky-900"
+            : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300",
+          lineDisabled && "cursor-not-allowed opacity-50",
+        )}
+      >
+        Linha
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange("product")}
+        className={cn(
+          "rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase transition-colors",
+          value === "product"
+            ? "border-zinc-300 bg-zinc-200 text-zinc-900"
+            : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300",
+        )}
+      >
+        Produto
+      </button>
+    </div>
+  );
+}
+
+function CompositionNotesEditor({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  const keepOpen = () => {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    setOpen(true);
+  };
+
+  const scheduleClose = () => {
+    closeTimerRef.current = setTimeout(() => setOpen(false), 180);
+  };
+
+  useEffect(
+    () => () => {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    },
+    [],
+  );
+
+  const preview = value.trim();
+
+  return (
+    <div
+      className="relative min-w-[4rem]"
+      onMouseEnter={keepOpen}
+      onMouseLeave={scheduleClose}
+      onFocus={keepOpen}
+      onBlur={scheduleClose}
+    >
+      <button
+        type="button"
+        className={cn(
+          "block w-full truncate rounded border border-dashed border-zinc-300 bg-white px-1.5 py-1 text-left text-xs",
+          preview ? "text-zinc-700" : "text-zinc-400",
+        )}
+        title={preview || "Passar o mouse para editar notas"}
+      >
+        {preview || "Notas…"}
+      </button>
+      {open ? (
+        <div
+          className="absolute top-full right-0 z-40 mt-1 w-64 rounded-lg border border-zinc-200 bg-white p-2 shadow-lg"
+          onMouseEnter={keepOpen}
+          onMouseLeave={scheduleClose}
+        >
+          <label className="mb-1 block text-[11px] font-medium text-zinc-600">Notas</label>
+          <textarea
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            rows={4}
+            className="w-full resize-y rounded-md border border-zinc-300 px-2 py-1.5 text-xs text-zinc-800"
+            placeholder="Observações sobre este componente…"
+            autoFocus
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function CompositionComponentCell({
+  row,
+  editing,
+  draft,
+  parentProductId,
+  lineId,
+  onDraftChange,
+  onQuickEditChildProduct,
+}: {
+  row: CompositionRow;
+  editing?: boolean;
+  draft?: CompositionEditDraft;
+  parentProductId?: string;
+  lineId?: string;
+  onDraftChange?: (patch: Partial<CompositionEditDraft>) => void;
+  onQuickEditChildProduct?: (id: string, name: string) => void;
+}) {
   const name = String(row.childName ?? row.childProductId ?? "—");
   const sku = row.childSku?.trim();
   const scopeLabel = row.scope === "line" ? "Linha" : row.scope === "product" ? "Produto" : null;
+  const childId = draft?.childProductId ?? row.childProductId;
+  const childName = name;
+
+  if (editing && draft && onDraftChange && parentProductId) {
+    return (
+      <td className={`${compositionTableTd} min-w-[12rem]`}>
+        <div className="max-w-[18rem] min-w-[11rem]">
+          <div className="flex items-start gap-1">
+            <div className="min-w-0 flex-1">
+              <CompositionProductPicker
+                value={draft.childProductId}
+                onChange={(productId) => onDraftChange({ childProductId: productId })}
+                excludeProductId={parentProductId}
+                selectedSku={row.childSku}
+                selectedName={row.childName}
+              />
+            </div>
+            {childId && onQuickEditChildProduct ? (
+              <CompositionChildQuickEditButton
+                productId={childId}
+                productName={childName}
+                onQuickEdit={onQuickEditChildProduct}
+              />
+            ) : null}
+          </div>
+          <CompositionScopeToggle
+            value={draft.scope}
+            onChange={(scope) => onDraftChange({ scope })}
+            lineDisabled={!lineId}
+          />
+        </div>
+      </td>
+    );
+  }
+
   return (
     <td className={compositionTableTd}>
       <div className="max-w-[14rem] min-w-0 sm:max-w-[18rem]">
         <div className="flex flex-wrap items-center gap-1.5">
+          {row.childProductId && onQuickEditChildProduct ? (
+            <CompositionChildQuickEditButton
+              productId={row.childProductId}
+              productName={name}
+              onQuickEdit={onQuickEditChildProduct}
+            />
+          ) : null}
           <div className="truncate font-medium text-zinc-900" title={name}>
             {name}
           </div>
@@ -707,12 +897,15 @@ function CompositionTableRow({
   expanded,
   editing,
   draft,
+  parentProductId,
+  lineId,
   onDraftChange,
   onToggleExpand,
   onEdit,
   onSave,
   onCancel,
   onRemove,
+  onQuickEditChildProduct,
 }: {
   row: CompositionRow;
   kind: "bom" | "packaging";
@@ -721,12 +914,15 @@ function CompositionTableRow({
   expanded: boolean;
   editing: boolean;
   draft?: CompositionEditDraft;
+  parentProductId?: string;
+  lineId?: string;
   onDraftChange?: (patch: Partial<CompositionEditDraft>) => void;
   onToggleExpand: () => void;
   onEdit: () => void;
   onSave: () => void;
   onCancel: () => void;
   onRemove: () => void;
+  onQuickEditChildProduct?: (id: string, name: string) => void;
 }) {
   const canExpand = compositionRowHasExpandableDetails(row);
   const notes = row.notes?.trim();
@@ -742,7 +938,15 @@ function CompositionTableRow({
           editing && "bg-sky-50/40 hover:bg-sky-50/50",
         )}
       >
-        <CompositionComponentCell row={row} />
+        <CompositionComponentCell
+          row={row}
+          editing={editing}
+          draft={draft}
+          parentProductId={parentProductId}
+          lineId={lineId}
+          onDraftChange={onDraftChange}
+          onQuickEditChildProduct={onQuickEditChildProduct}
+        />
         <td className={`${compositionTableTd} whitespace-nowrap`}>
           {editing && draft && kind === "packaging" ? (
             <PackagingChannelSelect
@@ -805,12 +1009,9 @@ function CompositionTableRow({
         {showNotes ? (
           <td className={`${compositionTableTd} max-w-[5.5rem] text-xs`}>
             {editing && draft ? (
-              <input
+              <CompositionNotesEditor
                 value={draft.notes}
-                onChange={(e) => onDraftChange?.({ notes: e.target.value })}
-                className={compositionTableInputClass}
-                placeholder="Notas…"
-                aria-label="Notas"
+                onChange={(notes) => onDraftChange?.({ notes })}
               />
             ) : notes ? (
               <span className="block truncate text-zinc-600" title={notes}>
@@ -1184,6 +1385,10 @@ export function ProductOperationalForm({
   const [compositionDrafts, setCompositionDrafts] = useState<Record<string, CompositionEditDraft>>(
     {},
   );
+  const [compositionQuickEdit, setCompositionQuickEdit] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
   const [expandedCompositionIds, setExpandedCompositionIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -1553,10 +1758,14 @@ export function ProductOperationalForm({
     const qty = Number(draft.quantity.replace(",", "."));
     if (!draft.childProductId || !(qty > 0)) {
       throw new Error(
-        `Linha «${row.childName ?? row.childSku ?? "componente"}»: informe quantidade > 0.`,
+        `Linha «${row.childName ?? row.childSku ?? "componente"}»: informe componente e quantidade > 0.`,
       );
     }
+    if (draft.scope === "line" && !lineId) {
+      throw new Error("Defina a linha na aba Geral para aplicar à receita da linha.");
+    }
     const apiId = compositionApiId(row);
+    const originalScope = row.scope === "line" ? "line" : "product";
     const body = {
       childProductId: draft.childProductId,
       compositionType: draft.compositionType,
@@ -1567,6 +1776,16 @@ export function ProductOperationalForm({
       isDefault: row.isDefault ?? true,
       notes: draft.notes.trim() || undefined,
     };
+    if (draft.scope !== originalScope) {
+      if (originalScope === "line") {
+        await removeLineCompositionAction(apiId);
+        await addProductCompositionAction(productId, body);
+      } else {
+        await removeProductCompositionAction(productId, apiId);
+        await addLineCompositionAction(lineId, body);
+      }
+      return;
+    }
     if (draft.scope === "line") {
       await updateLineCompositionAction(apiId, body);
     } else {
@@ -2413,8 +2632,13 @@ export function ProductOperationalForm({
                                       showNotes
                                       editing={Boolean(draft)}
                                       draft={draft}
+                                      parentProductId={productId}
+                                      lineId={lineId}
                                       onDraftChange={(patch) =>
                                         updateCompositionDraft(row.id, patch)
+                                      }
+                                      onQuickEditChildProduct={(id, name) =>
+                                        setCompositionQuickEdit({ id, name })
                                       }
                                       expanded={expandedCompositionIds.has(row.id)}
                                       onToggleExpand={() => toggleCompositionExpand(row.id)}
@@ -2446,8 +2670,13 @@ export function ProductOperationalForm({
                                       showNotes
                                       editing={Boolean(draft)}
                                       draft={draft}
+                                      parentProductId={productId}
+                                      lineId={lineId}
                                       onDraftChange={(patch) =>
                                         updateCompositionDraft(row.id, patch)
+                                      }
+                                      onQuickEditChildProduct={(id, name) =>
+                                        setCompositionQuickEdit({ id, name })
                                       }
                                       expanded={expandedCompositionIds.has(row.id)}
                                       onToggleExpand={() => toggleCompositionExpand(row.id)}
@@ -2566,8 +2795,13 @@ export function ProductOperationalForm({
                                       showNotes={false}
                                       editing={Boolean(draft)}
                                       draft={draft}
+                                      parentProductId={productId}
+                                      lineId={lineId}
                                       onDraftChange={(patch) =>
                                         updateCompositionDraft(row.id, patch)
+                                      }
+                                      onQuickEditChildProduct={(id, name) =>
+                                        setCompositionQuickEdit({ id, name })
                                       }
                                       expanded={expandedCompositionIds.has(row.id)}
                                       onToggleExpand={() => toggleCompositionExpand(row.id)}
@@ -2599,8 +2833,13 @@ export function ProductOperationalForm({
                                       showNotes={false}
                                       editing={Boolean(draft)}
                                       draft={draft}
+                                      parentProductId={productId}
+                                      lineId={lineId}
                                       onDraftChange={(patch) =>
                                         updateCompositionDraft(row.id, patch)
+                                      }
+                                      onQuickEditChildProduct={(id, name) =>
+                                        setCompositionQuickEdit({ id, name })
                                       }
                                       expanded={expandedCompositionIds.has(row.id)}
                                       onToggleExpand={() => toggleCompositionExpand(row.id)}
@@ -3680,6 +3919,12 @@ export function ProductOperationalForm({
           </div>
         </aside>
       </div>
+
+      <ProductQuickEditModal
+        productId={compositionQuickEdit?.id ?? null}
+        productLabel={compositionQuickEdit?.name}
+        onClose={() => setCompositionQuickEdit(null)}
+      />
     </div>
   );
 }
