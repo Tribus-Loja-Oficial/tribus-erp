@@ -129,7 +129,7 @@ export async function searchProductsCatalogAction(opts: {
   q?: string;
   excludeId?: string;
   limit?: number;
-  /** Tipos elegíveis para composição (BOM/embalagem). */
+  /** Matéria-prima, insumo e embalagem apenas (exclui produto final, kit e bundle). */
   composeCatalog?: boolean;
 }): Promise<CatalogProductSearchRow[]> {
   const searchParams: Record<string, string | number> = {

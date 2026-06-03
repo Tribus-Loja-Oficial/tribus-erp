@@ -24,6 +24,7 @@ export function CompositionProductPicker({
   selectedName,
 }: Props) {
   const [q, setQ] = useState("");
+  const [excludeFinishedProducts, setExcludeFinishedProducts] = useState(true);
   const [results, setResults] = useState<CatalogProductSearchRow[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -38,7 +39,7 @@ export function CompositionProductPicker({
         q: q.trim() || undefined,
         excludeId: excludeProductId,
         limit: 40,
-        composeCatalog: true,
+        composeCatalog: excludeFinishedProducts,
       })
         .then(setResults)
         .catch(() => setResults([]))
@@ -47,7 +48,7 @@ export function CompositionProductPicker({
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [q, excludeProductId]);
+  }, [q, excludeProductId, excludeFinishedProducts]);
 
   useEffect(() => {
     function handleClickOutside(ev: MouseEvent) {
@@ -63,8 +64,29 @@ export function CompositionProductPicker({
 
   return (
     <div ref={wrapRef} className="relative">
-      <label className="mb-1 block text-xs text-zinc-600">Buscar produto</label>
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <label className="text-xs text-zinc-600" htmlFor="composition-product-search">
+          Buscar produto
+        </label>
+        <label
+          className="flex shrink-0 cursor-pointer items-center gap-1.5 text-[11px] text-zinc-600"
+          title="Marcado: matéria-prima, insumo operacional e embalagem. Desmarcado: todos os tipos."
+        >
+          <input
+            id="composition-product-exclude-finished"
+            type="checkbox"
+            checked={excludeFinishedProducts}
+            onChange={(e) => {
+              setExcludeFinishedProducts(e.target.checked);
+              setOpen(true);
+            }}
+            className="rounded border-zinc-300"
+          />
+          Excluir produtos finais
+        </label>
+      </div>
       <input
+        id="composition-product-search"
         type="text"
         value={q}
         onChange={(e) => {

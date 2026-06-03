@@ -95,14 +95,7 @@ function buildListConditions(params: ListProductsParams): SQL[] {
   // Catálogo para composição / filtros de stock e canal são para listagem operacional;
   // com `status=archived` ignoramos para não esconder arquivos por filtros herdados na URL.
   if (!archivedOnly && composeCatalog) {
-    conditions.push(
-      inArray(products.productType, [
-        "finished_product",
-        "raw_material",
-        "packaging",
-        "consumable",
-      ]),
-    );
+    conditions.push(inArray(products.productType, ["raw_material", "packaging", "consumable"]));
   } else if (productType) {
     conditions.push(eq(products.productType, productType as Product["productType"]));
   }

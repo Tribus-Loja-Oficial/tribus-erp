@@ -185,7 +185,7 @@ export const listProductsSchema = z.object({
   q: z.string().max(200).optional(),
   status: z.enum(["draft", "active", "inactive", "archived"]).optional(),
   productType: productTypeSchema.optional(),
-  /** Quando true, restringe a tipos elegíveis para composição (BOM/embalagem). */
+  /** Quando true, restringe a matéria-prima, insumo operacional e embalagem (exclui produto final, kit e bundle). */
   composeCatalog: z.preprocess(
     (v) => v === "1" || v === "true" || v === "yes" || v === true,
     z.boolean().default(false),
