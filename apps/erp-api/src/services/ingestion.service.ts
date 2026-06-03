@@ -39,11 +39,13 @@ import { INGESTION_TYPE_ORDER } from "../schemas/ingestion.schemas.js";
 
 export type CompositionSetItemError = { index: number; message: string };
 
-/** Metadados de `product_composition_set` na resposta de execução / dry-run. */
+/** Metadados de `product_composition_set` / `line_composition_set` na resposta de execução / dry-run. */
 export type CompositionSetResultPayload = {
-  parentProductId: string;
+  parentProductId?: string;
+  parentLineId?: string;
   parentSku?: string;
   parentSlug?: string;
+  parentLineSlug?: string;
   removedCount: number;
   createdCount: number;
   itemErrors?: CompositionSetItemError[];
@@ -1720,7 +1722,12 @@ async function createIngestionObject(
         id: parentLineId,
         outcome: "updated",
         warnings,
-        detail: `Linha ${parentRow?.slug ?? parentLineId}: removidas ${removedCount}, criadas ${createdCount}.`,
+        compositionSet: {
+          parentLineId,
+          parentLineSlug: parentRow?.slug ?? undefined,
+          removedCount,
+          createdCount,
+        },
       };
     }
     case "inventory_movement": {
