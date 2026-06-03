@@ -156,6 +156,20 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "history", label: "Histórico" },
 ];
 
+/** Embalagem, matéria-prima e consumível: sem composição própria nem preços de venda ao cliente. */
+const SUPPLY_CHAIN_PRODUCT_TYPES = new Set(["packaging", "raw_material", "consumable"]);
+
+function isSupplyChainProductType(productType: string): boolean {
+  return SUPPLY_CHAIN_PRODUCT_TYPES.has(productType);
+}
+
+function visibleTabsForProductType(productType: string): typeof TABS {
+  if (isSupplyChainProductType(productType)) {
+    return TABS.filter((t) => t.id !== "composition");
+  }
+  return TABS;
+}
+
 const PRODUCT_TYPES: { value: string; label: string }[] = [
   { value: "finished_product", label: "Produto final (venda ao cliente)" },
   { value: "raw_material", label: "Matéria-prima" },
@@ -311,6 +325,62 @@ function compositionCostBaseLabel(
   return `${formatCurrency(unitCostCents ?? 0)} / ${compositionRateUnitSuffix(quantityUnit)}`;
 }
 
+type ProductCostUnitBasis = "average" | "consumption_unit" | "legacy_cost_price";
+
+function productCostUnitBasisFromRecord(product: Record<string, unknown>): ProductCostUnitBasis {
+  const averageCost = product.averageCostDecimal;
+  if (averageCost != null && Number.isFinite(Number(averageCost)) && Number(averageCost) >= 0) {
+    return "average";
+  }
+  const perConsumption = product.costPerConsumptionUnitCents;
+  if (
+    perConsumption != null &&
+    Number.isFinite(Number(perConsumption)) &&
+    Number(perConsumption) >= 0
+  ) {
+    return "consumption_unit";
+  }
+  return "legacy_cost_price";
+}
+
+function productCostDisplayUnit(
+  product: Record<string, unknown>,
+  basis: ProductCostUnitBasis,
+): string {
+  if (basis === "average") {
+    const avgUnit = String(product.averageCostUnit ?? "").trim();
+    if (avgUnit) return compositionRateUnitSuffix(avgUnit);
+  }
+  const consumption = String(product.consumptionUnit ?? "").trim();
+  if (consumption) return compositionRateUnitSuffix(consumption);
+  return compositionRateUnitSuffix(String(product.unitOfMeasure ?? ""));
+}
+
+function productCostBaseInfoTooltip(product: Record<string, unknown>): string {
+  const basis = productCostUnitBasisFromRecord(product);
+  const unit = productCostDisplayUnit(product, basis);
+  const parts = [
+    `Valor referenciado por ${unit} (unidade usada na composição de produtos finais).`,
+    `Critério ativo: ${compositionCostBasisLabel(basis)}.`,
+    `Origem no cadastro: ${productCostSourceLabel(String(product.costSource ?? "unknown"))}.`,
+  ];
+  if (basis === "average" && product.averageCostDecimal != null) {
+    parts.push(
+      `Custo médio ponderado (compras): R$ ${Number(product.averageCostDecimal).toFixed(4)} / ${unit}.`,
+    );
+  } else if (basis === "consumption_unit" && product.costPerConsumptionUnitCents != null) {
+    parts.push(
+      `Custo proporcional cadastrado: R$ ${(Number(product.costPerConsumptionUnitCents) / 100).toFixed(4)} / ${unit}.`,
+    );
+  } else {
+    parts.push(
+      "Campo «Custo base» do cadastro — registre entradas de compra para formar custo médio real.",
+    );
+    if (product.costSource === "legacy_ingestion") parts.push(COMPOSITION_LEGACY_COST_TOOLTIP);
+  }
+  return parts.join(" ");
+}
+
 function CompositionColumnHelp({ title }: { title: string }) {
   return (
     <span className="inline-flex cursor-help text-zinc-400" title={title}>
@@ -354,6 +424,44 @@ function compositionCostSourceDetail(row: CompositionRow): string {
   ];
   if (row.childLegacyCostWarning) parts.push(COMPOSITION_LEGACY_COST_TOOLTIP);
   return parts.filter((p) => p && p !== "—").join(" · ");
+}
+
+function compositionCostBaseTooltip(row: CompositionRow): string {
+  const unit = compositionRateUnitSuffix(row.quantityUnit);
+  const parts = [
+    `Taxa na unidade desta linha (${unit}): ${compositionCostBaseLabel(row.childUnitCostCents, row.quantityUnit)}.`,
+    compositionCostSourceDetail(row),
+  ];
+  if (row.childAverageCostUnit?.trim()) {
+    parts.push(`Unidade do custo médio no cadastro: ${row.childAverageCostUnit.trim()}.`);
+  }
+  return parts.filter(Boolean).join(" ");
+}
+
+function CompositionCostBaseCell({ row }: { row: CompositionRow }) {
+  return (
+    <td className={compositionTableTdNumeric}>
+      <span className="inline-flex items-center justify-end gap-1">
+        {compositionCostBaseLabel(row.childUnitCostCents, row.quantityUnit)}
+        <CompositionColumnHelp title={compositionCostBaseTooltip(row)} />
+      </span>
+    </td>
+  );
+}
+
+function snapshotLineCostBaseTooltip(line: ProductCostSnapshotComponentLineRow): string {
+  const unit = compositionRateUnitSuffix(line.quantityUnit);
+  const parts = [
+    line.unitCost != null
+      ? `Taxa na unidade desta linha (${unit}): ${compositionCostBaseLabel(line.unitCost, line.quantityUnit)}.`
+      : null,
+    compositionCostBasisLabel(line.unitCostBasis),
+    productCostSourceLabel(line.costSource),
+  ];
+  if (line.averageCostUnit?.trim()) {
+    parts.push(`Unidade do custo médio: ${line.averageCostUnit.trim()}.`);
+  }
+  return parts.filter((p) => p && p !== "—").join(" ");
 }
 
 function compositionCostSourceChip(row: CompositionRow): {
@@ -482,9 +590,7 @@ function CompositionDisplayRows({
             ? productTypeLabel(row.childProductType)
             : packagingChannelLabel(row.packagingChannel)}
         </td>
-        <td className={compositionTableTdNumeric}>
-          {compositionCostBaseLabel(row.childUnitCostCents, row.quantityUnit)}
-        </td>
+        <CompositionCostBaseCell row={row} />
         <td className={compositionTableTdNumeric}>
           {compositionUsagePerPieceLabel(row.quantity, row.quantityUnit)}
         </td>
@@ -910,6 +1016,27 @@ export function ProductOperationalForm({
     });
   };
 
+  const isSupplyProduct = isSupplyChainProductType(productType);
+  const visibleTabs = useMemo(() => visibleTabsForProductType(productType), [productType]);
+  const productCostBasis = useMemo(
+    () => productCostUnitBasisFromRecord(initialProduct),
+    [initialProduct],
+  );
+  const productCostUnit = useMemo(
+    () => productCostDisplayUnit(initialProduct, productCostBasis),
+    [initialProduct, productCostBasis],
+  );
+  const productCostBaseTooltip = useMemo(
+    () => productCostBaseInfoTooltip(initialProduct),
+    [initialProduct],
+  );
+
+  useEffect(() => {
+    if (isSupplyProduct && tab === "composition") {
+      setTab("prices");
+    }
+  }, [isSupplyProduct, tab]);
+
   const saleCents = useMemo(() => inputToCents(salePrice), [salePrice]);
   const costCents = useMemo(() => inputToCents(costPrice), [costPrice]);
 
@@ -1294,7 +1421,7 @@ export function ProductOperationalForm({
       <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
         <div className="min-w-0 space-y-4">
           <div className="flex flex-wrap gap-1 rounded-lg border border-zinc-200 bg-zinc-50 p-1">
-            {TABS.map((t) => (
+            {visibleTabs.map((t) => (
               <button
                 key={t.id}
                 type="button"
@@ -1518,71 +1645,89 @@ export function ProductOperationalForm({
             {tab === "prices" && (
               <div className="space-y-4">
                 <div className="grid gap-4 md:grid-cols-2">
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-zinc-600">
-                      Preço de venda (R$)
-                    </label>
-                    <input
-                      value={salePrice}
-                      onChange={(e) => setSalePrice(e.target.value)}
-                      className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm tabular-nums"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-zinc-600">
-                      Custo base (R$)
+                  {!isSupplyProduct ? (
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-zinc-600">
+                        Preço de venda (R$)
+                      </label>
+                      <input
+                        value={salePrice}
+                        onChange={(e) => setSalePrice(e.target.value)}
+                        className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm tabular-nums"
+                      />
+                    </div>
+                  ) : null}
+                  <div className={isSupplyProduct ? "md:col-span-2" : undefined}>
+                    <label className="mb-1 flex flex-wrap items-center gap-1 text-xs font-medium text-zinc-600">
+                      <span>Custo base (R$)</span>
+                      {isSupplyProduct ? (
+                        <>
+                          <span className="font-normal text-zinc-500">— por {productCostUnit}</span>
+                          <CompositionColumnHelp title={productCostBaseTooltip} />
+                        </>
+                      ) : null}
                     </label>
                     <input
                       value={costPrice}
                       onChange={(e) => setCostPrice(e.target.value)}
-                      className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm tabular-nums"
+                      className={`w-full rounded-md border border-zinc-300 px-3 py-2 text-sm tabular-nums ${isSupplyProduct ? "max-w-xs" : ""}`}
                     />
+                    {isSupplyProduct ? (
+                      <p className="mt-1 text-xs text-zinc-500">
+                        Na composição de produtos finais, o ERP prioriza custo médio de compras,
+                        depois custo proporcional cadastrado e, por último, este custo base.
+                      </p>
+                    ) : null}
                   </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-zinc-600">
-                      Preço promocional (R$)
-                    </label>
-                    <input
-                      value={promotionalPrice}
-                      onChange={(e) => setPromotionalPrice(e.target.value)}
-                      className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm tabular-nums"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-zinc-600">
-                      Preço evento (R$)
-                    </label>
-                    <input
-                      value={eventPrice}
-                      onChange={(e) => setEventPrice(e.target.value)}
-                      className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm tabular-nums"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-zinc-600">
-                      Preço atacado (R$)
-                    </label>
-                    <input
-                      value={wholesalePrice}
-                      onChange={(e) => setWholesalePrice(e.target.value)}
-                      className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm tabular-nums"
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="mb-1 block text-xs font-medium text-zinc-600">
-                      Preço de referência — compare at (R$)
-                    </label>
-                    <input
-                      value={compareAtPrice}
-                      onChange={(e) => setCompareAtPrice(e.target.value)}
-                      className="w-full max-w-xs rounded-md border border-zinc-300 px-3 py-2 text-sm tabular-nums"
-                      placeholder="Opcional"
-                    />
-                    <p className="mt-1 text-xs text-zinc-500">
-                      Campo legado para “preço antes da promoção” em integrações; o ERP prioriza
-                      preço promocional explícito quando ambos existirem.
-                    </p>
-                  </div>
+                  {!isSupplyProduct ? (
+                    <>
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-zinc-600">
+                          Preço promocional (R$)
+                        </label>
+                        <input
+                          value={promotionalPrice}
+                          onChange={(e) => setPromotionalPrice(e.target.value)}
+                          className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm tabular-nums"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-zinc-600">
+                          Preço evento (R$)
+                        </label>
+                        <input
+                          value={eventPrice}
+                          onChange={(e) => setEventPrice(e.target.value)}
+                          className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm tabular-nums"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-zinc-600">
+                          Preço atacado (R$)
+                        </label>
+                        <input
+                          value={wholesalePrice}
+                          onChange={(e) => setWholesalePrice(e.target.value)}
+                          className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm tabular-nums"
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="mb-1 block text-xs font-medium text-zinc-600">
+                          Preço de referência — compare at (R$)
+                        </label>
+                        <input
+                          value={compareAtPrice}
+                          onChange={(e) => setCompareAtPrice(e.target.value)}
+                          className="w-full max-w-xs rounded-md border border-zinc-300 px-3 py-2 text-sm tabular-nums"
+                          placeholder="Opcional"
+                        />
+                        <p className="mt-1 text-xs text-zinc-500">
+                          Campo legado para “preço antes da promoção” em integrações; o ERP prioriza
+                          preço promocional explícito quando ambos existirem.
+                        </p>
+                      </div>
+                    </>
+                  ) : null}
                   {productType === "raw_material" ? (
                     <div className="space-y-3 rounded-lg border border-sky-200 bg-sky-50 p-4 md:col-span-2">
                       <p className="text-xs font-semibold text-sky-950">
@@ -1654,8 +1799,9 @@ export function ProductOperationalForm({
                 <div className="rounded-lg border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm">
                   <p className="font-medium text-zinc-800">Custos (servidor)</p>
                   <p className="mt-1 text-xs text-zinc-600">
-                    Custo base (campo acima) é independente. Totais com composição e produção vêm da
-                    aba Composição e do perfil de produção.
+                    {isSupplyProduct
+                      ? "Custo médio e última compra vêm das entradas de estoque. Este insumo entra na composição de produtos finais na unidade indicada acima."
+                      : "Custo base (campo acima) é independente. Totais com composição e produção vêm da aba Composição e do perfil de produção."}
                   </p>
                   <ul className="mt-2 grid gap-1 text-xs text-zinc-600 sm:grid-cols-2">
                     <li>
@@ -1698,7 +1844,9 @@ export function ProductOperationalForm({
                     </ul>
                   ) : (
                     <p className="mt-2 text-xs text-zinc-500">
-                      Guarde o produto e defina composição para ver o detalhe de custos.
+                      {isSupplyProduct
+                        ? "Este tipo de produto não possui composição própria; custos agregados aparecem nos produtos finais que o utilizam."
+                        : "Guarde o produto e defina composição para ver o detalhe de custos."}
                     </p>
                   )}
                   {mode === "edit" && productId && initialBomParents.length > 0 ? (
@@ -1726,24 +1874,28 @@ export function ProductOperationalForm({
                       </ul>
                     </div>
                   ) : null}
-                  <div className="mt-3 flex flex-wrap gap-4 border-t border-zinc-200 pt-3 text-zinc-800">
-                    <span>
-                      Margem (online):{" "}
-                      <strong>
-                        {marginOnlinePct === null ? "—" : `${marginOnlinePct.toFixed(1)}%`}
-                      </strong>
-                    </span>
-                    <span>
-                      Margem (presencial):{" "}
-                      <strong>
-                        {marginPresentialPct === null ? "—" : `${marginPresentialPct.toFixed(1)}%`}
-                      </strong>
-                    </span>
-                    <span>
-                      Markup (ref. online):{" "}
-                      <strong>{markupVal === null ? "—" : `${markupVal.toFixed(2)}×`}</strong>
-                    </span>
-                  </div>
+                  {!isSupplyProduct ? (
+                    <div className="mt-3 flex flex-wrap gap-4 border-t border-zinc-200 pt-3 text-zinc-800">
+                      <span>
+                        Margem (online):{" "}
+                        <strong>
+                          {marginOnlinePct === null ? "—" : `${marginOnlinePct.toFixed(1)}%`}
+                        </strong>
+                      </span>
+                      <span>
+                        Margem (presencial):{" "}
+                        <strong>
+                          {marginPresentialPct === null
+                            ? "—"
+                            : `${marginPresentialPct.toFixed(1)}%`}
+                        </strong>
+                      </span>
+                      <span>
+                        Markup (ref. online):{" "}
+                        <strong>{markupVal === null ? "—" : `${markupVal.toFixed(2)}×`}</strong>
+                      </span>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             )}
@@ -2962,12 +3114,19 @@ export function ProductOperationalForm({
                                           {line.compositionType ?? "—"}
                                         </td>
                                         <td className="px-2 py-1.5 text-right align-top whitespace-nowrap text-zinc-800 tabular-nums">
-                                          {line.unitCost != null
-                                            ? compositionCostBaseLabel(
+                                          {line.unitCost != null ? (
+                                            <span className="inline-flex items-center justify-end gap-1">
+                                              {compositionCostBaseLabel(
                                                 line.unitCost,
                                                 line.quantityUnit,
-                                              )
-                                            : "—"}
+                                              )}
+                                              <CompositionColumnHelp
+                                                title={snapshotLineCostBaseTooltip(line)}
+                                              />
+                                            </span>
+                                          ) : (
+                                            "—"
+                                          )}
                                         </td>
                                         <td className="px-2 py-1.5 align-top whitespace-nowrap text-zinc-800 tabular-nums">
                                           {line.quantity != null
@@ -3136,10 +3295,12 @@ export function ProductOperationalForm({
                   {productType.replace(/_/g, " ")}
                 </dd>
               </div>
-              <div className="flex justify-between gap-2">
-                <dt className="text-zinc-500">Preço venda</dt>
-                <dd className="text-zinc-900 tabular-nums">{formatCurrency(saleCents)}</dd>
-              </div>
+              {!isSupplyProduct ? (
+                <div className="flex justify-between gap-2">
+                  <dt className="text-zinc-500">Preço venda</dt>
+                  <dd className="text-zinc-900 tabular-nums">{formatCurrency(saleCents)}</dd>
+                </div>
+              ) : null}
               <div className="flex justify-between gap-2">
                 <dt className="text-zinc-500">Custo materiais</dt>
                 <dd className="text-zinc-800 tabular-nums">
@@ -3164,18 +3325,22 @@ export function ProductOperationalForm({
                     : formatCurrency(costCents)}
                 </dd>
               </div>
-              <div className="flex justify-between gap-2">
-                <dt className="text-zinc-500">Margem (online)</dt>
-                <dd className="text-emerald-700 tabular-nums">
-                  {marginOnlinePct === null ? "—" : `${marginOnlinePct.toFixed(1)}%`}
-                </dd>
-              </div>
-              <div className="flex justify-between gap-2">
-                <dt className="text-zinc-500">Margem (presencial)</dt>
-                <dd className="text-emerald-700 tabular-nums">
-                  {marginPresentialPct === null ? "—" : `${marginPresentialPct.toFixed(1)}%`}
-                </dd>
-              </div>
+              {!isSupplyProduct ? (
+                <>
+                  <div className="flex justify-between gap-2">
+                    <dt className="text-zinc-500">Margem (online)</dt>
+                    <dd className="text-emerald-700 tabular-nums">
+                      {marginOnlinePct === null ? "—" : `${marginOnlinePct.toFixed(1)}%`}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <dt className="text-zinc-500">Margem (presencial)</dt>
+                    <dd className="text-emerald-700 tabular-nums">
+                      {marginPresentialPct === null ? "—" : `${marginPresentialPct.toFixed(1)}%`}
+                    </dd>
+                  </div>
+                </>
+              ) : null}
               <div className="flex justify-between gap-2">
                 <dt className="text-zinc-500">Estoque mín.</dt>
                 <dd className="tabular-nums">{minStock || "0"}</dd>
