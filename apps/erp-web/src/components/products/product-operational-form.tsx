@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronDown, ChevronRight, Eye, Info } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, Eye, Info } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { cn, formatCurrency, formatDateTime } from "@/lib/utils";
@@ -364,7 +364,7 @@ function PackagingChannelSelect({
 }
 
 const COMPOSITION_COST_BASE_HEADER_TOOLTIP =
-  "Custo normalizado do componente na unidade usada nesta linha, como R$/m, R$/cm, R$/g ou R$/unidade. Vem do custo médio das 2 últimas compras (ponderado por quantidade) ou do custo base legado do cadastro.";
+  "Custo do componente na unidade desta linha (R$/m, R$/unidade, etc.). Passe o cursor sobre o ícone ao lado de cada valor para ver a fonte (média de compras, legado, etc.).";
 
 const COMPOSITION_COST_ON_PRODUCT_HEADER_TOOLTIP =
   "Valor deste componente em uma unidade do produto final: uso por peça × custo base.";
@@ -451,10 +451,14 @@ function productCostBaseInfoTooltip(product: Record<string, unknown>): string {
   return lines.join(" ");
 }
 
-function CompositionColumnHelp({ title }: { title: string }) {
+function CompositionColumnHelp({ title, warn = false }: { title: string; warn?: boolean }) {
+  const Icon = warn ? AlertTriangle : Info;
   return (
-    <span className="inline-flex cursor-help text-zinc-400" title={title}>
-      <Info className="h-3.5 w-3.5 shrink-0" aria-hidden />
+    <span
+      className={cn("inline-flex shrink-0 cursor-help", warn ? "text-amber-600" : "text-zinc-400")}
+      title={title}
+    >
+      <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
       <span className="sr-only">{title}</span>
     </span>
   );
@@ -548,83 +552,77 @@ function CompositionCostHeader({ label, tooltip }: { label: ReactNode; tooltip: 
   );
 }
 
-function compositionCostSourceDetail(row: CompositionRow): string {
-  const parts = [
-    compositionCostBasisLabel(row.childUnitCostBasis),
-    productCostSourceLabel(row.childCostSource),
-  ];
-  if (row.childLegacyCostWarning) parts.push(COMPOSITION_LEGACY_COST_TOOLTIP);
-  return parts.filter((p) => p && p !== "—").join(" · ");
+function compositionCostSourceChip(row: CompositionRow): { label: string; warn: boolean } {
+  if (row.childLegacyCostWarning) {
+    return { label: "Legado", warn: true };
+  }
+  switch (row.childUnitCostBasis) {
+    case "average":
+      return { label: "Médio", warn: false };
+    case "legacy_cost_price":
+      return { label: "Legado", warn: true };
+    default: {
+      const src = productCostSourceLabel(row.childCostSource);
+      return { label: src === "Desconhecido" ? "—" : src, warn: false };
+    }
+  }
 }
 
-function compositionCostBaseTooltip(row: CompositionRow): string {
+function compositionMergedCostTooltip(row: CompositionRow): string {
+  const chip = compositionCostSourceChip(row);
   const unit = compositionRateUnitSuffix(row.quantityUnit);
-  const parts = [
-    `Taxa na unidade desta linha (${unit}): ${compositionCostBaseLabel(row.childUnitCostCents, row.quantityUnit)}.`,
-    compositionCostSourceDetail(row),
+  const lines = [
+    `Valor: ${compositionCostBaseLabel(row.childUnitCostCents, row.quantityUnit)} (${unit} nesta linha).`,
+    `Fonte: ${chip.label}.`,
   ];
-  if (row.childAverageCostUnit?.trim()) {
-    parts.push(`Unidade do custo médio no cadastro: ${row.childAverageCostUnit.trim()}.`);
+  const basis = compositionCostBasisLabel(row.childUnitCostBasis);
+  if (basis !== "—") lines.push(basis + ".");
+  const source = productCostSourceLabel(row.childCostSource);
+  if (source !== "Desconhecido") lines.push(`Origem no cadastro: ${source}.`);
+  if (row.childLegacyCostWarning) {
+    lines.push("Custo legado — registre compras para formar média real.");
   }
-  return parts.filter(Boolean).join(" ");
+  if (row.childAverageCostUnit?.trim()) {
+    lines.push(`Unidade do custo médio: ${row.childAverageCostUnit.trim()}.`);
+  }
+  return lines.join("\n");
 }
 
 function CompositionCostBaseCell({ row }: { row: CompositionRow }) {
+  const chip = compositionCostSourceChip(row);
   return (
     <td className={compositionTableTdNumeric}>
       <span className="inline-flex items-center justify-end gap-1">
         {compositionCostBaseLabel(row.childUnitCostCents, row.quantityUnit)}
-        <CompositionColumnHelp title={compositionCostBaseTooltip(row)} />
+        <CompositionColumnHelp title={compositionMergedCostTooltip(row)} warn={chip.warn} />
       </span>
     </td>
   );
 }
 
-function snapshotLineCostBaseTooltip(line: ProductCostSnapshotComponentLineRow): string {
+function snapshotMergedCostTooltip(line: ProductCostSnapshotComponentLineRow): string {
   const unit = compositionRateUnitSuffix(line.quantityUnit);
-  const parts = [
-    line.unitCost != null
-      ? `Taxa na unidade desta linha (${unit}): ${compositionCostBaseLabel(line.unitCost, line.quantityUnit)}.`
-      : null,
-    compositionCostBasisLabel(line.unitCostBasis),
-    productCostSourceLabel(line.costSource),
-  ];
-  if (line.averageCostUnit?.trim()) {
-    parts.push(`Unidade do custo médio: ${line.averageCostUnit.trim()}.`);
+  const lines: string[] = [];
+  if (line.unitCost != null) {
+    lines.push(
+      `Valor: ${compositionCostBaseLabel(line.unitCost, line.quantityUnit)} (${unit} nesta linha).`,
+    );
   }
-  return parts.filter((p) => p && p !== "—").join(" ");
+  const basis = compositionCostBasisLabel(line.unitCostBasis);
+  if (basis !== "—") lines.push(basis + ".");
+  const source = productCostSourceLabel(line.costSource);
+  if (source !== "Desconhecido") lines.push(`Fonte: ${source}.`);
+  if (snapshotCostSourceWarn(line)) {
+    lines.push("Custo legado — registre compras para formar média real.");
+  }
+  if (line.averageCostUnit?.trim()) {
+    lines.push(`Unidade do custo médio: ${line.averageCostUnit.trim()}.`);
+  }
+  return lines.join("\n");
 }
 
-function compositionCostSourceChip(row: CompositionRow): {
-  label: string;
-  warn: boolean;
-  title: string;
-} {
-  if (row.childLegacyCostWarning) {
-    return {
-      label: "Legado ⚠",
-      warn: true,
-      title: compositionCostSourceDetail(row),
-    };
-  }
-  switch (row.childUnitCostBasis) {
-    case "average":
-      return { label: "Médio", warn: false, title: compositionCostSourceDetail(row) };
-    case "legacy_cost_price":
-      return {
-        label: "Legado",
-        warn: true,
-        title: compositionCostSourceDetail(row),
-      };
-    default: {
-      const src = productCostSourceLabel(row.childCostSource);
-      return {
-        label: src === "Desconhecido" ? "—" : src,
-        warn: false,
-        title: compositionCostSourceDetail(row),
-      };
-    }
-  }
+function snapshotCostSourceWarn(line: ProductCostSnapshotComponentLineRow): boolean {
+  return line.unitCostBasis === "legacy_cost_price" || line.costSource === "legacy_ingestion";
 }
 
 function CompositionChildQuickEditButton({
@@ -886,32 +884,6 @@ function CompositionComponentCell({
   );
 }
 
-function CompositionCostSourceCell({ row }: { row: CompositionRow }) {
-  const chip = compositionCostSourceChip(row);
-  if (chip.label === "—") {
-    return (
-      <td className={compositionTableTd}>
-        <span className="text-zinc-400">—</span>
-      </td>
-    );
-  }
-  return (
-    <td className={compositionTableTd}>
-      <span
-        className={cn(
-          "inline-flex cursor-help items-center rounded-full border px-2 py-0.5 text-[11px] leading-tight font-medium whitespace-nowrap",
-          chip.warn
-            ? "border-amber-200 bg-amber-50 text-amber-950"
-            : "border-zinc-200 bg-zinc-100 text-zinc-700",
-        )}
-        title={chip.title}
-      >
-        {chip.label}
-      </span>
-    </td>
-  );
-}
-
 function compositionRowHasExpandableDetails(row: CompositionRow): boolean {
   return Boolean(
     row.notes?.trim() ||
@@ -1016,7 +988,6 @@ function CompositionTableRow({
         <td className={`${compositionTableTdNumeric} font-medium text-zinc-900`}>
           {formatCurrency(row.lineCostCents ?? 0)}
         </td>
-        <CompositionCostSourceCell row={row} />
         <td
           className={`${compositionTableTd} text-xs whitespace-nowrap text-zinc-600 tabular-nums`}
         >
@@ -1164,8 +1135,8 @@ function CompositionLegacyCostBanner({ count }: { count: number }) {
   return (
     <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-snug text-amber-950">
       {count === 1 ? "1 componente usa custo legado." : `${count} componentes usam custo legado.`}{" "}
-      Passe o cursor sobre o chip «Legado» na coluna Fonte do custo para ver o detalhe. Registre
-      compras para atualizar o custo médio dos materiais.
+      Passe o cursor sobre o ícone ⚠ ao lado do custo base para ver o detalhe. Registre compras para
+      atualizar o custo médio dos materiais.
     </p>
   );
 }
@@ -2607,7 +2578,6 @@ export function ProductOperationalForm({
                             <col className="w-[10.5rem]" />
                             <col className="w-[6.5rem]" />
                             <col className="w-[9rem]" />
-                            <col />
                             <col className="w-[7.5rem]" />
                             <col className="w-[9rem]" />
                             <col className="w-[5.5rem]" />
@@ -2626,7 +2596,6 @@ export function ProductOperationalForm({
                                 label={<CompositionCalculatedUsageCostHeaderLabel />}
                                 tooltip={COMPOSITION_COST_ON_PRODUCT_HEADER_TOOLTIP}
                               />
-                              <th className={compositionTableTh}>Fonte do custo</th>
                               <th className={compositionTableTh}>Atualizado em</th>
                               <th className={compositionTableTh}>Última compra/entrada</th>
                               <th className={compositionTableTh}>Notas</th>
@@ -2636,7 +2605,7 @@ export function ProductOperationalForm({
                           <tbody>
                             {lineBomRows.length === 0 && productBomRows.length === 0 ? (
                               <tr>
-                                <td colSpan={10} className="px-3 py-4 text-center text-zinc-500">
+                                <td colSpan={9} className="px-3 py-4 text-center text-zinc-500">
                                   Nenhum material na BOM.
                                 </td>
                               </tr>
@@ -2645,7 +2614,7 @@ export function ProductOperationalForm({
                                 {lineBomRows.length > 0 ? (
                                   <tr className="bg-sky-50/80">
                                     <td
-                                      colSpan={10}
+                                      colSpan={9}
                                       className="px-3 py-2 text-xs font-semibold text-sky-900"
                                     >
                                       Receita da linha
@@ -2659,7 +2628,7 @@ export function ProductOperationalForm({
                                       key={row.id}
                                       row={row}
                                       kind="bom"
-                                      colSpan={10}
+                                      colSpan={9}
                                       showNotes
                                       editing={Boolean(draft)}
                                       draft={draft}
@@ -2683,7 +2652,7 @@ export function ProductOperationalForm({
                                 {productBomRows.length > 0 ? (
                                   <tr>
                                     <td
-                                      colSpan={10}
+                                      colSpan={9}
                                       className="bg-white px-3 py-2 text-xs font-semibold text-zinc-800"
                                     >
                                       Específico deste produto
@@ -2697,7 +2666,7 @@ export function ProductOperationalForm({
                                       key={row.id}
                                       row={row}
                                       kind="bom"
-                                      colSpan={10}
+                                      colSpan={9}
                                       showNotes
                                       editing={Boolean(draft)}
                                       draft={draft}
@@ -2772,7 +2741,6 @@ export function ProductOperationalForm({
                             <col className="w-[10.5rem]" />
                             <col className="w-[6.5rem]" />
                             <col className="w-[9rem]" />
-                            <col />
                             <col className="w-[7.5rem]" />
                             <col className="w-[9rem]" />
                             <col className="w-[4.5rem]" />
@@ -2790,7 +2758,6 @@ export function ProductOperationalForm({
                                 label={<CompositionCalculatedUsageCostHeaderLabel />}
                                 tooltip={COMPOSITION_COST_ON_PRODUCT_HEADER_TOOLTIP}
                               />
-                              <th className={compositionTableTh}>Fonte do custo</th>
                               <th className={compositionTableTh}>Atualizado em</th>
                               <th className={compositionTableTh}>Última compra/entrada</th>
                               <th className={`${compositionTableTh} w-0`} aria-label="Ações" />
@@ -2799,7 +2766,7 @@ export function ProductOperationalForm({
                           <tbody>
                             {linePackagingRows.length === 0 && productPackagingRows.length === 0 ? (
                               <tr>
-                                <td colSpan={9} className="px-3 py-4 text-center text-zinc-500">
+                                <td colSpan={8} className="px-3 py-4 text-center text-zinc-500">
                                   Nenhuma embalagem cadastrada.
                                 </td>
                               </tr>
@@ -2808,7 +2775,7 @@ export function ProductOperationalForm({
                                 {linePackagingRows.length > 0 ? (
                                   <tr className="bg-sky-50/80">
                                     <td
-                                      colSpan={9}
+                                      colSpan={8}
                                       className="px-3 py-2 text-xs font-semibold text-sky-900"
                                     >
                                       Receita da linha
@@ -2822,7 +2789,7 @@ export function ProductOperationalForm({
                                       key={row.id}
                                       row={row}
                                       kind="packaging"
-                                      colSpan={9}
+                                      colSpan={8}
                                       showNotes={false}
                                       editing={Boolean(draft)}
                                       draft={draft}
@@ -2846,7 +2813,7 @@ export function ProductOperationalForm({
                                 {productPackagingRows.length > 0 ? (
                                   <tr>
                                     <td
-                                      colSpan={9}
+                                      colSpan={8}
                                       className="px-3 py-2 text-xs font-semibold text-zinc-800"
                                     >
                                       Específico deste produto
@@ -2860,7 +2827,7 @@ export function ProductOperationalForm({
                                       key={row.id}
                                       row={row}
                                       kind="packaging"
-                                      colSpan={9}
+                                      colSpan={8}
                                       showNotes={false}
                                       editing={Boolean(draft)}
                                       draft={draft}
@@ -3604,9 +3571,6 @@ export function ProductOperationalForm({
                                           />
                                         </span>
                                       </th>
-                                      <th className="px-2 py-1.5 font-semibold whitespace-nowrap text-zinc-600">
-                                        Fonte do custo
-                                      </th>
                                     </tr>
                                   </thead>
                                   <tbody>
@@ -3644,7 +3608,8 @@ export function ProductOperationalForm({
                                                 line.quantityUnit,
                                               )}
                                               <CompositionColumnHelp
-                                                title={snapshotLineCostBaseTooltip(line)}
+                                                title={snapshotMergedCostTooltip(line)}
+                                                warn={snapshotCostSourceWarn(line)}
                                               />
                                             </span>
                                           ) : (
@@ -3671,9 +3636,6 @@ export function ProductOperationalForm({
                                           {line.lineTotalCents != null
                                             ? formatCurrency(line.lineTotalCents)
                                             : "—"}
-                                        </td>
-                                        <td className="px-2 py-1.5 align-top text-zinc-600">
-                                          {productCostSourceLabel(line.costSource)}
                                         </td>
                                       </tr>
                                     ))}
