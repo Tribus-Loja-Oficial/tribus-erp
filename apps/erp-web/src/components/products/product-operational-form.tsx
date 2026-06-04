@@ -668,13 +668,15 @@ function CompositionScopeToggle({
   value,
   onChange,
   lineDisabled,
+  className,
 }: {
   value: "line" | "product";
   onChange: (value: "line" | "product") => void;
   lineDisabled: boolean;
+  className?: string;
 }) {
   return (
-    <div className="mt-1.5 flex flex-wrap gap-1">
+    <div className={cn("mt-1.5 flex flex-wrap gap-1", className)}>
       <button
         type="button"
         disabled={lineDisabled}
@@ -805,12 +807,55 @@ function CompositionNotesEditor({
   );
 }
 
+function compositionScopeBadgeClass(scope: "line" | "product"): string {
+  return cn(
+    "inline-block rounded-full border px-1.5 py-0.5 text-[10px] font-semibold tracking-wide uppercase",
+    scope === "line"
+      ? "border-sky-200 bg-sky-100 text-sky-900"
+      : "border-zinc-200 bg-zinc-100 text-zinc-700",
+  );
+}
+
+function CompositionScopeCell({
+  row,
+  editing,
+  draft,
+  lineId,
+  onDraftChange,
+}: {
+  row: CompositionRow;
+  editing?: boolean;
+  draft?: CompositionEditDraft;
+  lineId?: string;
+  onDraftChange?: (patch: Partial<CompositionEditDraft>) => void;
+}) {
+  const scope = row.scope === "line" ? "line" : row.scope === "product" ? "product" : null;
+
+  return (
+    <td className={`${compositionTableTd} w-0 align-top whitespace-nowrap`}>
+      {editing && draft && onDraftChange ? (
+        <CompositionScopeToggle
+          value={draft.scope}
+          onChange={(nextScope) => onDraftChange({ scope: nextScope })}
+          lineDisabled={!lineId}
+          className="mt-0"
+        />
+      ) : scope ? (
+        <span className={compositionScopeBadgeClass(scope)}>
+          {scope === "line" ? "Linha" : "Produto"}
+        </span>
+      ) : (
+        <span className="text-zinc-400">—</span>
+      )}
+    </td>
+  );
+}
+
 function CompositionComponentCell({
   row,
   editing,
   draft,
   parentProductId,
-  lineId,
   onDraftChange,
   onQuickEditChildProduct,
 }: {
@@ -818,13 +863,11 @@ function CompositionComponentCell({
   editing?: boolean;
   draft?: CompositionEditDraft;
   parentProductId?: string;
-  lineId?: string;
   onDraftChange?: (patch: Partial<CompositionEditDraft>) => void;
   onQuickEditChildProduct?: (id: string, name: string) => void;
 }) {
   const name = String(row.childName ?? row.childProductId ?? "—");
   const sku = row.childSku?.trim();
-  const scopeLabel = row.scope === "line" ? "Linha" : row.scope === "product" ? "Produto" : null;
   const childId = draft?.childProductId ?? row.childProductId;
   const childName = name;
 
@@ -851,11 +894,6 @@ function CompositionComponentCell({
               />
             ) : null}
           </div>
-          <CompositionScopeToggle
-            value={draft.scope}
-            onChange={(scope) => onDraftChange({ scope })}
-            lineDisabled={!lineId}
-          />
         </div>
       </td>
     );
@@ -864,7 +902,7 @@ function CompositionComponentCell({
   return (
     <td className={compositionTableTd}>
       <div className="max-w-[14rem] min-w-0 sm:max-w-[18rem]">
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex items-start gap-1">
           {row.childProductId && onQuickEditChildProduct ? (
             <CompositionChildQuickEditButton
               productId={row.childProductId}
@@ -872,30 +910,20 @@ function CompositionComponentCell({
               onQuickEdit={onQuickEditChildProduct}
             />
           ) : null}
-          <div className="truncate font-medium text-zinc-900" title={name}>
-            {name}
+          <div className="min-w-0 flex-1">
+            <div className="truncate font-medium text-zinc-900" title={name}>
+              {name}
+            </div>
+            {sku ? (
+              <div
+                className="mt-0.5 truncate font-mono text-[11px] leading-tight text-zinc-500"
+                title={sku}
+              >
+                {sku}
+              </div>
+            ) : null}
           </div>
-          {scopeLabel ? (
-            <span
-              className={cn(
-                "shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold tracking-wide uppercase",
-                row.scope === "line"
-                  ? "border-sky-200 bg-sky-100 text-sky-900"
-                  : "border-zinc-200 bg-zinc-100 text-zinc-700",
-              )}
-            >
-              {scopeLabel}
-            </span>
-          ) : null}
         </div>
-        {sku ? (
-          <div
-            className="mt-0.5 truncate font-mono text-[11px] leading-tight text-zinc-500"
-            title={sku}
-          >
-            {sku}
-          </div>
-        ) : null}
       </div>
     </td>
   );
@@ -965,9 +993,15 @@ function CompositionTableRow({
           editing={editing}
           draft={draft}
           parentProductId={parentProductId}
-          lineId={lineId}
           onDraftChange={onDraftChange}
           onQuickEditChildProduct={onQuickEditChildProduct}
+        />
+        <CompositionScopeCell
+          row={row}
+          editing={editing}
+          draft={draft}
+          lineId={lineId}
+          onDraftChange={onDraftChange}
         />
         <td className={`${compositionTableTd} whitespace-nowrap`}>
           {editing && draft && kind === "packaging" ? (
@@ -2623,7 +2657,8 @@ export function ProductOperationalForm({
                       <div className="overflow-x-auto rounded-lg border border-zinc-200">
                         <table className="w-full min-w-[56rem] text-left text-sm">
                           <colgroup>
-                            <col className="w-[min(22rem,28%)]" />
+                            <col className="w-[min(20rem,26%)]" />
+                            <col className="w-[5.5rem]" />
                             <col className="w-[9.5rem]" />
                             <col className="w-[10.5rem]" />
                             <col className="w-[6.5rem]" />
@@ -2636,6 +2671,7 @@ export function ProductOperationalForm({
                           <thead className="border-b border-zinc-200 bg-zinc-50">
                             <tr>
                               <th className={compositionTableTh}>Componente</th>
+                              <th className={compositionTableTh}>Escopo</th>
                               <th className={compositionTableTh}>Tipo do componente</th>
                               <CompositionCostHeader
                                 label="Custo base"
@@ -2655,7 +2691,7 @@ export function ProductOperationalForm({
                           <tbody>
                             {lineBomRows.length === 0 && productBomRows.length === 0 ? (
                               <tr>
-                                <td colSpan={9} className="px-3 py-4 text-center text-zinc-500">
+                                <td colSpan={10} className="px-3 py-4 text-center text-zinc-500">
                                   Nenhum material na BOM.
                                 </td>
                               </tr>
@@ -2664,7 +2700,7 @@ export function ProductOperationalForm({
                                 {lineBomRows.length > 0 ? (
                                   <tr className="bg-sky-50/80">
                                     <td
-                                      colSpan={9}
+                                      colSpan={10}
                                       className="px-3 py-2 text-xs font-semibold text-sky-900"
                                     >
                                       Receita da linha
@@ -2678,7 +2714,7 @@ export function ProductOperationalForm({
                                       key={row.id}
                                       row={row}
                                       kind="bom"
-                                      colSpan={9}
+                                      colSpan={10}
                                       showNotes
                                       editing={Boolean(draft)}
                                       draft={draft}
@@ -2702,7 +2738,7 @@ export function ProductOperationalForm({
                                 {productBomRows.length > 0 ? (
                                   <tr>
                                     <td
-                                      colSpan={9}
+                                      colSpan={10}
                                       className="bg-white px-3 py-2 text-xs font-semibold text-zinc-800"
                                     >
                                       Específico deste produto
@@ -2716,7 +2752,7 @@ export function ProductOperationalForm({
                                       key={row.id}
                                       row={row}
                                       kind="bom"
-                                      colSpan={9}
+                                      colSpan={10}
                                       showNotes
                                       editing={Boolean(draft)}
                                       draft={draft}
@@ -2786,7 +2822,8 @@ export function ProductOperationalForm({
                       <div className="overflow-x-auto rounded-lg border border-zinc-200">
                         <table className="w-full min-w-[52rem] text-left text-sm">
                           <colgroup>
-                            <col className="w-[min(22rem,30%)]" />
+                            <col className="w-[min(20rem,28%)]" />
+                            <col className="w-[5.5rem]" />
                             <col className="w-[6rem]" />
                             <col className="w-[10.5rem]" />
                             <col className="w-[6.5rem]" />
@@ -2798,6 +2835,7 @@ export function ProductOperationalForm({
                           <thead className="border-b border-zinc-200 bg-zinc-50">
                             <tr>
                               <th className={compositionTableTh}>Componente</th>
+                              <th className={compositionTableTh}>Escopo</th>
                               <th className={compositionTableTh}>Canal</th>
                               <CompositionCostHeader
                                 label="Custo base"
@@ -2816,7 +2854,7 @@ export function ProductOperationalForm({
                           <tbody>
                             {linePackagingRows.length === 0 && productPackagingRows.length === 0 ? (
                               <tr>
-                                <td colSpan={8} className="px-3 py-4 text-center text-zinc-500">
+                                <td colSpan={9} className="px-3 py-4 text-center text-zinc-500">
                                   Nenhuma embalagem cadastrada.
                                 </td>
                               </tr>
@@ -2825,7 +2863,7 @@ export function ProductOperationalForm({
                                 {linePackagingRows.length > 0 ? (
                                   <tr className="bg-sky-50/80">
                                     <td
-                                      colSpan={8}
+                                      colSpan={9}
                                       className="px-3 py-2 text-xs font-semibold text-sky-900"
                                     >
                                       Receita da linha
@@ -2839,7 +2877,7 @@ export function ProductOperationalForm({
                                       key={row.id}
                                       row={row}
                                       kind="packaging"
-                                      colSpan={8}
+                                      colSpan={9}
                                       showNotes={false}
                                       editing={Boolean(draft)}
                                       draft={draft}
@@ -2863,7 +2901,7 @@ export function ProductOperationalForm({
                                 {productPackagingRows.length > 0 ? (
                                   <tr>
                                     <td
-                                      colSpan={8}
+                                      colSpan={9}
                                       className="px-3 py-2 text-xs font-semibold text-zinc-800"
                                     >
                                       Específico deste produto
@@ -2877,7 +2915,7 @@ export function ProductOperationalForm({
                                       key={row.id}
                                       row={row}
                                       kind="packaging"
-                                      colSpan={8}
+                                      colSpan={9}
                                       showNotes={false}
                                       editing={Boolean(draft)}
                                       draft={draft}
