@@ -404,117 +404,126 @@ export function ProductsListing({
         </div>
       )}
 
-      <div className="flex flex-wrap items-end gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
-        <div className="min-w-[200px] flex-1">
-          <label className="mb-1 block text-xs font-medium text-zinc-600">Busca</label>
-          <input
-            type="search"
-            defaultValue={qp.q ?? ""}
-            id="product-search-input"
-            placeholder="Buscar por SKU, nome ou descrição..."
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                const v = (e.target as HTMLInputElement).value.trim();
+      <div className="space-y-3 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-6">
+          <div className="min-w-0 sm:col-span-2 md:col-span-2 lg:col-span-2">
+            <label className="mb-1 block text-xs font-medium text-zinc-600">Busca</label>
+            <input
+              type="search"
+              defaultValue={qp.q ?? ""}
+              id="product-search-input"
+              placeholder="Buscar por SKU, nome ou descrição..."
+              className="block w-full min-w-0 rounded-md border border-zinc-300 bg-white px-3 py-2.5 text-sm text-zinc-900 shadow-sm transition-[border-color,box-shadow] hover:border-zinc-400 focus:border-zinc-500 focus:ring-2 focus:ring-zinc-200/80 focus:outline-none"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  const v = (e.target as HTMLInputElement).value.trim();
+                  replaceQuery({ q: v || undefined });
+                }
+              }}
+            />
+          </div>
+          <div className="min-w-0">
+            <label className="mb-1 block text-xs font-medium text-zinc-600">Tipo</label>
+            <Select
+              value={qp.productType ?? ""}
+              onChange={(e) => replaceQuery({ productType: e.target.value || undefined, page: 1 })}
+            >
+              {PRODUCT_TYPES.map((o) => (
+                <option key={o.value || "all"} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="min-w-0">
+            <label className="mb-1 block text-xs font-medium text-zinc-600">Estrutura</label>
+            <Select
+              value={qp.productKind ?? ""}
+              onChange={(e) => replaceQuery({ productKind: e.target.value || undefined, page: 1 })}
+            >
+              {PRODUCT_KINDS.map((o) => (
+                <option key={o.value || "all-k"} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="min-w-0">
+            <label className="mb-1 block text-xs font-medium text-zinc-600">Status</label>
+            <Select
+              value={qp.status ?? ""}
+              onChange={(e) => {
+                const v = e.target.value || undefined;
+                if (v === "archived") {
+                  replaceQuery({
+                    status: "archived",
+                    page: 1,
+                    stockFilter: undefined,
+                    channel: undefined,
+                  });
+                } else {
+                  replaceQuery({ status: v, page: 1 });
+                }
+              }}
+            >
+              {STATUSES.map((o) => (
+                <option key={o.value || "all-s"} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="min-w-0">
+            <label className="mb-1 block text-xs font-medium text-zinc-600">Estoque</label>
+            <Select
+              value={qp.stockFilter ?? ""}
+              onChange={(e) => replaceQuery({ stockFilter: e.target.value || undefined, page: 1 })}
+            >
+              {STOCK_FILTERS.map((o) => (
+                <option key={o.value || "all-st"} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div className="w-full min-w-0 sm:max-w-xs">
+            <label className="mb-1 block text-xs font-medium text-zinc-600">Canal</label>
+            <Select
+              value={qp.channel ?? ""}
+              onChange={(e) => replaceQuery({ channel: e.target.value || undefined, page: 1 })}
+            >
+              {CHANNELS.map((o) => (
+                <option key={o.value || "all-ch"} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-2 sm:justify-end">
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="rounded-md border border-zinc-300 bg-white px-3 py-2.5 text-sm font-medium text-zinc-800 hover:bg-zinc-100"
+            >
+              Limpar filtros
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const el = document.getElementById(
+                  "product-search-input",
+                ) as HTMLInputElement | null;
+                const v = el?.value.trim() ?? "";
                 replaceQuery({ q: v || undefined });
-              }
-            }}
-          />
+              }}
+              className="rounded-md bg-zinc-900 px-3 py-2.5 text-sm font-medium text-white hover:bg-zinc-800"
+            >
+              Buscar
+            </button>
+          </div>
         </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-zinc-600">Tipo</label>
-          <Select
-            value={qp.productType ?? ""}
-            onChange={(e) => replaceQuery({ productType: e.target.value || undefined, page: 1 })}
-          >
-            {PRODUCT_TYPES.map((o) => (
-              <option key={o.value || "all"} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-zinc-600">Estrutura</label>
-          <Select
-            value={qp.productKind ?? ""}
-            onChange={(e) => replaceQuery({ productKind: e.target.value || undefined, page: 1 })}
-          >
-            {PRODUCT_KINDS.map((o) => (
-              <option key={o.value || "all-k"} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-zinc-600">Status</label>
-          <Select
-            value={qp.status ?? ""}
-            onChange={(e) => {
-              const v = e.target.value || undefined;
-              if (v === "archived") {
-                replaceQuery({
-                  status: "archived",
-                  page: 1,
-                  stockFilter: undefined,
-                  channel: undefined,
-                });
-              } else {
-                replaceQuery({ status: v, page: 1 });
-              }
-            }}
-          >
-            {STATUSES.map((o) => (
-              <option key={o.value || "all-s"} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-zinc-600">Estoque</label>
-          <Select
-            value={qp.stockFilter ?? ""}
-            onChange={(e) => replaceQuery({ stockFilter: e.target.value || undefined, page: 1 })}
-          >
-            {STOCK_FILTERS.map((o) => (
-              <option key={o.value || "all-st"} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-zinc-600">Canal</label>
-          <Select
-            value={qp.channel ?? ""}
-            onChange={(e) => replaceQuery({ channel: e.target.value || undefined, page: 1 })}
-          >
-            {CHANNELS.map((o) => (
-              <option key={o.value || "all-ch"} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <button
-          type="button"
-          onClick={clearFilters}
-          className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-100"
-        >
-          Limpar filtros
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            const el = document.getElementById("product-search-input") as HTMLInputElement | null;
-            const v = el?.value.trim() ?? "";
-            replaceQuery({ q: v || undefined });
-          }}
-          className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-800"
-        >
-          Buscar
-        </button>
       </div>
 
       {someSelected && (
@@ -571,8 +580,24 @@ export function ProductsListing({
         </div>
       )}
 
-      <div className="overflow-visible rounded-xl border border-zinc-200 bg-white shadow-sm">
-        <table className="w-full text-left text-sm">
+      <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white shadow-sm">
+        <table className="w-full min-w-[64rem] table-fixed text-left text-sm">
+          <colgroup>
+            <col className="w-10" />
+            <col className="w-10" />
+            <col className="w-[5.5rem]" />
+            <col className="w-24" />
+            <col />
+            <col className="w-[8.5rem]" />
+            <col className="w-24" />
+            <col className="w-20" />
+            <col className="w-24" />
+            <col className="w-28" />
+            <col className="w-28" />
+            <col className="w-36" />
+            <col className="w-40" />
+            <col className="w-28" />
+          </colgroup>
           <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold tracking-wide text-zinc-500">
             <tr>
               <th className="w-10 px-2 py-3">
@@ -613,7 +638,7 @@ export function ProductsListing({
                   ) : null}
                 </Fragment>
               ))}
-              <th className="px-3 py-3 text-right">Ações</th>
+              <th className="px-3 py-3 whitespace-nowrap">Ações</th>
             </tr>
           </thead>
           <tbody>
@@ -740,12 +765,11 @@ export function ProductsListing({
                           })
                         : "—"}
                     </td>
-                    <td className="px-3 py-3 font-mono text-xs">{p.sku}</td>
-                    <td className="relative px-3 py-3 text-right">
-                      <div
-                        id={`product-row-actions-${p.id}`}
-                        className="relative inline-flex flex-col items-end"
-                      >
+                    <td className="truncate px-3 py-3 font-mono text-xs" title={p.sku}>
+                      {p.sku}
+                    </td>
+                    <td className="relative px-3 py-3 align-middle whitespace-nowrap">
+                      <div id={`product-row-actions-${p.id}`} className="relative inline-block">
                         <button
                           type="button"
                           className="inline-flex items-center gap-1 rounded-md border border-zinc-300 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-800 shadow-sm hover:bg-zinc-50"
