@@ -3813,7 +3813,7 @@ export function ProductOperationalForm({
         </div>
 
         <aside className="space-y-4">
-          <div className="sticky top-4 rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+          <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
             <h2 className="text-sm font-semibold text-zinc-900">Resumo</h2>
             <dl className="mt-3 space-y-2 text-sm">
               <div className="flex justify-between gap-2">
