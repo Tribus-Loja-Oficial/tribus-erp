@@ -1,4 +1,4 @@
-import { env } from "../config/env";
+import { getErpWebEnv } from "../config/env";
 
 type HttpMethod = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
 
@@ -14,7 +14,8 @@ interface FetchOptions {
 export async function erpApiFetch<T>(options: FetchOptions): Promise<T> {
   const { method = "GET", path, body, searchParams, additionalOkStatuses = [] } = options;
 
-  const url = new URL(`${env.erpApiUrl}${path}`);
+  const { erpApiUrl, erpApiInternalSecret } = getErpWebEnv();
+  const url = new URL(`${erpApiUrl}${path}`);
   if (searchParams) {
     for (const [key, value] of Object.entries(searchParams)) {
       if (value !== undefined) url.searchParams.set(key, String(value));
@@ -23,7 +24,7 @@ export async function erpApiFetch<T>(options: FetchOptions): Promise<T> {
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    Authorization: `Bearer ${env.erpApiInternalSecret}`,
+    Authorization: `Bearer ${erpApiInternalSecret}`,
   };
 
   const response = await fetch(url.toString(), {

@@ -18,5 +18,13 @@ function getEnv() {
   };
 }
 
-export const env = getEnv();
-export type Env = typeof env;
+let cachedEnv: ReturnType<typeof getEnv> | null = null;
+
+export function getErpWebEnv() {
+  if (!cachedEnv) cachedEnv = getEnv();
+  return cachedEnv;
+}
+
+/** @deprecated Prefer `getErpWebEnv()` — lazy para não rebentar import do módulo sem variáveis. */
+export const env = getErpWebEnv();
+export type Env = ReturnType<typeof getErpWebEnv>;

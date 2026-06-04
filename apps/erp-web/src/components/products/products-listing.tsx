@@ -213,7 +213,6 @@ export function ProductsListing({
         next = { ...next, page: 1 };
       }
       router.replace(`${pathname}${toQueryString(next)}`);
-      router.refresh();
     },
     [pathname, qp, router],
   );
@@ -241,7 +240,6 @@ export function ProductsListing({
 
   function clearFilters() {
     router.replace(pathname);
-    router.refresh();
   }
 
   const from = meta.total === 0 ? 0 : (meta.page - 1) * meta.limit + 1;

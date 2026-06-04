@@ -39,9 +39,10 @@ async function fetchLinesForProductForm(): Promise<{ id: string; name: string }[
     if (msg.includes("404") || msg.toLowerCase().includes("not found")) {
       return [];
     }
-    throw new Error(
-      `Não foi possível carregar linhas de produto (${msg}). Confirme que a API em produção está atualizada e que as migrações 0015/0016 foram aplicadas.`,
+    console.warn(
+      `[products] Linhas indisponíveis (${msg}); formulário segue sem receita de linha.`,
     );
+    return [];
   }
 }
 
@@ -167,7 +168,6 @@ export async function fetchProductCompositionDetailAction(productId: string): Pr
       costBreakdown?: ProductCostBreakdown | null;
     };
   }>({ path: `/products/${productId}/detail` });
-  revalidatePath(`/products/${productId}`);
   return {
     compositions: res.data.compositions ?? [],
     costBreakdown: res.data.costBreakdown ?? null,
