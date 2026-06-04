@@ -157,6 +157,23 @@ export async function createProductOperationalAction(body: Record<string, unknow
   return res.data.id;
 }
 
+export async function fetchProductCompositionDetailAction(productId: string): Promise<{
+  compositions: CompositionRow[];
+  costBreakdown: ProductCostBreakdown | null;
+}> {
+  const res = await erpApiFetch<{
+    data: {
+      compositions?: CompositionRow[];
+      costBreakdown?: ProductCostBreakdown | null;
+    };
+  }>({ path: `/products/${productId}/detail` });
+  revalidatePath(`/products/${productId}`);
+  return {
+    compositions: res.data.compositions ?? [],
+    costBreakdown: res.data.costBreakdown ?? null,
+  };
+}
+
 export async function updateProductOperationalAction(id: string, body: Record<string, unknown>) {
   await erpApiFetch({
     method: "PATCH",

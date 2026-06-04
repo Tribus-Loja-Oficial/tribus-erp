@@ -9,9 +9,16 @@ type Props = {
   productId: string | null;
   productLabel?: string;
   onClose: () => void;
+  /** Dispara quando o formulário interno grava alterações (ex.: atualizar composição do produto pai). */
+  onPersistedChange?: () => void;
 };
 
-export function ProductQuickEditModal({ productId, productLabel, onClose }: Props) {
+export function ProductQuickEditModal({
+  productId,
+  productLabel,
+  onClose,
+  onPersistedChange,
+}: Props) {
   const [payload, setPayload] = useState<ProductOperationalEditPayload | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -118,6 +125,7 @@ export function ProductQuickEditModal({ productId, productLabel, onClose }: Prop
               initialBomParents={payload.bomParents}
               embedded
               onClose={onClose}
+              onPersistedChange={onPersistedChange}
             />
           ) : null}
         </div>

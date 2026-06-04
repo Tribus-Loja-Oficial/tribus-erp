@@ -3,12 +3,21 @@
 import Link from "next/link";
 import { AlertTriangle, ChevronDown, ChevronRight, Eye, Info } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { type ReactNode, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { cn, formatCurrency, formatDateTime } from "@/lib/utils";
 import {
   addLineCompositionAction,
   addProductCompositionAction,
   createProductOperationalAction,
+  fetchProductCompositionDetailAction,
   recalculateProductCostSnapshotAction,
   removeLineCompositionAction,
   removeProductCompositionAction,
@@ -1221,6 +1230,8 @@ interface ProductOperationalFormProps {
   /** Quando true: layout compacto, sem breadcrumb; Cancelar / «voltar» chamam `onClose`. */
   embedded?: boolean;
   onClose?: () => void;
+  /** Após gravar alterações (ex.: popup aninhado notifica o produto pai). */
+  onPersistedChange?: () => void;
 }
 
 export function ProductOperationalForm({
@@ -1246,10 +1257,36 @@ export function ProductOperationalForm({
   initialBomParents = [],
   embedded = false,
   onClose,
+  onPersistedChange,
 }: ProductOperationalFormProps) {
   const router = useRouter();
   const [tab, setTab] = useState<TabId>("general");
   const [pending, startTransition] = useTransition();
+  const [compositionRows, setCompositionRows] = useState<CompositionRow[]>(initialCompositions);
+  const [liveCostBreakdown, setLiveCostBreakdown] = useState<
+    ProductCostBreakdown | null | undefined
+  >(costBreakdown);
+
+  useEffect(() => {
+    setCompositionRows(initialCompositions);
+  }, [initialCompositions]);
+
+  useEffect(() => {
+    setLiveCostBreakdown(costBreakdown);
+  }, [costBreakdown]);
+
+  const refreshCompositionData = useCallback(async () => {
+    if (!productId) return;
+    try {
+      const { compositions, costBreakdown: refreshedBreakdown } =
+        await fetchProductCompositionDetailAction(productId);
+      setCompositionRows(compositions);
+      setLiveCostBreakdown(refreshedBreakdown);
+      router.refresh();
+    } catch {
+      router.refresh();
+    }
+  }, [productId, router]);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [expandedSnapshotId, setExpandedSnapshotId] = useState<string | null>(null);
@@ -1414,10 +1451,10 @@ export function ProductOperationalForm({
 
   const isSupplyProduct = isSupplyChainProductType(productType);
   const visibleTabs = useMemo(() => visibleTabsForProductType(productType), [productType]);
-  const productCostUnit = useMemo(() => productCostDisplayUnit(initialProduct), [initialProduct]);
+  const productCostUnit = useMemo(() => compositionRateUnitSuffix(unitOfMeasure), [unitOfMeasure]);
   const productCostBaseTooltip = useMemo(
-    () => productCostBaseInfoTooltip(initialProduct),
-    [initialProduct],
+    () => productCostBaseInfoTooltip({ ...initialProduct, unitOfMeasure }),
+    [initialProduct, unitOfMeasure],
   );
 
   useEffect(() => {
@@ -1430,23 +1467,26 @@ export function ProductOperationalForm({
   const costCents = useMemo(() => inputToCents(costPrice), [costPrice]);
 
   const primaryTotalCostCents = useMemo(() => {
-    if (costBreakdown) return costBreakdown.onlineTotalCostCents;
+    if (liveCostBreakdown) return liveCostBreakdown.onlineTotalCostCents;
     return costCents;
-  }, [costBreakdown, costCents]);
+  }, [liveCostBreakdown, costCents]);
 
-  const marginOnlinePct = pctMargin(saleCents, costBreakdown?.onlineTotalCostCents ?? null);
-  const marginPresentialPct = pctMargin(saleCents, costBreakdown?.presentialTotalCostCents ?? null);
+  const marginOnlinePct = pctMargin(saleCents, liveCostBreakdown?.onlineTotalCostCents ?? null);
+  const marginPresentialPct = pctMargin(
+    saleCents,
+    liveCostBreakdown?.presentialTotalCostCents ?? null,
+  );
   const markupVal = markup(saleCents, primaryTotalCostCents);
 
   const bomRows = useMemo(
-    () => initialCompositions.filter((r) => r.compositionType === "bom"),
-    [initialCompositions],
+    () => compositionRows.filter((r) => r.compositionType === "bom"),
+    [compositionRows],
   );
   const lineBomRows = useMemo(() => bomRows.filter((r) => r.scope === "line"), [bomRows]);
   const productBomRows = useMemo(() => bomRows.filter((r) => r.scope !== "line"), [bomRows]);
   const packagingRows = useMemo(
-    () => initialCompositions.filter((r) => r.compositionType === "packaging"),
-    [initialCompositions],
+    () => compositionRows.filter((r) => r.compositionType === "packaging"),
+    [compositionRows],
   );
   const linePackagingRows = useMemo(
     () => packagingRows.filter((r) => r.scope === "line"),
@@ -1576,6 +1616,7 @@ export function ProductOperationalForm({
           await updateProductOperationalAction(productId, payload);
           setSuccess("Alterações salvas.");
           router.refresh();
+          onPersistedChange?.();
           if (navigateAfter === "list") {
             if (embedded && onClose) onClose();
             else router.push("/products");
@@ -1691,7 +1732,7 @@ export function ProductOperationalForm({
       setCompQty("1");
       setCompQtyUnit("unit");
       setCompNotes("");
-      router.refresh();
+      await refreshCompositionData();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao adicionar composição");
     }
@@ -1718,7 +1759,7 @@ export function ProductOperationalForm({
           return next;
         });
       }
-      router.refresh();
+      await refreshCompositionData();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao remover");
     }
@@ -1807,13 +1848,13 @@ export function ProductOperationalForm({
     if (!productId) return;
     const draft = compositionDrafts[rowId];
     if (!draft) return;
-    const row = initialCompositions.find((r) => r.id === rowId);
+    const row = compositionRows.find((r) => r.id === rowId);
     if (!row) return;
     setError(null);
     try {
       await persistCompositionDraft(row, draft);
       cancelEditComposition(rowId);
-      router.refresh();
+      await refreshCompositionData();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao atualizar composição");
     }
@@ -1829,7 +1870,7 @@ export function ProductOperationalForm({
         await persistCompositionDraft(row, compositionDrafts[row.id]!);
       }
       cancelEditCompositionSection(toSave);
-      router.refresh();
+      await refreshCompositionData();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao atualizar composição");
     }
@@ -2245,20 +2286,23 @@ export function ProductOperationalForm({
                       {String(initialProduct.costUpdatedAt ?? initialProduct.updatedAt ?? "—")}
                     </li>
                   </ul>
-                  {costBreakdown ? (
+                  {liveCostBreakdown ? (
                     <ul className="mt-2 grid gap-1 text-xs text-zinc-600 sm:grid-cols-2">
-                      <li>Materiais: {formatCurrency(costBreakdown.materialCostCents)}</li>
-                      <li>Emb. online: {formatCurrency(costBreakdown.packagingOnlineCostCents)}</li>
+                      <li>Materiais: {formatCurrency(liveCostBreakdown.materialCostCents)}</li>
+                      <li>
+                        Emb. online: {formatCurrency(liveCostBreakdown.packagingOnlineCostCents)}
+                      </li>
                       <li>
                         Emb. presencial:{" "}
-                        {formatCurrency(costBreakdown.packagingPresentialCostCents)}
+                        {formatCurrency(liveCostBreakdown.packagingPresentialCostCents)}
                       </li>
-                      <li>Mão de obra: {formatCurrency(costBreakdown.laborCostCents)}</li>
+                      <li>Mão de obra: {formatCurrency(liveCostBreakdown.laborCostCents)}</li>
                       <li className="font-medium text-zinc-800">
-                        Total online: {formatCurrency(costBreakdown.onlineTotalCostCents)}
+                        Total online: {formatCurrency(liveCostBreakdown.onlineTotalCostCents)}
                       </li>
                       <li className="font-medium text-zinc-800">
-                        Total presencial: {formatCurrency(costBreakdown.presentialTotalCostCents)}
+                        Total presencial:{" "}
+                        {formatCurrency(liveCostBreakdown.presentialTotalCostCents)}
                       </li>
                     </ul>
                   ) : (
@@ -2408,9 +2452,7 @@ export function ProductOperationalForm({
                       <p className="font-medium text-zinc-800">Estoque atual (agregado)</p>
                       <p className="mt-1 text-zinc-700 tabular-nums">
                         {String(initialProduct.currentStock ?? 0)}{" "}
-                        <span className="text-zinc-500">
-                          ({unitLabelPt(String(initialProduct.unitOfMeasure ?? "unit"))})
-                        </span>
+                        <span className="text-zinc-500">({unitLabelPt(unitOfMeasure)})</span>
                       </p>
                     </div>
                     <div className="rounded-lg border border-zinc-200 bg-white px-4 py-3">
@@ -2863,51 +2905,51 @@ export function ProductOperationalForm({
                       </div>
                     </div>
 
-                    {costBreakdown ? (
+                    {liveCostBreakdown ? (
                       <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
                         <h3 className="text-sm font-semibold text-zinc-900">3. Resumo de custos</h3>
                         <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
                           <div className="flex justify-between gap-2">
                             <dt className="text-zinc-600">Custo materiais</dt>
                             <dd className="text-zinc-900 tabular-nums">
-                              {formatCurrency(costBreakdown.materialCostCents)}
+                              {formatCurrency(liveCostBreakdown.materialCostCents)}
                             </dd>
                           </div>
                           <div className="flex justify-between gap-2">
                             <dt className="text-zinc-600">Embalagem online</dt>
                             <dd className="text-zinc-900 tabular-nums">
-                              {formatCurrency(costBreakdown.packagingOnlineCostCents)}
+                              {formatCurrency(liveCostBreakdown.packagingOnlineCostCents)}
                             </dd>
                           </div>
                           <div className="flex justify-between gap-2">
                             <dt className="text-zinc-600">Embalagem presencial</dt>
                             <dd className="text-zinc-900 tabular-nums">
-                              {formatCurrency(costBreakdown.packagingPresentialCostCents)}
+                              {formatCurrency(liveCostBreakdown.packagingPresentialCostCents)}
                             </dd>
                           </div>
                           <div className="flex justify-between gap-2">
                             <dt className="text-zinc-600">Mão de obra</dt>
                             <dd className="text-zinc-900 tabular-nums">
-                              {formatCurrency(costBreakdown.laborCostCents)}
+                              {formatCurrency(liveCostBreakdown.laborCostCents)}
                             </dd>
                           </div>
                           <div className="flex justify-between gap-2 border-t border-zinc-200 pt-2 sm:col-span-2">
                             <dt className="font-medium text-zinc-800">Custo total online</dt>
                             <dd className="font-medium text-zinc-900 tabular-nums">
-                              {formatCurrency(costBreakdown.onlineTotalCostCents)}
+                              {formatCurrency(liveCostBreakdown.onlineTotalCostCents)}
                             </dd>
                           </div>
                           <div className="flex justify-between gap-2 sm:col-span-2">
                             <dt className="font-medium text-zinc-800">Custo total presencial</dt>
                             <dd className="font-medium text-zinc-900 tabular-nums">
-                              {formatCurrency(costBreakdown.presentialTotalCostCents)}
+                              {formatCurrency(liveCostBreakdown.presentialTotalCostCents)}
                             </dd>
                           </div>
                         </dl>
                       </div>
                     ) : null}
 
-                    {initialCompositions.some(
+                    {compositionRows.some(
                       (r) => r.compositionType !== "bom" && r.compositionType !== "packaging",
                     ) ? (
                       <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950">
@@ -2924,7 +2966,7 @@ export function ProductOperationalForm({
                               </tr>
                             </thead>
                             <tbody>
-                              {initialCompositions
+                              {compositionRows
                                 .filter(
                                   (r) =>
                                     r.compositionType !== "bom" &&
@@ -3797,24 +3839,24 @@ export function ProductOperationalForm({
               <div className="flex justify-between gap-2">
                 <dt className="text-zinc-500">Custo materiais</dt>
                 <dd className="text-zinc-800 tabular-nums">
-                  {costBreakdown
-                    ? formatCurrency(costBreakdown.materialCostCents)
+                  {liveCostBreakdown
+                    ? formatCurrency(liveCostBreakdown.materialCostCents)
                     : formatCurrency(0)}
                 </dd>
               </div>
               <div className="flex justify-between gap-2">
                 <dt className="text-zinc-500">Custo online</dt>
                 <dd className="text-zinc-800 tabular-nums">
-                  {costBreakdown
-                    ? formatCurrency(costBreakdown.onlineTotalCostCents)
+                  {liveCostBreakdown
+                    ? formatCurrency(liveCostBreakdown.onlineTotalCostCents)
                     : formatCurrency(costCents)}
                 </dd>
               </div>
               <div className="flex justify-between gap-2">
                 <dt className="text-zinc-500">Custo presencial</dt>
                 <dd className="text-zinc-800 tabular-nums">
-                  {costBreakdown
-                    ? formatCurrency(costBreakdown.presentialTotalCostCents)
+                  {liveCostBreakdown
+                    ? formatCurrency(liveCostBreakdown.presentialTotalCostCents)
                     : formatCurrency(costCents)}
                 </dd>
               </div>
@@ -3924,7 +3966,13 @@ export function ProductOperationalForm({
       <ProductQuickEditModal
         productId={compositionQuickEdit?.id ?? null}
         productLabel={compositionQuickEdit?.name}
-        onClose={() => setCompositionQuickEdit(null)}
+        onClose={() => {
+          setCompositionQuickEdit(null);
+          void refreshCompositionData();
+        }}
+        onPersistedChange={() => {
+          void refreshCompositionData();
+        }}
       />
     </div>
   );
