@@ -111,5 +111,35 @@ export function createProductCompositionRepository(db: AppDb) {
       const where = activeCompositionScopeWhere(parentProductId, replaceTypes, packagingChannel);
       await db.update(productCompositions).set({ archivedAt: ts, updatedAt: ts }).where(where);
     },
+
+    async archiveActiveMatchingNaturalKey(
+      parentProductIds: readonly string[],
+      match: {
+        childProductId: string;
+        compositionType: string;
+        packagingChannel: string | null;
+      },
+    ): Promise<void> {
+      if (parentProductIds.length === 0) return;
+      const ts = new Date().toISOString();
+      const conditions: SQL[] = [
+        inArray(productCompositions.parentProductId, [...parentProductIds]),
+        isNull(productCompositions.archivedAt),
+        isNull(productCompositions.parentVariantId),
+        eq(productCompositions.childProductId, match.childProductId),
+        eq(
+          productCompositions.compositionType,
+          match.compositionType as ProductComposition["compositionType"],
+        ),
+      ];
+      if (match.compositionType === "packaging" && match.packagingChannel) {
+        const channel = match.packagingChannel as "online" | "presential" | "both";
+        conditions.push(eq(productCompositions.packagingChannel, channel));
+      }
+      await db
+        .update(productCompositions)
+        .set({ archivedAt: ts, updatedAt: ts })
+        .where(and(...conditions));
+    },
   };
 }

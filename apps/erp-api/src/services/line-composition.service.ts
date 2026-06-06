@@ -6,9 +6,11 @@ import {
   createLineCompositionRepository,
   activeLineCompositionScopeWhere,
 } from "../repositories/line-composition.repository.js";
+import { createProductCompositionRepository } from "../repositories/product-composition.repository.js";
 import { lineCompositions } from "../db/schema/index.js";
 import { createProductCostSnapshotService } from "./product-cost-snapshot.service.js";
 import { lineCostCentsFromComposition } from "../domain/product-cost.js";
+import { compositionNaturalKey } from "../domain/composition-merge.js";
 import type {
   CreateProductCompositionInput,
   UpdateProductCompositionInput,
@@ -40,8 +42,25 @@ function validateLineCompositionRules(opts: {
 export function createLineCompositionService(db: AppDb) {
   const productsRepo = createProductRepository(db);
   const lineCompositionsRepo = createLineCompositionRepository(db);
+  const compositionsRepo = createProductCompositionRepository(db);
   const snapshotService = createProductCostSnapshotService(db);
   const now = () => new Date().toISOString();
+
+  async function clearProductOverridesInLine(
+    parentLineId: string,
+    input: {
+      childProductId: string;
+      compositionType: string;
+      packagingChannel: "online" | "presential" | "both" | null;
+    },
+  ) {
+    const productIds = await productsRepo.findProductIdsByLineId(parentLineId);
+    await compositionsRepo.archiveActiveMatchingNaturalKey(productIds, {
+      childProductId: input.childProductId,
+      compositionType: input.compositionType,
+      packagingChannel: input.packagingChannel,
+    });
+  }
 
   async function recalcSnapshotsForLine(lineId: string, metadata?: Record<string, unknown>) {
     const productIds = await productsRepo.findProductIdsByLineId(lineId);
@@ -52,6 +71,60 @@ export function createLineCompositionService(db: AppDb) {
         ...metadata,
       });
     }
+  }
+
+  async function updateLineComposition(
+    parentLineId: string,
+    compositionId: string,
+    input: UpdateProductCompositionInput,
+  ) {
+    const row = await lineCompositionsRepo.findById(compositionId);
+    if (!row || row.archivedAt) throw new NotFoundError("LineComposition", compositionId);
+    if (row.parentLineId !== parentLineId) {
+      throw new ValidationError("Composição não pertence a esta linha");
+    }
+
+    const nextType = input.compositionType ?? row.compositionType;
+    const nextChildId = input.childProductId ?? row.childProductId;
+    const nextQty = input.quantity ?? row.quantity;
+    const nextChannel =
+      input.packagingChannel !== undefined ? input.packagingChannel : row.packagingChannel;
+
+    validateLineCompositionRules({
+      parentLineId,
+      childProductId: nextChildId,
+      compositionType: nextType,
+      packagingChannel: nextType === "packaging" ? nextChannel : null,
+      quantity: nextQty,
+    });
+
+    const child = await productsRepo.findById(nextChildId);
+    if (!child) throw new NotFoundError("Product", nextChildId);
+
+    const packagingChannel: "online" | "presential" | "both" | null =
+      nextType === "packaging" ? (nextChannel as "online" | "presential" | "both") : null;
+
+    const { unitCostCents, totalCostCents } = lineCostCentsFromComposition(nextQty, child);
+
+    const patch: Record<string, unknown> = {
+      unitCostSnapshotCents: unitCostCents,
+      totalCostSnapshotCents: totalCostCents,
+      packagingChannel,
+    };
+    if (input.childProductId !== undefined) patch.childProductId = input.childProductId;
+    if (input.quantity !== undefined) patch.quantity = input.quantity;
+    if (input.quantityUnit !== undefined) patch.quantityUnit = input.quantityUnit;
+    if (input.compositionType !== undefined) patch.compositionType = input.compositionType;
+    if (input.required !== undefined) patch.required = input.required;
+    if (input.isDefault !== undefined) patch.isDefault = input.isDefault;
+    if (input.notes !== undefined) patch.notes = input.notes;
+
+    const updated = await lineCompositionsRepo.update(compositionId, patch as never);
+    await recalcSnapshotsForLine(parentLineId, {
+      compositionId: updated.id,
+      action: "update",
+    });
+    return updated;
   }
 
   return {
@@ -77,6 +150,30 @@ export function createLineCompositionService(db: AppDb) {
 
       const packagingChannel =
         input.compositionType === "packaging" ? input.packagingChannel! : null;
+
+      await clearProductOverridesInLine(parentLineId, {
+        childProductId: input.childProductId,
+        compositionType: input.compositionType,
+        packagingChannel,
+      });
+
+      const inputKey = compositionNaturalKey({
+        compositionType: input.compositionType,
+        childProductId: input.childProductId,
+        packagingChannel,
+      });
+      const existingLineRows = await lineCompositionsRepo.findActiveByParentLineId(parentLineId);
+      const existing = existingLineRows.find(
+        (row) =>
+          compositionNaturalKey({
+            compositionType: row.compositionType,
+            childProductId: row.childProductId,
+            packagingChannel: row.packagingChannel,
+          }) === inputKey,
+      );
+      if (existing) {
+        return updateLineComposition(parentLineId, existing.id, input);
+      }
 
       const { unitCostCents, totalCostCents } = lineCostCentsFromComposition(input.quantity, child);
 
@@ -119,53 +216,7 @@ export function createLineCompositionService(db: AppDb) {
       compositionId: string,
       input: UpdateProductCompositionInput,
     ) {
-      const row = await lineCompositionsRepo.findById(compositionId);
-      if (!row || row.archivedAt) throw new NotFoundError("LineComposition", compositionId);
-      if (row.parentLineId !== parentLineId) {
-        throw new ValidationError("Composição não pertence a esta linha");
-      }
-
-      const nextType = input.compositionType ?? row.compositionType;
-      const nextChildId = input.childProductId ?? row.childProductId;
-      const nextQty = input.quantity ?? row.quantity;
-      const nextChannel =
-        input.packagingChannel !== undefined ? input.packagingChannel : row.packagingChannel;
-
-      validateLineCompositionRules({
-        parentLineId,
-        childProductId: nextChildId,
-        compositionType: nextType,
-        packagingChannel: nextType === "packaging" ? nextChannel : null,
-        quantity: nextQty,
-      });
-
-      const child = await productsRepo.findById(nextChildId);
-      if (!child) throw new NotFoundError("Product", nextChildId);
-
-      const packagingChannel: "online" | "presential" | "both" | null =
-        nextType === "packaging" ? (nextChannel as "online" | "presential" | "both") : null;
-
-      const { unitCostCents, totalCostCents } = lineCostCentsFromComposition(nextQty, child);
-
-      const patch: Record<string, unknown> = {
-        unitCostSnapshotCents: unitCostCents,
-        totalCostSnapshotCents: totalCostCents,
-        packagingChannel,
-      };
-      if (input.childProductId !== undefined) patch.childProductId = input.childProductId;
-      if (input.quantity !== undefined) patch.quantity = input.quantity;
-      if (input.quantityUnit !== undefined) patch.quantityUnit = input.quantityUnit;
-      if (input.compositionType !== undefined) patch.compositionType = input.compositionType;
-      if (input.required !== undefined) patch.required = input.required;
-      if (input.isDefault !== undefined) patch.isDefault = input.isDefault;
-      if (input.notes !== undefined) patch.notes = input.notes;
-
-      const updated = await lineCompositionsRepo.update(compositionId, patch as never);
-      await recalcSnapshotsForLine(parentLineId, {
-        compositionId: updated.id,
-        action: "update",
-      });
-      return updated;
+      return updateLineComposition(parentLineId, compositionId, input);
     },
 
     async archive(parentLineId: string, compositionId: string) {

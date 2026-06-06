@@ -1866,7 +1866,7 @@ export function ProductOperationalForm({
         await removeLineCompositionAction(apiId);
         await addProductCompositionAction(productId, body);
       } else {
-        await removeProductCompositionAction(productId, apiId);
+        // addLineCompositionAction arquiva overrides de produto em toda a linha e grava na receita da linha.
         await addLineCompositionAction(lineId, body);
       }
       return;

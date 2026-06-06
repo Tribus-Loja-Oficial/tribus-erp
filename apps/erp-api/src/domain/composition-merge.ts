@@ -22,7 +22,7 @@ export type MergedCompositionRow = CompositionMergeRow & {
   sourceCompositionId: string;
 };
 
-function compositionNaturalKey(row: {
+export function compositionNaturalKey(row: {
   compositionType: string;
   childProductId: string;
   packagingChannel: string | null;
