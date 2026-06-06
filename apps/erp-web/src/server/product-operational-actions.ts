@@ -28,6 +28,22 @@ export interface ProductOperationalEditPayload {
   bomParents: ProductBomParentRow[];
 }
 
+async function revalidateProductsForLine(lineId: string | undefined | null) {
+  const id = lineId?.trim();
+  if (!id) return;
+  try {
+    const res = await erpApiFetch<{ data: string[] }>({
+      path: `/products/lines/${id}/product-ids`,
+    });
+    for (const productId of res.data ?? []) {
+      revalidatePath(`/products/${productId}`);
+    }
+  } catch {
+    // Segue com revalidação da listagem mesmo se o endpoint não estiver disponível.
+  }
+  revalidatePath("/products");
+}
+
 async function fetchLinesForProductForm(): Promise<{ id: string; name: string }[]> {
   try {
     const res = await erpApiFetch<{ data: { id: string; name: string }[] }>({
@@ -223,24 +239,27 @@ export async function addLineCompositionAction(lineId: string, body: Record<stri
     path: `/products/lines/${lineId}/compositions`,
     body,
   });
+  await revalidateProductsForLine(lineId);
 }
 
 export async function updateLineCompositionAction(
   compositionId: string,
   body: Record<string, unknown>,
 ) {
-  await erpApiFetch({
+  const res = await erpApiFetch<{ data: { parentLineId?: string } }>({
     method: "PATCH",
     path: `/products/lines/compositions/${compositionId}`,
     body,
   });
+  await revalidateProductsForLine(res.data?.parentLineId);
 }
 
 export async function removeLineCompositionAction(compositionId: string) {
-  await erpApiFetch({
+  const res = await erpApiFetch<{ parentLineId?: string }>({
     method: "DELETE",
     path: `/products/lines/compositions/${compositionId}`,
   });
+  await revalidateProductsForLine(res.parentLineId);
 }
 
 export async function recalculateProductCostSnapshotAction(productId: string) {

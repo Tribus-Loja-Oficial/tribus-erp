@@ -12,6 +12,8 @@ import type {
 } from "@/components/products/product-operational-form";
 import { notFound } from "next/navigation";
 
+export const dynamic = "force-dynamic";
+
 interface CategoryRow {
   id: string;
   name: string;

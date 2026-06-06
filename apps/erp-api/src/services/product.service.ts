@@ -681,5 +681,11 @@ export function createProductService(db: AppDb) {
     async findLines() {
       return productsRepo.findLines();
     },
+
+    async findProductIdsByLine(lineId: string) {
+      const line = await productsRepo.findLineById(lineId);
+      if (!line) throw new NotFoundError("ProductLine", lineId);
+      return productsRepo.findProductIdsByLineId(lineId);
+    },
   };
 }

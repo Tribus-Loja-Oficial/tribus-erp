@@ -153,6 +153,19 @@ products.get("/lines", async (c) => {
   }
 });
 
+products.get("/lines/:lineId/product-ids", async (c) => {
+  try {
+    const config = getEnv(c.env);
+    const db = createDb(config.db);
+    const service = createProductService(db);
+    const data = await service.findProductIdsByLine(c.req.param("lineId"));
+    return c.json({ data });
+  } catch (err) {
+    const { message, code, status } = toApiError(err);
+    return c.json({ message, code }, status);
+  }
+});
+
 products.get("/lines/:lineId/compositions", async (c) => {
   try {
     const config = getEnv(c.env);
@@ -212,7 +225,7 @@ products.delete("/lines/compositions/:compositionId", async (c) => {
     if (!row) return c.json({ message: "Composição não encontrada", code: "NOT_FOUND" }, 404);
     const service = createLineCompositionService(db);
     await service.archive(row.parentLineId, c.req.param("compositionId"));
-    return c.json({ success: true });
+    return c.json({ success: true, parentLineId: row.parentLineId });
   } catch (err) {
     const { message, code, status } = toApiError(err);
     return c.json({ message, code }, status);
